@@ -23,18 +23,20 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'https://wplanner-j7a7.onrender.com',
         changeOrigin: true,
-        secure: false
+        secure: true
       },
       '/socket.io': {
-        target: 'http://localhost:3000',
-        ws: true
+        target: 'https://wplanner-j7a7.onrender.com',
+        ws: true,
+        changeOrigin: true,
+        secure: true
       },
       '/uploads': {
-        target: 'http://localhost:3000',
+        target: 'https://wplanner-j7a7.onrender.com',
         changeOrigin: true,
-        secure: false
+        secure: true
       }
     }
   }

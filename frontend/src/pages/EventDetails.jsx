@@ -44,7 +44,7 @@ import {
   ArrowDownward as ArrowDownwardIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
-import api from '../services/api';
+import api, { apiUrl } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { getEventDisplayTitle } from '../utils/eventTitle';
 import { isEventLocked, EVENT_LOCKED_MESSAGE } from '../utils/eventLock';
@@ -1001,7 +1001,7 @@ function EventDetails() {
                     onClick={async () => {
                       try {
                         const token = localStorage.getItem('accessToken');
-                        await fetch(`/api/events/${id}`, {
+                        await fetch(apiUrl(`/api/events/${id}`), {
                           method: 'PUT',
                           headers: {
                             'Content-Type': 'application/json',
@@ -1031,7 +1031,7 @@ function EventDetails() {
                         return;
                       try {
                         const token = localStorage.getItem('accessToken');
-                        await fetch(`/api/events/${id}`, {
+                        await fetch(apiUrl(`/api/events/${id}`), {
                           method: 'PUT',
                           headers: {
                             'Content-Type': 'application/json',

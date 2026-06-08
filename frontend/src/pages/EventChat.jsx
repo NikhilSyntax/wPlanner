@@ -133,7 +133,8 @@ function EventChat() {
     load();
 
     const socketUrl =
-      import.meta.env.VITE_SOCKET_URL || window.location.origin;
+      import.meta.env.VITE_SOCKET_URL ||
+      'https://wplanner-j7a7.onrender.com';
     const socket = io(socketUrl, {
       path: '/socket.io',
       query: { token },

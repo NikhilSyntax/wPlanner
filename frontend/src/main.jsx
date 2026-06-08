@@ -1,6 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import axios from 'axios';
 import { Provider, useSelector } from 'react-redux';
+import { API_ORIGIN } from './services/api';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import App from './App';
@@ -11,6 +13,8 @@ import NotificationSnackbar from './components/common/NotificationSnackbar';
 import './index.css';
 import './styles/pages.css';
 import './styles/theme.css';
+
+axios.defaults.baseURL = API_ORIGIN;
 
 function ThemeWrapper() {
   const themeMode = useSelector((state) => state.ui.themeMode);

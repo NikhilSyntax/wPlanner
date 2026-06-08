@@ -1,6 +1,6 @@
 /**
  * Turn API-relative upload paths into URLs the browser can load.
- * e.g. /uploads/photo.jpg → http://localhost:3000/uploads/photo.jpg in dev
+ * e.g. /uploads/photo.jpg → https://wplanner-j7a7.onrender.com/uploads/photo.jpg
  */
 export function resolveMediaUrl(url) {
   if (!url) return undefined;
@@ -16,7 +16,9 @@ export function resolveMediaUrl(url) {
   }
 
   const normalized = path.startsWith('/') ? path : `/${path}`;
-  const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
+  const apiBase =
+    import.meta.env.VITE_API_BASE_URL ||
+    'https://wplanner-j7a7.onrender.com/api';
 
   if (apiBase.startsWith('http')) {
     const origin = apiBase.replace(/\/api\/?$/, '');

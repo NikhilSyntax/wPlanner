@@ -1,7 +1,24 @@
 import axios from 'axios';
 
+const RENDER_API_BASE = 'https://wplanner-j7a7.onrender.com/api';
+const RENDER_API_ORIGIN = 'https://wplanner-j7a7.onrender.com';
+
+export const API_ORIGIN =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.VITE_API_BASE_URL || '').replace(/\/api\/?$/, '') ||
+  RENDER_API_ORIGIN;
+
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || RENDER_API_BASE;
+
+/** Build a full URL for fetch() or static asset paths (e.g. /api/..., /uploads/...). */
+export function apiUrl(path) {
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return `${API_ORIGIN}${normalized}`;
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL: API_BASE_URL,
 });
 
 api.interceptors.request.use((config) => {
