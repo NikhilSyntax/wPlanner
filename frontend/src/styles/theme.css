@@ -1,0 +1,461 @@
+/* ==================== THEME VARIABLES ==================== */
+
+/* Light Theme */
+:root[data-theme='light'] {
+  /* Background Colors */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-tertiary: #f0f2f5;
+
+  /* Text Colors */
+  --text-primary: #212121;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+
+  /* Border Colors */
+  --border-light: #f0f0f0;
+  --border-default: #e0e0e0;
+  --border-dark: #d0d0d0;
+}
+
+/* Dark Theme */
+:root[data-theme='dark'] {
+  /* Background Colors */
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2d2d2d;
+  --bg-tertiary: #3d3d3d;
+
+  /* Text Colors */
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --text-tertiary: #808080;
+
+  /* Border Colors */
+  --border-light: #3d3d3d;
+  --border-default: #4d4d4d;
+  --border-dark: #5d5d5d;
+}
+
+/* ==================== ENHANCED ANIMATIONS ==================== */
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes zoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes swing {
+  20% {
+    transform: rotate(15deg);
+  }
+  40% {
+    transform: rotate(-10deg);
+  }
+  60% {
+    transform: rotate(5deg);
+  }
+  80% {
+    transform: rotate(-5deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+/* ==================== GLASS MORPHISM ==================== */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.glass-dark {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* ==================== GRADIENT BACKGROUNDS ==================== */
+.gradient-mesh {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.gradient-mesh::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    #667eea 0%,
+    #764ba2 25%,
+    #f093fb 50%,
+    #4facfe 75%,
+    #667eea 100%
+  );
+  background-size: 400% 400%;
+  animation: gradientShift 15s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.gradient-aurora {
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+}
+
+.gradient-sunset {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.gradient-ocean {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+/* ==================== SHADOW EFFECTS ==================== */
+.shadow-hover {
+  transition: box-shadow 250ms ease;
+}
+
+.shadow-hover:hover {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15) !important;
+}
+
+.shadow-lg-hover {
+  transition: all 250ms ease;
+}
+
+.shadow-lg-hover:hover {
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
+  transform: translateY(-4px) !important;
+}
+
+.shadow-inset {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.shadow-top {
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.shadow-bottom {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* ==================== BORDER STYLES ==================== */
+.border-gradient {
+  border-image: linear-gradient(135deg, #667eea 0%, #764ba2 100%) 1;
+}
+
+.border-left-gradient {
+  border-left: 3px solid;
+  border-image: linear-gradient(180deg, #667eea 0%, #764ba2 100%) 0 0 0 1;
+}
+
+.border-top-gradient {
+  border-top: 3px solid;
+  border-image: linear-gradient(90deg, #667eea 0%, #764ba2 100%) 1 0 0 0;
+}
+
+/* ==================== HOVER EFFECTS ==================== */
+.hover-lift {
+  transition: all 250ms ease;
+  transform: translateY(0);
+}
+
+.hover-lift:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+}
+
+.hover-grow {
+  transition: transform 250ms ease;
+  transform: scale(1);
+}
+
+.hover-grow:hover {
+  transform: scale(1.05);
+}
+
+.hover-glow {
+  transition: all 250ms ease;
+}
+
+.hover-glow:hover {
+  filter: drop-shadow(0 0 8px rgba(25, 118, 210, 0.4));
+}
+
+.hover-color {
+  transition:
+    color 250ms ease,
+    background-color 250ms ease;
+}
+
+.hover-color:hover {
+  color: #1976d2;
+  background-color: rgba(25, 118, 210, 0.05);
+}
+
+/* ==================== TEXT EFFECTS ==================== */
+.text-gradient {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-shadow-sm {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.text-shadow-md {
+  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.text-shadow-lg {
+  text-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* ==================== BLUR EFFECTS ==================== */
+.blur-sm {
+  filter: blur(4px);
+}
+
+.blur-md {
+  filter: blur(8px);
+}
+
+.blur-lg {
+  filter: blur(16px);
+}
+
+/* ==================== TRANSITION CLASSES ==================== */
+.transition-fast {
+  transition: all 150ms ease;
+}
+
+.transition-base {
+  transition: all 250ms ease;
+}
+
+.transition-slow {
+  transition: all 350ms ease;
+}
+
+.transition-colors {
+  transition:
+    background-color 250ms ease,
+    color 250ms ease,
+    border-color 250ms ease;
+}
+
+/* ==================== OPACITY UTILITIES ==================== */
+.opacity-0 {
+  opacity: 0;
+}
+.opacity-10 {
+  opacity: 0.1;
+}
+.opacity-25 {
+  opacity: 0.25;
+}
+.opacity-50 {
+  opacity: 0.5;
+}
+.opacity-75 {
+  opacity: 0.75;
+}
+.opacity-90 {
+  opacity: 0.9;
+}
+.opacity-100 {
+  opacity: 1;
+}
+
+/* ==================== ROTATION UTILITIES ==================== */
+.rotate-0 {
+  transform: rotate(0deg);
+}
+.rotate-45 {
+  transform: rotate(45deg);
+}
+.rotate-90 {
+  transform: rotate(90deg);
+}
+.rotate-180 {
+  transform: rotate(180deg);
+}
+
+/* ==================== SCALE UTILITIES ==================== */
+.scale-75 {
+  transform: scale(0.75);
+}
+.scale-90 {
+  transform: scale(0.9);
+}
+.scale-100 {
+  transform: scale(1);
+}
+.scale-110 {
+  transform: scale(1.1);
+}
+.scale-125 {
+  transform: scale(1.25);
+}
+.scale-150 {
+  transform: scale(1.5);
+}
+
+/* ==================== DARK MODE SUPPORT ==================== */
+@media (prefers-color-scheme: dark) {
+  body[data-theme='dark'],
+  body {
+    background: #1a1a1a;
+    color: #ffffff;
+  }
+
+  .card,
+  .form-section,
+  .list-filters {
+    background: #2d2d2d;
+    border-color: #3d3d3d;
+  }
+
+  .card:hover,
+  .form-section:hover {
+    border-color: #4d4d4d;
+  }
+
+  .form-control,
+  .form-input,
+  .form-select,
+  .form-textarea {
+    background: #3d3d3d;
+    color: #ffffff;
+    border-color: #4d4d4d;
+  }
+
+  .form-control:focus,
+  .form-input:focus,
+  .form-select:focus,
+  .form-textarea:focus {
+    background: rgba(25, 118, 210, 0.1);
+    border-color: #667eea;
+  }
+
+  .list-table thead {
+    background: #3d3d3d;
+    border-bottom-color: #4d4d4d;
+  }
+
+  .list-table tbody tr:hover {
+    background: rgba(102, 126, 234, 0.1);
+  }
+}
+
+/* ==================== ACCESSIBILITY ==================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==================== PRINT STYLES ==================== */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .card,
+  .form-section {
+    box-shadow: none;
+    border: 1px solid #ccc;
+    page-break-inside: avoid;
+  }
+
+  a {
+    color: #000;
+    text-decoration: underline;
+  }
+}

@@ -1,0 +1,8 @@
+/* Chord highlight styling */
+.chord {
+  background-color: #7c4dff; /* purple */
+  color: #fff;
+  padding: 0 0.2rem;
+  border-radius: 9999px; /* pill shape */
+  font-weight: 600;
+}
