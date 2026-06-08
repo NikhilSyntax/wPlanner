@@ -1,11 +1,27 @@
 require('dotenv').config();
 
+const DEFAULT_CORS_ORIGINS = [
+  'http://localhost:5173',
+  'https://wplanner-frontend-36kt.onrender.com',
+];
+
+function getCorsOrigins() {
+  if (process.env.CORS_ORIGIN) {
+    return process.env.CORS_ORIGIN.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+  }
+  return DEFAULT_CORS_ORIGINS;
+}
+
+const corsOrigins = getCorsOrigins();
+
 const config = {
   env: process.env.NODE_ENV || 'development',
   port: process.env.PORT || 3000,
   mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017/wplanner',
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: corsOrigins,
     credentials: true
   },
   secrets: {
@@ -31,7 +47,7 @@ const config = {
   },
   socket: {
     cors: {
-      origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+      origin: corsOrigins,
       methods: ['GET', 'POST']
     }
   }
