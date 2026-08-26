@@ -12,6 +12,8 @@ import {
   IconButton,
   Divider,
   Paper,
+  Tooltip,
+  CircularProgress,
 } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -25,8 +27,13 @@ import {
   CheckCircle as CheckCircleIcon,
   AccessTime as AccessTimeIcon,
   QueueMusic as QueueMusicIcon,
+  Check as CheckIcon,
+  Close as CloseIcon,
+  Cancel as CancelIcon,
+  AssignmentInd as AssignmentIndIcon,
 } from '@mui/icons-material';
 import { fetchEvents } from '../store/slices/eventSlice';
+import { addNotification } from '../store/slices/uiSlice';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import api from '../services/api';
@@ -40,6 +47,41 @@ function Dashboard() {
   const [songsCount, setSongsCount] = useState(0);
   const [membersCount, setMembersCount] = useState(0);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [respondingSpotlight, setRespondingSpotlight] = useState(false);
+
+  const handleSpotlightAssignmentRespond = async (eventId, actionOrStatus) => {
+    try {
+      setRespondingSpotlight(true);
+      const targetStatus =
+        actionOrStatus === 'accept' || actionOrStatus === 'accepted'
+          ? 'accepted'
+          : 'declined';
+      await api.post(`/events/${eventId}/assignments/respond`, {
+        status: targetStatus,
+      });
+      await dispatch(fetchEvents());
+      dispatch(
+        addNotification({
+          type: targetStatus === 'accepted' ? 'success' : 'info',
+          message:
+            targetStatus === 'accepted'
+              ? 'You accepted your assignment for this service! 🎉'
+              : 'You declined this assignment.',
+        })
+      );
+    } catch (err) {
+      console.error('[Dashboard] Error responding to assignment:', err);
+      dispatch(
+        addNotification({
+          type: 'error',
+          message:
+            err?.response?.data?.message || 'Failed to update assignment response',
+        })
+      );
+    } finally {
+      setRespondingSpotlight(false);
+    }
+  };
 
   useEffect(() => {
     dispatch(fetchEvents());
@@ -61,7 +103,15 @@ function Dashboard() {
 
   const now = new Date();
   const upcomingEvents = [...events]
-    .filter((event) => new Date(event.schedule?.start) > now)
+    .filter((event) => {
+      const status = (event.event?.status || event.status || 'draft').toLowerCase();
+      // Must be CONFIRMED ('published' or 'confirmed'), NEVER 'completed', 'draft', or 'cancelled'
+      const isConfirmed = status === 'published' || status === 'confirmed';
+      const isCompleted = status === 'completed';
+      const isFutureOrOngoing = new Date(event.schedule?.end || event.schedule?.start) > now;
+
+      return isConfirmed && !isCompleted && isFutureOrOngoing;
+    })
     .sort((a, b) => new Date(a.schedule?.start) - new Date(b.schedule?.start));
 
   const nextUpcomingEvent = upcomingEvents[0];
@@ -254,20 +304,52 @@ function Dashboard() {
                   </Box>
 
                   {isUserInTeam && (
-                    <Chip
-                      icon={<CheckCircleIcon sx={{ fontSize: '13px !important', color: '#ffffff !important' }} />}
-                      label="You're in the Team!"
-                      size="small"
-                      sx={{
-                        fontWeight: 700,
-                        fontSize: '0.72rem',
-                        bgcolor: '#10b981',
-                        color: '#ffffff',
-                        boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
-                        height: 22,
-                        '& .MuiChip-icon': { ml: 0.5 },
-                      }}
-                    />
+                    userAssignment?.status === 'accepted' ? (
+                      <Chip
+                        icon={<CheckCircleIcon sx={{ fontSize: '13px !important', color: '#ffffff !important' }} />}
+                        label={`✓ Role Accepted${userAssignment.role ? `: ${userAssignment.role}` : ''}`}
+                        size="small"
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                          bgcolor: '#10b981',
+                          color: '#ffffff',
+                          boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+                          height: 24,
+                          '& .MuiChip-icon': { ml: 0.5 },
+                        }}
+                      />
+                    ) : userAssignment?.status === 'declined' ? (
+                      <Chip
+                        icon={<CancelIcon sx={{ fontSize: '13px !important', color: '#ffffff !important' }} />}
+                        label={`✕ Role Declined${userAssignment.role ? `: ${userAssignment.role}` : ''}`}
+                        size="small"
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                          bgcolor: '#ef4444',
+                          color: '#ffffff',
+                          boxShadow: '0 2px 6px rgba(239, 68, 68, 0.3)',
+                          height: 24,
+                          '& .MuiChip-icon': { ml: 0.5 },
+                        }}
+                      />
+                    ) : (
+                      <Chip
+                        icon={<CheckCircleIcon sx={{ fontSize: '13px !important', color: '#ffffff !important' }} />}
+                        label="You're in the Team!"
+                        size="small"
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                          bgcolor: '#2563eb',
+                          color: '#ffffff',
+                          boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)',
+                          height: 24,
+                          '& .MuiChip-icon': { ml: 0.5 },
+                        }}
+                      />
+                    )
                   )}
                 </Box>
 
@@ -396,6 +478,183 @@ function Dashboard() {
                         </Paper>
                       </Grid>
                     </Grid>
+
+                    {/* Assignment Action Banner with Tick (Accept) and Cross (Reject) Buttons */}
+                    {isUserInTeam && (
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 1.25,
+                          px: 1.75,
+                          mb: 1.5,
+                          borderRadius: 2,
+                          borderColor:
+                            userAssignment?.status === 'accepted'
+                              ? 'rgba(16, 185, 129, 0.35)'
+                              : userAssignment?.status === 'declined'
+                              ? 'rgba(239, 68, 68, 0.35)'
+                              : 'rgba(37, 99, 235, 0.35)',
+                          bgcolor: (theme) =>
+                            userAssignment?.status === 'accepted'
+                              ? theme.palette.mode === 'dark'
+                                ? 'rgba(16, 185, 129, 0.12)'
+                                : '#f0fdf4'
+                              : userAssignment?.status === 'declined'
+                              ? theme.palette.mode === 'dark'
+                                ? 'rgba(239, 68, 68, 0.12)'
+                                : '#fef2f2'
+                              : theme.palette.mode === 'dark'
+                              ? 'rgba(37, 99, 235, 0.12)'
+                              : '#eff6ff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 1.5,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        {userAssignment?.status === 'accepted' ? (
+                          <>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <CheckCircleIcon sx={{ color: '#10b981', fontSize: 20 }} />
+                              <Typography
+                                variant="body2"
+                                fontWeight={600}
+                                sx={{
+                                  color: (theme) =>
+                                    theme.palette.mode === 'dark' ? '#34d399' : '#065f46',
+                                }}
+                              >
+                                You accepted your role as <strong>{userAssignment?.role || 'Team Member'}</strong> for this service.
+                              </Typography>
+                            </Box>
+                            <Tooltip title="Decline assignment if unavailable (Cross)">
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="error"
+                                startIcon={<CloseIcon sx={{ fontSize: 13 }} />}
+                                onClick={() =>
+                                  handleSpotlightAssignmentRespond(nextUpcomingEvent._id, 'declined')
+                                }
+                                disabled={respondingSpotlight}
+                                sx={{
+                                  textTransform: 'none',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  py: 0.3,
+                                  px: 1.2,
+                                  borderRadius: 1.5,
+                                }}
+                              >
+                                Decline (✕)
+                              </Button>
+                            </Tooltip>
+                          </>
+                        ) : userAssignment?.status === 'declined' ? (
+                          <>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <CancelIcon sx={{ color: '#ef4444', fontSize: 20 }} />
+                              <Typography
+                                variant="body2"
+                                fontWeight={600}
+                                sx={{
+                                  color: (theme) =>
+                                    theme.palette.mode === 'dark' ? '#f87171' : '#991b1b',
+                                }}
+                              >
+                                You have declined this assignment ({userAssignment?.role || 'Team Member'}).
+                              </Typography>
+                            </Box>
+                            <Tooltip title="Accept assignment (Tick)">
+                              <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                startIcon={<CheckIcon sx={{ fontSize: 13 }} />}
+                                onClick={() =>
+                                  handleSpotlightAssignmentRespond(nextUpcomingEvent._id, 'accepted')
+                                }
+                                disabled={respondingSpotlight}
+                                sx={{
+                                  textTransform: 'none',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  py: 0.3,
+                                  px: 1.4,
+                                  borderRadius: 1.5,
+                                  boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+                                }}
+                              >
+                                Accept (✓)
+                              </Button>
+                            </Tooltip>
+                          </>
+                        ) : (
+                          <>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <AssignmentIndIcon color="primary" sx={{ fontSize: 20 }} />
+                              <Typography variant="body2" fontWeight={600} color="text.primary">
+                                You are scheduled as <strong>{userAssignment?.role || 'Team Member'}</strong>. Please respond:
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Tooltip title="Accept Assignment (Tick)">
+                                <Button
+                                  variant="contained"
+                                  color="success"
+                                  size="small"
+                                  startIcon={
+                                    respondingSpotlight ? (
+                                      <CircularProgress size={13} color="inherit" />
+                                    ) : (
+                                      <CheckIcon sx={{ fontSize: 15 }} />
+                                    )
+                                  }
+                                  onClick={() =>
+                                    handleSpotlightAssignmentRespond(nextUpcomingEvent._id, 'accepted')
+                                  }
+                                  disabled={respondingSpotlight}
+                                  sx={{
+                                    fontWeight: 700,
+                                    textTransform: 'none',
+                                    borderRadius: 1.5,
+                                    fontSize: '0.78rem',
+                                    py: 0.4,
+                                    px: 1.5,
+                                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                                  }}
+                                >
+                                  Accept (✓)
+                                </Button>
+                              </Tooltip>
+                              <Tooltip title="Decline Assignment (Cross)">
+                                <Button
+                                  variant="outlined"
+                                  color="error"
+                                  size="small"
+                                  startIcon={<CloseIcon sx={{ fontSize: 15 }} />}
+                                  onClick={() =>
+                                    handleSpotlightAssignmentRespond(nextUpcomingEvent._id, 'declined')
+                                  }
+                                  disabled={respondingSpotlight}
+                                  sx={{
+                                    fontWeight: 700,
+                                    textTransform: 'none',
+                                    borderRadius: 1.5,
+                                    fontSize: '0.78rem',
+                                    py: 0.4,
+                                    px: 1.5,
+                                  }}
+                                >
+                                  Decline (✕)
+                                </Button>
+                              </Tooltip>
+                            </Box>
+                          </>
+                        )}
+                      </Paper>
+                    )}
                   </>
                 ) : (
                   <Box sx={{ py: 3, textAlign: 'center' }}>

@@ -89,4 +89,11 @@ router.post(
   eventController.approveAssignment
 );
 
+// Respond to assignment (accept / decline by volunteer)
+router.post(
+  '/:id/assignments/respond',
+  requireSameChurch(Event),
+  eventController.respondToAssignment
+);
+
 module.exports = router;

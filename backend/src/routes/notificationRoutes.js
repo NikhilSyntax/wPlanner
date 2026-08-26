@@ -20,6 +20,9 @@ router.put('/:id/read', notificationController.markAsRead);
 // Mark all as read
 router.put('/read-all', notificationController.markAllAsRead);
 
+// Respond to notification assignment action (accept/decline)
+router.post('/:id/respond', notificationController.respondToNotification);
+
 // Create notification (admin or system)
 router.post('/', authMiddleware.roleRestriction(['admin']), notificationController.createNotification);
 

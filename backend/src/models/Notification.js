@@ -18,6 +18,13 @@ const notificationSchema = new mongoose.Schema({
   title: { type: String, required: true },
   message: { type: String, required: true },
   link: String,
+  eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event' },
+  actionStatus: {
+    type: String,
+    enum: ['pending', 'accepted', 'declined', null],
+    default: null,
+  },
+  assignmentRole: String,
   read: { type: Boolean, default: false },
   sentVia: [{ type: String, enum: ['in_app', 'push', 'email', 'sms', 'socket'] }],
   createdAt: { type: Date, default: Date.now }

@@ -16,7 +16,17 @@ const { sendPushToUser } = require('./pushService');
  * @param {string} params.message - Notification body text
  * @param {string} [params.link] - Target route link (e.g. /events/123)
  */
-exports.sendNotification = async ({ recipientId, senderId, type, title, message, link }) => {
+exports.sendNotification = async ({
+  recipientId,
+  senderId,
+  type,
+  title,
+  message,
+  link,
+  eventId,
+  actionStatus,
+  assignmentRole,
+}) => {
   try {
     if (!recipientId || !title || !message) return null;
 
@@ -36,6 +46,14 @@ exports.sendNotification = async ({ recipientId, senderId, type, title, message,
       title,
       message,
       link: link || '',
+      eventId: eventId || null,
+      actionStatus:
+        actionStatus !== undefined
+          ? actionStatus
+          : type === 'assignment'
+          ? 'pending'
+          : null,
+      assignmentRole: assignmentRole || '',
       read: false,
       sentVia: ['in_app', 'push'],
     });

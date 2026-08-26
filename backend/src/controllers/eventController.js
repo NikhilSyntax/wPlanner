@@ -3,6 +3,7 @@ const Team = require("../models/Team");
 const Assignment = require("../models/Assignment");
 const User = require("../models/User");
 const Song = require("../models/Song");
+const Notification = require("../models/Notification");
 const {
   getEventDisplayTitle,
   ensureEventHasTitle,
@@ -81,20 +82,63 @@ exports.getEvent = async (req, res) => {
   }
 };
 
-// Create event
-// Sanitize event payload to prevent casting empty strings to ObjectIds
-function sanitizeEventPayload(body) {
-  const payload = ensureEventPayloadHasTitle(body);
-  if (!payload.event) payload.event = {};
-  if (payload.team === "" || payload.team === null || payload.team === "null" || payload.team === "undefined") {
+// Sanitize event payload to prevent casting empty strings to ObjectIds and preserve subdocument titles
+function sanitizeEventPayload(body, existingDoc = null) {
+  const payload = { ...body };
+
+  if (
+    payload.team === "" ||
+    payload.team === null ||
+    payload.team === "null" ||
+    payload.team === "undefined"
+  ) {
     delete payload.team;
   }
-  if (payload.chat === "" || payload.chat === null || payload.chat === "null" || payload.chat === "undefined") {
+  if (
+    payload.chat === "" ||
+    payload.chat === null ||
+    payload.chat === "null" ||
+    payload.chat === "undefined"
+  ) {
     delete payload.chat;
   }
   if (Array.isArray(payload.setlist)) {
     payload.setlist = payload.setlist.filter(Boolean);
   }
+
+  if (existingDoc) {
+    if (payload.event && typeof payload.event === "object") {
+      const currentTitle =
+        payload.event.title?.trim() ||
+        existingDoc.event?.title ||
+        getEventDisplayTitle(existingDoc) ||
+        "Untitled Event";
+      payload.event.title = currentTitle;
+      if (!payload.event.type && existingDoc.event?.type) {
+        payload.event.type = existingDoc.event.type;
+      }
+      if (!payload.event.status && existingDoc.event?.status) {
+        payload.event.status = existingDoc.event.status;
+      }
+    } else {
+      delete payload.event;
+    }
+  } else {
+    // createEvent mode
+    if (!payload.event || typeof payload.event !== "object") {
+      payload.event = {};
+    }
+    if (!payload.event.title || !payload.event.title.trim()) {
+      payload.event.title = getEventDisplayTitle(payload) || "Untitled Event";
+    }
+    if (!payload.event.type) {
+      payload.event.type = payload.type || "service";
+    }
+    if (!payload.event.status) {
+      payload.event.status = "draft";
+    }
+  }
+
   return payload;
 }
 
@@ -106,7 +150,7 @@ exports.createEvent = async (req, res) => {
       req.user?.isAdmin
     );
 
-    const payload = sanitizeEventPayload(req.body);
+    const payload = sanitizeEventPayload(req.body, null);
 
     // If created by someone other than full admin (sub-admin, instrumentalist, etc.), status is always 'draft' (Unconfirmed)
     if (!isFullAdmin) {
@@ -227,7 +271,7 @@ exports.updateEvent = async (req, res) => {
       req.user?.isAdmin
     );
 
-    const payload = sanitizeEventPayload(req.body);
+    const payload = sanitizeEventPayload(req.body, existing);
 
     const newStatus = payload["event.status"] || payload.event?.status;
     const oldStatus = existing.event?.status;
@@ -447,6 +491,9 @@ exports.addAssignment = async (req, res) => {
         title: "New Worship Assignment 🎵",
         message: `You were assigned as ${role || userToAssign.role} for "${event.event?.title || 'Worship Service'}".`,
         link: `/events/${event._id}`,
+        eventId: event._id,
+        actionStatus: "pending",
+        assignmentRole: role || userToAssign.role,
       }).catch((err) => console.warn(err.message));
     }
 
@@ -525,6 +572,9 @@ exports.setEventTeamFromRoster = async (req, res) => {
           title: "New Worship Assignment 🎵",
           message: `You were scheduled as ${assignment.role} for "${eventTitle}".`,
           link: `/events/${event._id}`,
+          eventId: event._id,
+          actionStatus: "pending",
+          assignmentRole: assignment.role,
         }).catch((err) => console.warn("Failed to notify user:", err.message));
       }
     }
@@ -572,7 +622,7 @@ exports.deleteAssignment = async (req, res) => {
   }
 };
 
-// Approve or reject a pending assignment (admin only)
+// Approve or reject a pending assignment
 exports.approveAssignment = async (req, res) => {
   try {
     const { assignmentId } = req.params;
@@ -589,12 +639,112 @@ exports.approveAssignment = async (req, res) => {
     if (!event || !event.churchId.equals(req.user.churchId)) {
       return res.status(403).json({ message: "Cross-church access denied" });
     }
-    assignment.status = action === "approve" ? "accepted" : "declined";
+    const newStatus = action === "approve" ? "accepted" : "declined";
+    assignment.status = newStatus;
     assignment.updatedAt = Date.now();
     await assignment.save();
+
+    // Update in event.assignments
+    const memberIndex = event.assignments.findIndex(
+      (a) => a.userId && a.userId.toString() === assignment.user.toString()
+    );
+    if (memberIndex !== -1) {
+      event.assignments[memberIndex].status = newStatus;
+      event.updatedAt = new Date();
+      await event.save();
+    }
+
     res.json(assignment);
   } catch (err) {
     console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Respond to assignment (accept/decline by volunteer for a specific event)
+exports.respondToAssignment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, action } = req.body;
+    let normalizedStatus = status;
+    if (!normalizedStatus && action) {
+      normalizedStatus =
+        action === "approve" || action === "accept" || action === "accepted"
+          ? "accepted"
+          : "declined";
+    }
+    if (!["accepted", "declined", "assigned", "pending"].includes(normalizedStatus)) {
+      return res.status(400).json({ message: 'Invalid status. Use "accepted" or "declined".' });
+    }
+
+    const event = await Event.findOne({
+      _id: id,
+      churchId: req.user.churchId,
+    });
+    if (!event) return res.status(404).json({ message: "Event not found" });
+
+    // Enforce that users can only change their own assignment status
+    const userId = req.user.userId;
+    if (req.body.userId && req.body.userId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        message: "You cannot change another member's response.",
+      });
+    }
+
+    let assignmentIndex = event.assignments.findIndex((a) => {
+      const uid = a.userId?._id ? a.userId._id.toString() : a.userId?.toString();
+      return uid === userId.toString();
+    });
+
+    let assignedRole = "Team Member";
+    if (assignmentIndex !== -1) {
+      event.assignments[assignmentIndex].status = normalizedStatus;
+      assignedRole = event.assignments[assignmentIndex].role || assignedRole;
+    } else {
+      const userDoc = await User.findById(userId).select("role name").lean();
+      assignedRole = userDoc?.role || "Team Member";
+      event.assignments.push({
+        userId,
+        role: assignedRole,
+        status: normalizedStatus,
+      });
+    }
+
+    event.updatedAt = new Date();
+    await event.save();
+
+    // Sync Assignment collection
+    await Assignment.findOneAndUpdate(
+      { event: event._id, user: userId },
+      {
+        status: normalizedStatus,
+        updatedAt: Date.now(),
+        $setOnInsert: {
+          assignedBy: req.user.userId,
+          role: assignedRole,
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    // Sync any related notifications for this user and event
+    await Notification.updateMany(
+      {
+        recipient: userId,
+        type: "assignment",
+        $or: [{ eventId: event._id }, { link: `/events/${event._id}` }],
+      },
+      { $set: { actionStatus: normalizedStatus, read: true } }
+    );
+
+    const populated = await populateEventDetails(event._id);
+    res.json({
+      success: true,
+      status: normalizedStatus,
+      event: populated,
+    });
+  } catch (err) {
+    console.error("[EventController] Error responding to assignment:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

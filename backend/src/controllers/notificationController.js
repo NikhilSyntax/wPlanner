@@ -1,4 +1,6 @@
 const Notification = require('../models/Notification');
+const Event = require('../models/Event');
+const Assignment = require('../models/Assignment');
 const { getVapidPublicKey, subscribeUser, unsubscribeUser, sendPushToUser } = require('../utils/pushService');
 const { sendNotification } = require('../utils/notificationService');
 
@@ -16,7 +18,7 @@ exports.getNotifications = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
-      .select('type title message link read createdAt');
+      .select('type title message link read createdAt actionStatus eventId assignmentRole');
 
     const total = await Notification.countDocuments(filter);
     const unreadCount = await Notification.countDocuments({ recipient: userId, read: false });
@@ -168,5 +170,92 @@ exports.sendTestPush = async (req, res) => {
   } catch (err) {
     console.error('[WebPush] Test push error:', err);
     res.status(500).json({ message: err.message || 'Failed to send test push' });
+  }
+};
+
+// POST /api/notifications/:id/respond
+// Accept or reject/decline an assignment notification
+exports.respondToNotification = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, status } = req.body;
+    let normalizedStatus = status;
+    if (!normalizedStatus && action) {
+      normalizedStatus =
+        action === 'accept' || action === 'approve' || action === 'accepted'
+          ? 'accepted'
+          : 'declined';
+    }
+    if (!['accepted', 'declined'].includes(normalizedStatus)) {
+      return res.status(400).json({ message: 'Invalid action. Use "accept" or "decline".' });
+    }
+
+    const notification = await Notification.findOne({
+      _id: id,
+      recipient: req.user.userId,
+    });
+    if (!notification) {
+      return res.status(404).json({ message: 'Notification not found' });
+    }
+
+    notification.actionStatus = normalizedStatus;
+    notification.read = true;
+    await notification.save();
+
+    // If associated with an event, update event assignments and Assignment document
+    let eventId = notification.eventId;
+    if (!eventId && notification.link) {
+      const match = notification.link.match(/\/events\/([a-fA-F0-9]{24})/);
+      if (match) eventId = match[1];
+    }
+
+    if (eventId) {
+      const event = await Event.findOne({
+        _id: eventId,
+        churchId: req.user.churchId,
+      });
+
+      if (event) {
+        const userId = req.user.userId;
+        const idx = event.assignments.findIndex((a) => {
+          const uid = a.userId?._id ? a.userId._id.toString() : a.userId?.toString();
+          return uid === userId.toString();
+        });
+
+        if (idx !== -1) {
+          event.assignments[idx].status = normalizedStatus;
+        } else {
+          event.assignments.push({
+            userId,
+            role: notification.assignmentRole || 'Team Member',
+            status: normalizedStatus,
+          });
+        }
+        event.updatedAt = new Date();
+        await event.save();
+
+        await Assignment.findOneAndUpdate(
+          { event: event._id, user: userId },
+          {
+            status: normalizedStatus,
+            updatedAt: Date.now(),
+            $setOnInsert: {
+              role: notification.assignmentRole || 'Team Member',
+              assignedBy: userId,
+            },
+          },
+          { upsert: true }
+        );
+      }
+    }
+
+    res.json({
+      success: true,
+      notification,
+      status: normalizedStatus,
+    });
+  } catch (err) {
+    console.error('[NotificationController] Error responding to notification:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 };

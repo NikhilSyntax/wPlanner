@@ -28,6 +28,9 @@ import {
   TableRow,
   Paper,
   Alert,
+  Avatar,
+  Tooltip,
+  CircularProgress,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -45,6 +48,9 @@ import {
   NotificationsActive as NotificationsActiveIcon,
   CheckCircle as CheckCircleIcon,
   AccessTime as AccessTimeIcon,
+  Check as CheckIcon,
+  Close as CloseIcon,
+  Cancel as CancelIcon,
 } from '@mui/icons-material';
 import api, { apiUrl } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -120,6 +126,44 @@ function EventDetails() {
   const [titleDraft, setTitleDraft] = useState(event?.title || '');
   const [descDraft, setDescDraft] = useState(event?.description || '');
   const [saveMessage, setSaveMessage] = useState('');
+  const [memberUpdatingId, setMemberUpdatingId] = useState(null);
+
+  const handleMemberStatusUpdate = async (member, targetStatus) => {
+    try {
+      const memberUserId = member.userId?._id || member.userId || member._id;
+      const currentUserId = user?.id || user?._id;
+      if (String(memberUserId) !== String(currentUserId)) {
+        setError("You can only respond to your own assignment.");
+        return;
+      }
+      setMemberUpdatingId(memberUserId);
+      await api.post(`/events/${id}/assignments/respond`, {
+        status: targetStatus,
+      });
+      setTeamMembers((prev) =>
+        prev.map((m) => {
+          const uId = m.userId?._id || m.userId || m._id;
+          return String(uId) === String(memberUserId)
+            ? { ...m, status: targetStatus }
+            : m;
+        })
+      );
+      setSaveMessage({
+        type: 'success',
+        text:
+          targetStatus === 'accepted'
+            ? 'Your assignment is confirmed as Approved!'
+            : 'Your assignment is marked as Not Available.',
+      });
+      setTimeout(() => setSaveMessage(''), 2500);
+      await fetchEvent();
+    } catch (err) {
+      console.error('Failed to update member status:', err);
+      setError(err?.response?.data?.message || 'Failed to update member status');
+    } finally {
+      setMemberUpdatingId(null);
+    }
+  };
 
   const addSongTitleInputRef = useRef(null);
   const setlistCardRef = useRef(null);
@@ -1214,55 +1258,211 @@ function EventDetails() {
           {/* Team Members */}
           <Card sx={{ borderRadius: 3 }}>
             <CardContent sx={{ p: 3 }}>
-              <Box display="flex" alignItems="center" gap={2} mb={3}>
-                <GroupIcon color="primary" />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                  Team Members ({teamMembers.length})
-                </Typography>
+              <Box display="flex" alignItems="center" justifyContent="space-between" mb={3} flexWrap="wrap" gap={1}>
+                <Box display="flex" alignItems="center" gap={2}>
+                  <GroupIcon color="primary" />
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Team Members ({teamMembers.length})
+                  </Typography>
+                </Box>
+                {canEdit && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<EditIcon />}
+                    onClick={() => navigate(`/events/${id}/team`)}
+                    sx={{ borderRadius: 1.5, textTransform: 'none', fontSize: '0.8125rem' }}
+                  >
+                    Manage Roster
+                  </Button>
+                )}
               </Box>
 
               {teamMembers.length > 0 ? (
-                <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
-                  <Table>
-                    <TableHead sx={{ bgcolor: 'action.hover' }}>
+                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                  <Table size="small">
+                    <TableHead sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : '#f8fafc' }}>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 600 }}>Person</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Role</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', py: 1.25 }}>Person</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', py: 1.25 }}>Role</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', py: 1.25 }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', py: 1.25, textAlign: 'right' }}>Response Actions</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {teamMembers.map((member, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {member.userId?.name ||
-                                member.userId?.email ||
-                                'Unknown'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={member.role}
-                              size="small"
-                              variant="outlined"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={member.status || 'team member'}
-                              size="small"
-                              color={
-                                member.status === 'confirmed'
-                                  ? 'success'
-                                  : member.status === 'declined'
-                                    ? 'error'
-                                    : 'default'
-                              }
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {teamMembers.map((member, idx) => {
+                        const rawStatus = member.status ? String(member.status).toLowerCase() : 'pending';
+                        const isApproved = rawStatus === 'accepted' || rawStatus === 'confirmed' || rawStatus === 'approved';
+                        const isDeclined = rawStatus === 'declined' || rawStatus === 'rejected' || rawStatus === 'not_available';
+                        const currentUserId = user?.id || user?._id;
+                        const memberUserId = member.userId?._id ? String(member.userId._id) : String(member.userId || member._id || '');
+                        const isSelf = Boolean(currentUserId && memberUserId && String(memberUserId) === String(currentUserId));
+                        const isUpdating = memberUpdatingId === memberUserId;
+
+                        return (
+                          <TableRow key={idx} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                            <TableCell sx={{ py: 1.25 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                                <Avatar
+                                  sx={{
+                                    width: 32,
+                                    height: 32,
+                                    fontSize: '0.8rem',
+                                    fontWeight: 700,
+                                    bgcolor: isApproved
+                                      ? '#10b981'
+                                      : isDeclined
+                                      ? '#ef4444'
+                                      : 'primary.main',
+                                  }}
+                                >
+                                  {(member.userId?.name || member.name || 'U').charAt(0).toUpperCase()}
+                                </Avatar>
+                                <Box>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                                    <Typography variant="body2" fontWeight={600} sx={{ lineHeight: 1.2 }}>
+                                      {member.userId?.name || member.name || member.userId?.email || 'Unknown'}
+                                    </Typography>
+                                    {isSelf && (
+                                      <Chip
+                                        label="You"
+                                        size="small"
+                                        color="primary"
+                                        sx={{ height: 18, fontSize: '0.65rem', fontWeight: 700, px: 0.3 }}
+                                      />
+                                    )}
+                                  </Box>
+                                  {member.userId?.email && member.userId?.name && (
+                                    <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.72rem', mt: 0.2 }}>
+                                      {member.userId.email}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              </Box>
+                            </TableCell>
+                            <TableCell sx={{ py: 1.25 }}>
+                              <Chip
+                                label={member.role || 'Member'}
+                                size="small"
+                                variant="outlined"
+                                sx={{ fontWeight: 600, fontSize: '0.75rem', height: 24 }}
+                              />
+                            </TableCell>
+                            <TableCell sx={{ py: 1.25 }}>
+                              {isApproved ? (
+                                <Chip
+                                  icon={<CheckCircleIcon sx={{ fontSize: '13px !important', color: '#15803d !important' }} />}
+                                  label="Approved"
+                                  size="small"
+                                  color="success"
+                                  sx={{
+                                    fontWeight: 700,
+                                    fontSize: '0.72rem',
+                                    height: 24,
+                                    bgcolor: 'rgba(34, 197, 94, 0.15)',
+                                    color: '#15803d',
+                                    border: '1px solid rgba(34, 197, 94, 0.35)',
+                                  }}
+                                />
+                              ) : isDeclined ? (
+                                <Chip
+                                  icon={<CancelIcon sx={{ fontSize: '13px !important', color: '#b91c1c !important' }} />}
+                                  label="Not Available"
+                                  size="small"
+                                  color="error"
+                                  sx={{
+                                    fontWeight: 700,
+                                    fontSize: '0.72rem',
+                                    height: 24,
+                                    bgcolor: 'rgba(239, 68, 68, 0.15)',
+                                    color: '#b91c1c',
+                                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                                  }}
+                                />
+                              ) : (
+                                <Chip
+                                  label="Pending"
+                                  size="small"
+                                  sx={{
+                                    fontWeight: 600,
+                                    fontSize: '0.72rem',
+                                    height: 24,
+                                    bgcolor: 'action.hover',
+                                    color: 'text.secondary',
+                                  }}
+                                />
+                              )}
+                            </TableCell>
+                            <TableCell sx={{ py: 1.25, textAlign: 'right' }}>
+                              {isSelf ? (
+                                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, justifyContent: 'flex-end' }}>
+                                  <Tooltip title="Approve (Mark as Approved in Green)">
+                                    <Button
+                                      size="small"
+                                      variant={isApproved ? "contained" : "outlined"}
+                                      color="success"
+                                      startIcon={
+                                        isUpdating ? (
+                                          <CircularProgress size={12} color="inherit" />
+                                        ) : (
+                                          <CheckIcon sx={{ fontSize: 13 }} />
+                                        )
+                                      }
+                                      onClick={() => handleMemberStatusUpdate(member, 'accepted')}
+                                      disabled={isUpdating}
+                                      sx={{
+                                        textTransform: 'none',
+                                        fontWeight: 700,
+                                        fontSize: '0.72rem',
+                                        py: 0.3,
+                                        px: 1,
+                                        borderRadius: 1.5,
+                                        minWidth: 'auto',
+                                        boxShadow: isApproved ? '0 2px 6px rgba(34, 197, 94, 0.3)' : 'none',
+                                      }}
+                                    >
+                                      Approve
+                                    </Button>
+                                  </Tooltip>
+                                  <Tooltip title="Mark as Not Available in Red">
+                                    <Button
+                                      size="small"
+                                      variant={isDeclined ? "contained" : "outlined"}
+                                      color="error"
+                                      startIcon={<CloseIcon sx={{ fontSize: 13 }} />}
+                                      onClick={() => handleMemberStatusUpdate(member, 'declined')}
+                                      disabled={isUpdating}
+                                      sx={{
+                                        textTransform: 'none',
+                                        fontWeight: 700,
+                                        fontSize: '0.72rem',
+                                        py: 0.3,
+                                        px: 1,
+                                        borderRadius: 1.5,
+                                        minWidth: 'auto',
+                                      }}
+                                    >
+                                      Not Available
+                                    </Button>
+                                  </Tooltip>
+                                </Box>
+                              ) : (
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ fontStyle: 'italic', fontSize: '0.75rem' }}
+                                >
+                                  {isApproved
+                                    ? 'Confirmed by member'
+                                    : isDeclined
+                                    ? 'Declined by member'
+                                    : 'Awaiting member response'}
+                                </Typography>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </TableContainer>
@@ -1272,7 +1472,7 @@ function EventDetails() {
                   color="text.secondary"
                   sx={{ py: 2 }}
                 >
-                  No team members yet. Click "Edit Team" to add people.
+                  No team members yet. Click "Manage Roster" to add people.
                 </Typography>
               )}
             </CardContent>

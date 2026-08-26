@@ -191,7 +191,7 @@ function EventSetlistSongView() {
   const songContent = song?.content?.chords || song?.content?.lyrics || '';
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1050, mx: 'auto' }}>
+    <Box sx={{ p: { xs: 1.5, sm: 2.5, md: 3 }, maxWidth: 1050, mx: 'auto' }}>
       {/* Toast Notification */}
       <Snackbar
         open={Boolean(toastMessage)}
@@ -202,108 +202,219 @@ function EventSetlistSongView() {
       />
 
       {/* Header Top Bar */}
-      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
-        <IconButton onClick={() => navigate(`/events/${id}`)} aria-label="Back to event">
-          <ArrowBackIcon />
-        </IconButton>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            {view === 'lyrics' ? 'Song Lyrics' : 'Chords & Lyrics'}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {eventTitle}
-          </Typography>
-        </Box>
-      </Stack>
-
-      <Card sx={{ borderRadius: 3, mb: 3 }}>
-        <CardContent sx={{ p: 3 }}>
-          <Stack
-            direction={{ xs: 'column', md: 'row' }}
-            alignItems={{ xs: 'flex-start', md: 'center' }}
-            justifyContent="space-between"
-            gap={1.5}
-            sx={{ mb: 2 }}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          mb: 2,
+          gap: 1.5,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+          <IconButton
+            onClick={() => navigate(`/events/${id}`)}
+            aria-label="Back to event"
+            sx={{ bgcolor: 'action.hover', borderRadius: 2 }}
           >
-            <Stack direction="row" alignItems="center" gap={1.5} flexWrap="wrap">
+            <ArrowBackIcon fontSize="small" />
+          </IconButton>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant="h6"
+              fontWeight={700}
+              noWrap
+              sx={{ lineHeight: 1.2, fontSize: { xs: '1.05rem', sm: '1.25rem' } }}
+            >
+              {view === 'lyrics' ? 'Song Lyrics' : 'Chords & Lyrics'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap display="block">
+              {eventTitle}
+            </Typography>
+          </Box>
+        </Box>
+
+        {setlist.length > 0 && (
+          <Chip
+            label={`Song ${currentIndex + 1} of ${setlist.length}`}
+            size="small"
+            color="primary"
+            variant="outlined"
+            sx={{ fontWeight: 700, fontSize: '0.75rem', height: 26, flexShrink: 0 }}
+          />
+        )}
+      </Box>
+
+      {/* Song Hero Card with Touch-friendly Navigation Bar */}
+      <Card
+        variant="outlined"
+        sx={{
+          borderRadius: 3,
+          mb: 2.5,
+          bgcolor: 'background.paper',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+        }}
+      >
+        <CardContent sx={{ p: { xs: 2, sm: 2.5 }, pb: { xs: '16px !important', sm: '20px !important' } }}>
+          {/* Top row: Title + Artist + Key/BPM Badges */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: 1.5,
+              flexWrap: 'wrap',
+              mb: 1.75,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
               <Box
                 sx={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 2,
+                  width: 40,
+                  height: 40,
+                  borderRadius: 2.5,
                   bgcolor: 'rgba(37, 99, 235, 0.1)',
                   color: 'primary.main',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  flexShrink: 0,
                 }}
               >
                 <MusicIcon />
               </Box>
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                  {song?.title || 'Song'}
+              <Box sx={{ minWidth: 0 }}>
+                <Typography
+                  variant="h6"
+                  fontWeight={700}
+                  sx={{ lineHeight: 1.25, fontSize: { xs: '1.05rem', sm: '1.25rem' } }}
+                >
+                  {song?.title || 'Untitled Song'}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  noWrap
+                  sx={{ fontSize: '0.8125rem', mt: 0.25 }}
+                >
                   {song?.artist || 'Unknown Artist'}
                 </Typography>
               </Box>
-              {song?.key && (
-                <Chip size="small" label={`Key: ${song.key}`} color="primary" variant="outlined" sx={{ fontWeight: 600 }} />
-              )}
-            </Stack>
+            </Box>
 
-            {/* Actions: Edit Lyrics & Chords + Previous / Next Song Controls */}
-            <Stack direction="row" spacing={1} flexWrap="wrap">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+              {song?.key && (
+                <Chip
+                  size="small"
+                  label={`Key: ${song.key}`}
+                  color="primary"
+                  sx={{ fontWeight: 700, fontSize: '0.75rem', height: 24 }}
+                />
+              )}
+              {song?.bpm && (
+                <Chip
+                  size="small"
+                  label={`${song.bpm} BPM`}
+                  variant="outlined"
+                  sx={{ fontWeight: 600, fontSize: '0.72rem', height: 24 }}
+                />
+              )}
+              {song?.timeSignature && (
+                <Chip
+                  size="small"
+                  label={song.timeSignature}
+                  variant="outlined"
+                  sx={{ fontWeight: 600, fontSize: '0.72rem', height: 24 }}
+                />
+              )}
+            </Box>
+          </Box>
+
+          {/* Bottom row: Prev / Next Navigation & Edit Button */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1,
+              pt: 1.5,
+              borderTop: '1px solid',
+              borderColor: 'divider',
+              flexWrap: 'wrap',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: { xs: 1, sm: 'none' } }}>
               <Button
                 variant="outlined"
-                color="primary"
-                startIcon={<EditIcon />}
-                onClick={handleOpenEditModal}
-                sx={{
-                  textTransform: 'none',
-                  borderRadius: 2,
-                  fontWeight: 600,
-                  fontSize: '0.8125rem',
-                }}
-              >
-                Edit Lyrics & Chords
-              </Button>
-              <Button
-                variant="outlined"
+                size="small"
                 startIcon={<PrevIcon />}
                 onClick={goPrevSong}
                 disabled={!prevSong}
-                sx={{ textTransform: 'none', borderRadius: 2 }}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 1.75,
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  py: 0.5,
+                  px: { xs: 1.25, sm: 1.75 },
+                  flex: { xs: 1, sm: 'none' },
+                }}
               >
-                {prevSong ? 'Prev Song' : 'First Song'}
+                {prevSong ? 'Prev' : 'First'}
               </Button>
               <Button
                 variant="contained"
+                size="small"
                 endIcon={<NextIcon />}
                 onClick={goNextSong}
                 disabled={!nextSong}
-                sx={{ textTransform: 'none', borderRadius: 2 }}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 1.75,
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                  py: 0.5,
+                  px: { xs: 1.25, sm: 1.75 },
+                  flex: { xs: 1, sm: 'none' },
+                  boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)',
+                }}
               >
-                {nextSong ? 'Next Song' : 'Last Song'}
+                {nextSong ? 'Next' : 'Last'}
               </Button>
-            </Stack>
-          </Stack>
+            </Box>
 
-          <Divider sx={{ mb: 2.5 }} />
-
-          {/* Unified Chord Sheet Viewer with Hide/Show Chords initialized from URL query */}
-          <ChordSheetViewer
-            key={`${songId}-${view}-${song?.updatedAt || ''}`}
-            rawContent={songContent}
-            originalKey={song?.key || 'C'}
-            title={song?.title}
-            artist={song?.artist}
-            initialShowChords={initialShowChords}
-            onEdit={handleOpenEditModal}
-          />
+            <Button
+              variant="outlined"
+              color="inherit"
+              size="small"
+              startIcon={<EditIcon sx={{ fontSize: 15 }} />}
+              onClick={handleOpenEditModal}
+              sx={{
+                textTransform: 'none',
+                borderRadius: 1.75,
+                fontWeight: 600,
+                fontSize: '0.78rem',
+                py: 0.5,
+                px: 1.25,
+                ml: 'auto',
+              }}
+            >
+              Edit Sheet
+            </Button>
+          </Box>
         </CardContent>
       </Card>
+
+      {/* Unified Chord Sheet Viewer with Hide/Show Chords initialized from URL query */}
+      <ChordSheetViewer
+        key={`${songId}-${view}-${song?.updatedAt || ''}`}
+        rawContent={songContent}
+        originalKey={song?.key || 'C'}
+        title={song?.title}
+        artist={song?.artist}
+        initialShowChords={initialShowChords}
+        onEdit={handleOpenEditModal}
+      />
 
       {/* Edit Lyrics & Chords Modal Dialog */}
       <Dialog

@@ -1,0 +1,37 @@
+================================================================================
+wPlanner (Worship Planner) - Application Features Overview
+================================================================================
+
+wPlanner is a collaborative church service planning, worship management, and volunteer scheduling platform. Below is a brief and precise summary of its core features:
+
+1. AUTHENTICATION & CHURCH TENANCY
+   - Secure user registration, JWT-based authentication, and profile management.
+   - Multi-church organization with an administrator approval workflow for new members.
+   - Role-based access control (Admin, Leader, Member).
+
+2. EVENT & SERVICE PLANNING
+   - Service Scheduling: Create, edit, and organize church events and services.
+   - Setlist Builder: Attach songs, assign performance keys, and structure song sequences.
+   - Production Planning: Organize service orders, cue timelines, item durations, and production notes.
+   - Volunteer Scheduling: Assign team members to event roles and track confirmation statuses (Pending, Accepted, Declined).
+
+3. WORSHIP SONG REPOSITORY
+   - Song Library: Manage songs with lyrics, chord sheets, default keys, tempo (BPM), themes, and external links.
+   - Usage Analytics: Track song usage frequency and performance history across events.
+   - Musician View: Optimized in-event setlist interface for viewing lyrics and chords during rehearsals and live services.
+
+4. TEAM MANAGEMENT
+   - Team Organization: Create specialized ministry teams (e.g., Worship, Audio/Visual, Ushers, Media).
+   - Roster Management: Assign team leaders and organize volunteer rosters by skill/position.
+
+5. REAL-TIME COMMUNICATION
+   - Dedicated Chat Rooms: Real-time messaging for specific events and teams powered by WebSockets (Socket.IO).
+   - Instant updates and coordination between leaders and team members.
+
+6. NOTIFICATIONS & ALERTS
+   - In-app notification center for schedule changes, assignment requests, and team updates.
+   - Web Push Notifications: Browser-level push support for immediate volunteer alerts.
+
+7. INTERACTIVE DASHBOARD
+   - Centralized dashboard displaying upcoming services, personal roster assignments, quick-access setlists, and notification summaries.
+================================================================================

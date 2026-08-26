@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import {
   Box,
   IconButton,
@@ -30,7 +31,11 @@ import {
   NotificationsActive as NotificationsActiveIcon,
   Send as SendIcon,
   CheckCircle as CheckCircleIcon,
+  Check as CheckIcon,
+  Close as CloseIcon,
+  Cancel as CancelIcon,
 } from '@mui/icons-material';
+import { addNotification } from '../store/slices/uiSlice';
 import { io } from 'socket.io-client';
 import api, { API_ORIGIN } from '../services/api';
 import {
@@ -70,10 +75,12 @@ const formatTime = (dateStr) => {
 
 function NotificationBell() {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [anchorEl, setAnchorEl] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [respondingId, setRespondingId] = useState(null);
 
   // Push subscription state
   const [pushStatus, setPushStatus] = useState({
@@ -87,6 +94,47 @@ function NotificationBell() {
 
   const socketRef = useRef(null);
   const open = Boolean(anchorEl);
+
+  const handleRespondNotification = async (e, notif, action) => {
+    e.stopPropagation();
+    try {
+      setRespondingId(notif._id);
+      const res = await api.post(`/notifications/${notif._id}/respond`, { action });
+      const newStatus =
+        res.data?.status || (action === 'accept' ? 'accepted' : 'declined');
+
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n._id === notif._id
+            ? { ...n, actionStatus: newStatus, read: true }
+            : n
+        )
+      );
+      if (!notif.read) {
+        setUnreadCount((c) => Math.max(0, c - 1));
+      }
+      dispatch(
+        addNotification({
+          type: action === 'accept' ? 'success' : 'info',
+          message:
+            action === 'accept'
+              ? 'Assignment accepted! See you there 🎉'
+              : 'Assignment declined.',
+        })
+      );
+    } catch (err) {
+      console.error('[NotificationBell] Failed to respond to notification:', err);
+      dispatch(
+        addNotification({
+          type: 'error',
+          message:
+            err?.response?.data?.message || 'Failed to update assignment response',
+        })
+      );
+    } finally {
+      setRespondingId(null);
+    }
+  };
 
   // 1. Fetch notifications from backend
   const fetchNotifications = async () => {
@@ -327,80 +375,235 @@ function NotificationBell() {
               </Typography>
             </Box>
           ) : (
-            notifications.map((notif) => (
-              <ListItem
-                key={notif._id}
-                onClick={() => handleNotificationClick(notif)}
-                sx={{
-                  py: 1.5,
-                  px: 2.5,
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                  cursor: notif.link ? 'pointer' : 'default',
-                  bgcolor: notif.read ? 'transparent' : 'rgba(37, 99, 235, 0.05)',
-                  transition: 'background-color 0.15s ease',
-                  '&:hover': {
-                    bgcolor: 'action.hover',
-                  },
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 36 }}>
-                  {getNotificationIcon(notif.type)}
-                </ListItemIcon>
-                <ListItemText
-                  primary={
-                    <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1}>
-                      <Typography
-                        variant="body2"
-                        fontWeight={notif.read ? 600 : 700}
-                        color="text.primary"
-                        sx={{ lineHeight: 1.3 }}
-                      >
-                        {notif.title}
-                      </Typography>
-                      {!notif.read && (
-                        <Box
+            notifications.map((notif) => {
+              const isAssignment =
+                notif.type === 'assignment' ||
+                Boolean(notif.actionStatus) ||
+                Boolean(notif.assignmentRole) ||
+                (notif.title && notif.title.toLowerCase().includes('assignment')) ||
+                (notif.message && notif.message.toLowerCase().includes('assigned')) ||
+                (notif.message && notif.message.toLowerCase().includes('scheduled as'));
+
+              return (
+                <ListItem
+                  key={notif._id}
+                  onClick={() => handleNotificationClick(notif)}
+                  sx={{
+                    py: 1.5,
+                    px: 2.5,
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                    cursor: notif.link ? 'pointer' : 'default',
+                    bgcolor: notif.read ? 'transparent' : 'rgba(37, 99, 235, 0.05)',
+                    transition: 'background-color 0.15s ease',
+                    '&:hover': {
+                      bgcolor: 'action.hover',
+                    },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    {getNotificationIcon(notif.type)}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1}>
+                        <Typography
+                          variant="body2"
+                          fontWeight={notif.read ? 600 : 700}
+                          color="text.primary"
+                          sx={{ lineHeight: 1.3 }}
+                        >
+                          {notif.title}
+                        </Typography>
+                        {!notif.read && (
+                          <Box
+                            sx={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              bgcolor: 'primary.main',
+                              flexShrink: 0,
+                              mt: 0.5,
+                            }}
+                          />
+                        )}
+                      </Box>
+                    }
+                    secondary={
+                      <Box component="span" sx={{ display: 'block', mt: 0.3 }}>
+                        <Typography
+                          component="span"
+                          variant="caption"
+                          color="text.secondary"
                           sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            bgcolor: 'primary.main',
-                            flexShrink: 0,
-                            mt: 0.5,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            lineHeight: 1.4,
                           }}
-                        />
-                      )}
-                    </Box>
-                  }
-                  secondary={
-                    <Box component="span" sx={{ display: 'block', mt: 0.3 }}>
-                      <Typography
-                        component="span"
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          lineHeight: 1.4,
-                        }}
-                      >
-                        {notif.message}
-                      </Typography>
-                      <Typography
-                        component="span"
-                        variant="caption"
-                        color="text.disabled"
-                        sx={{ display: 'block', mt: 0.5, fontSize: '0.7rem' }}
-                      >
-                        {formatTime(notif.createdAt)}
-                      </Typography>
-                    </Box>
-                  }
-                />
-              </ListItem>
-            ))
+                        >
+                          {notif.message}
+                        </Typography>
+
+                        {/* Assignment Accept (Tick) / Reject (Cross) Action Controls */}
+                        {isAssignment && (
+                          <Box
+                            component="span"
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              mt: 1,
+                              pt: 0.75,
+                              borderTop: '1px dashed',
+                              borderColor: 'divider',
+                              gap: 0.8,
+                              flexWrap: 'wrap',
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {notif.actionStatus === 'accepted' ? (
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 1 }}>
+                                <Chip
+                                  icon={<CheckIcon sx={{ fontSize: '13px !important', color: '#16a34a !important' }} />}
+                                  label="Accepted ✓"
+                                  size="small"
+                                  sx={{
+                                    height: 22,
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    bgcolor: 'rgba(22, 163, 74, 0.12)',
+                                    color: '#16a34a',
+                                    border: '1px solid rgba(22, 163, 74, 0.3)',
+                                  }}
+                                />
+                                <Tooltip title="Change to Decline">
+                                  <Button
+                                    size="small"
+                                    color="error"
+                                    startIcon={<CloseIcon sx={{ fontSize: 12 }} />}
+                                    onClick={(e) => handleRespondNotification(e, notif, 'decline')}
+                                    disabled={respondingId === notif._id}
+                                    sx={{
+                                      textTransform: 'none',
+                                      fontSize: '0.68rem',
+                                      py: 0.2,
+                                      px: 0.8,
+                                      minWidth: 'auto',
+                                    }}
+                                  >
+                                    Decline
+                                  </Button>
+                                </Tooltip>
+                              </Box>
+                            ) : notif.actionStatus === 'declined' ? (
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 1 }}>
+                                <Chip
+                                  icon={<CloseIcon sx={{ fontSize: '13px !important', color: '#dc2626 !important' }} />}
+                                  label="Declined ✕"
+                                  size="small"
+                                  sx={{
+                                    height: 22,
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    bgcolor: 'rgba(220, 38, 38, 0.12)',
+                                    color: '#dc2626',
+                                    border: '1px solid rgba(220, 38, 38, 0.3)',
+                                  }}
+                                />
+                                <Tooltip title="Change to Accept">
+                                  <Button
+                                    size="small"
+                                    color="success"
+                                    startIcon={<CheckIcon sx={{ fontSize: 12 }} />}
+                                    onClick={(e) => handleRespondNotification(e, notif, 'accept')}
+                                    disabled={respondingId === notif._id}
+                                    sx={{
+                                      textTransform: 'none',
+                                      fontSize: '0.68rem',
+                                      py: 0.2,
+                                      px: 0.8,
+                                      minWidth: 'auto',
+                                    }}
+                                  >
+                                    Accept
+                                  </Button>
+                                </Tooltip>
+                              </Box>
+                            ) : (
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%', gap: 1 }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ mr: 'auto', fontWeight: 600, fontSize: '0.7rem' }}>
+                                  Respond:
+                                </Typography>
+                                <Tooltip title="Accept Assignment (Tick)">
+                                  <Button
+                                    size="small"
+                                    variant="contained"
+                                    color="success"
+                                    startIcon={
+                                      respondingId === notif._id ? (
+                                        <CircularProgress size={12} color="inherit" />
+                                      ) : (
+                                        <CheckIcon sx={{ fontSize: 13 }} />
+                                      )
+                                    }
+                                    onClick={(e) => handleRespondNotification(e, notif, 'accept')}
+                                    disabled={respondingId === notif._id}
+                                    sx={{
+                                      textTransform: 'none',
+                                      fontWeight: 700,
+                                      fontSize: '0.72rem',
+                                      py: 0.3,
+                                      px: 1.2,
+                                      borderRadius: 1.5,
+                                      minWidth: 70,
+                                      boxShadow: '0 2px 6px rgba(34, 197, 94, 0.3)',
+                                    }}
+                                  >
+                                    Accept
+                                  </Button>
+                                </Tooltip>
+                                <Tooltip title="Reject Assignment (Cross)">
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    color="error"
+                                    startIcon={<CloseIcon sx={{ fontSize: 13 }} />}
+                                    onClick={(e) => handleRespondNotification(e, notif, 'decline')}
+                                    disabled={respondingId === notif._id}
+                                    sx={{
+                                      textTransform: 'none',
+                                      fontWeight: 700,
+                                      fontSize: '0.72rem',
+                                      py: 0.3,
+                                      px: 1.2,
+                                      borderRadius: 1.5,
+                                      minWidth: 70,
+                                    }}
+                                  >
+                                    Reject
+                                  </Button>
+                                </Tooltip>
+                              </Box>
+                            )}
+                          </Box>
+                        )}
+
+                        <Typography
+                          component="span"
+                          variant="caption"
+                          color="text.disabled"
+                          sx={{ display: 'block', mt: 0.5, fontSize: '0.7rem' }}
+                        >
+                          {formatTime(notif.createdAt)}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </ListItem>
+              );
+            })
           )}
         </List>
 
