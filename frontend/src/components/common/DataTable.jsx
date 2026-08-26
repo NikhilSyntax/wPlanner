@@ -133,16 +133,28 @@ function DataTable({
       }}
     >
       {/* Header */}
-      <Box sx={{ p: 3, borderBottom: 1, borderColor: 'divider' }}>
+      {(title || searchable) && (
         <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          mb={2}
+          sx={{
+            p: { xs: 1.5, sm: '12px 20px' },
+            borderBottom: 1,
+            borderColor: 'divider',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 1.5,
+          }}
         >
-          <Typography variant="h6" component="h2">
-            {title}
-          </Typography>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            {typeof title === 'string' ? (
+              <Typography variant="h6" fontWeight={700}>
+                {title}
+              </Typography>
+            ) : (
+              title
+            )}
+          </Box>
           {searchable && (
             <TextField
               size="small"
@@ -152,15 +164,18 @@ function DataTable({
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchIcon />
+                    <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                   </InputAdornment>
                 ),
               }}
-              sx={{ minWidth: 250 }}
+              sx={{
+                minWidth: { xs: '100%', sm: 220 },
+                '& .MuiInputBase-root': { height: 34, borderRadius: 2 },
+              }}
             />
           )}
         </Box>
-      </Box>
+      )}
 
       {/* Table */}
       <TableContainer>

@@ -17,17 +17,9 @@ router.get('/', eventController.getEvents);
 // Get single event
 router.get('/:id', requireSameChurch(Event), eventController.getEvent);
 
-// Create event (team_leader, admin, worship leader, pastor, elder)
+// Create event (open to all church members; drafts for non-admins)
 router.post(
   '/',
-  authMiddleware.roleRestriction([
-    'team_leader',
-    'admin',
-    'worship leader',
-    'worship_leader',
-    'pastor',
-    'elder',
-  ]),
   eventController.createEvent
 );
 
@@ -39,17 +31,10 @@ router.put(
   eventController.updateEvent
 );
 
-// Delete event (team_leader, admin, worship leader, pastor, elder)
+// Delete event (Full Admin only)
 router.delete(
   '/:id',
-  authMiddleware.roleRestriction([
-    'team_leader',
-    'admin',
-    'worship leader',
-    'worship_leader',
-    'pastor',
-    'elder',
-  ]),
+  authMiddleware.fullAdminOnly,
   requireSameChurch(Event),
   blockCompletedEventLock,
   eventController.deleteEvent
@@ -60,28 +45,12 @@ router.delete(
 // Add assignment to event
 router.post(
   '/:id/assignments',
-  authMiddleware.roleRestriction([
-    'team_leader',
-    'admin',
-    'worship leader',
-    'worship_leader',
-    'pastor',
-    'elder',
-  ]),
   requireSameChurch(Event),
   blockCompletedEventLock,
   eventController.addAssignment
 );
 router.post(
   '/:id/event-team',
-  authMiddleware.roleRestriction([
-    'team_leader',
-    'admin',
-    'worship leader',
-    'worship_leader',
-    'pastor',
-    'elder',
-  ]),
   requireSameChurch(Event),
   blockCompletedEventLock,
   eventController.setEventTeamFromRoster,
@@ -104,33 +73,18 @@ router.post(
 
 // Get assignments for event
 router.get('/:id/assignments', requireSameChurch(Event), eventController.getAssignments);
+
 // Delete an assignment
 router.delete(
   '/:id/assignments/:assignmentId',
-  authMiddleware.roleRestriction([
-    'team_leader',
-    'admin',
-    'worship leader',
-    'worship_leader',
-    'pastor',
-    'elder',
-  ]),
   requireSameChurch(Event),
   blockCompletedEventLock,
   eventController.deleteAssignment
 );
 
-// Approve or reject an assignment (admin, team_leader, worship leader)
+// Approve or reject an assignment
 router.post(
   '/assignments/:assignmentId/approval',
-  authMiddleware.roleRestriction([
-    'team_leader',
-    'admin',
-    'worship leader',
-    'worship_leader',
-    'pastor',
-    'elder',
-  ]),
   requireSameChurch(Event),
   eventController.approveAssignment
 );

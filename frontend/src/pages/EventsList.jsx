@@ -61,13 +61,10 @@ function EventsList() {
   const { teams } = useSelector((state) => state.teams);
   const { user } = useSelector((state) => state.auth);
 
-  const isAdminOrSubAdmin = Boolean(
+  const isFullAdmin = Boolean(
     user?.isAdmin ||
-    user?.isSubAdmin ||
     user?.role === 'admin' ||
-    user?.role === 'sub_admin' ||
-    user?.roles?.includes('admin') ||
-    user?.roles?.includes('sub_admin')
+    user?.roles?.includes('admin')
   );
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -147,6 +144,18 @@ function EventsList() {
     }
   };
 
+  const handleQuickUndoCompleted = async (e, eventId) => {
+    e.stopPropagation();
+    try {
+      await api.put(`/events/${eventId}`, {
+        event: { status: 'published' },
+      });
+      dispatch(fetchEvents());
+    } catch (err) {
+      console.error('Failed to undo completed event:', err);
+    }
+  };
+
   const formatDateTime = (dateString) => {
     const date = new Date(dateString);
     return {
@@ -163,12 +172,19 @@ function EventsList() {
     };
   };
 
-  // Split into confirmed/scheduled events and drafts/unconfirmed events
-  const scheduledEvents = filteredEvents.filter(
-    (e) => (e.event?.status || 'draft') !== 'draft'
-  );
+  // Split into:
+  // 1. Confirmed / Scheduled active events (published / in_progress)
+  // 2. Drafts / Unconfirmed proposals
+  // 3. Completed worship events
+  const scheduledEvents = filteredEvents.filter((e) => {
+    const st = e.event?.status || 'draft';
+    return st === 'published' || st === 'in_progress';
+  });
   const draftEvents = filteredEvents.filter(
     (e) => (e.event?.status || 'draft') === 'draft'
+  );
+  const completedEvents = filteredEvents.filter(
+    (e) => (e.event?.status || 'draft') === 'completed'
   );
 
   const mainColumns = [
@@ -330,15 +346,17 @@ function EventsList() {
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Delete Event">
-            <IconButton
-              onClick={() => handleDeleteEvent(row._id)}
-              size="small"
-              sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          {isFullAdmin && (
+            <Tooltip title="Delete Event">
+              <IconButton
+                onClick={() => handleDeleteEvent(row._id)}
+                size="small"
+                sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
       ),
     },
@@ -471,7 +489,7 @@ function EventsList() {
       label: 'Actions',
       render: (row) => (
         <Box display="flex" alignItems="center" gap={1} onClick={(e) => e.stopPropagation()}>
-          {isAdminOrSubAdmin && (
+          {isFullAdmin && (
             <Button
               size="small"
               variant="contained"
@@ -501,15 +519,187 @@ function EventsList() {
               <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Delete Event">
-            <IconButton
-              onClick={() => handleDeleteEvent(row._id)}
-              size="small"
-              sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+          {isFullAdmin && (
+            <Tooltip title="Delete Event">
+              <IconButton
+                onClick={() => handleDeleteEvent(row._id)}
+                size="small"
+                sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      ),
+    },
+  ];
+
+  const completedColumns = [
+    {
+      id: 'title',
+      label: 'Completed Worship Service',
+      render: (row) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: 2,
+              bgcolor: 'rgba(16, 185, 129, 0.1)',
+              color: '#059669',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <CheckCircleIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Box>
+            <Typography variant="body2" fontWeight={600} color="text.primary">
+              {getEventTitle(row)}
+            </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{
+                maxWidth: 240,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                display: 'block',
+              }}
             >
-              <DeleteIcon fontSize="small" />
+              {getEventDescription(row) || 'Completed service'}
+            </Typography>
+          </Box>
+        </Box>
+      ),
+      sortable: true,
+      sortKey: (row) => getEventTitle(row),
+    },
+    {
+      id: 'type',
+      label: 'Category',
+      render: (row) => (
+        <Chip
+          label={getEventType(row)}
+          size="small"
+          sx={{
+            textTransform: 'capitalize',
+            fontWeight: 600,
+            fontSize: '0.75rem',
+            bgcolor: 'action.hover',
+          }}
+        />
+      ),
+      sortable: true,
+      sortKey: (row) => getEventType(row),
+    },
+    {
+      id: 'schedule',
+      label: 'Date Performed',
+      render: (row) => {
+        const startValue = getScheduleStart(row);
+        if (!startValue) {
+          return (
+            <Typography variant="caption" color="text.secondary">
+              N/A
+            </Typography>
+          );
+        }
+        const start = formatDateTime(startValue);
+        return (
+          <Box>
+            <Typography variant="body2" fontWeight={600}>
+              {start.date}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {start.time}
+            </Typography>
+          </Box>
+        );
+      },
+      sortable: true,
+      sortKey: (row) => new Date(getScheduleStart(row) || 0),
+    },
+    {
+      id: 'setlist',
+      label: 'Setlist Songs',
+      render: (row) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+          <QueueMusicIcon sx={{ fontSize: 16, color: '#10b981' }} />
+          <Typography variant="body2" fontWeight={600}>
+            {row.setlist?.length || 0} Songs Performed
+          </Typography>
+        </Box>
+      ),
+      sortable: true,
+      sortKey: (row) => row.setlist?.length || 0,
+    },
+    {
+      id: 'status',
+      label: 'Status',
+      render: () => (
+        <Chip
+          label="Completed"
+          size="small"
+          sx={{
+            fontWeight: 600,
+            fontSize: '0.75rem',
+            bgcolor: 'rgba(16, 185, 129, 0.12)',
+            color: '#059669',
+            border: '1px solid rgba(16, 185, 129, 0.3)',
+          }}
+        />
+      ),
+    },
+    {
+      id: 'actions',
+      label: 'Actions',
+      render: (row) => (
+        <Box display="flex" alignItems="center" gap={1} onClick={(e) => e.stopPropagation()}>
+          {isFullAdmin && (
+            <Button
+              size="small"
+              variant="outlined"
+              color="warning"
+              onClick={(e) => handleQuickUndoCompleted(e, row._id)}
+              sx={{
+                fontSize: '0.75rem',
+                textTransform: 'none',
+                height: 28,
+                borderRadius: 1.5,
+                fontWeight: 600,
+                px: 1.25,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Reopen
+            </Button>
+          )}
+          <Tooltip title="View Service Plan">
+            <IconButton
+              component={Link}
+              to={`/events/${row._id}`}
+              size="small"
+              sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+            >
+              <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
+          {isFullAdmin && (
+            <Tooltip title="Delete Event">
+              <IconButton
+                onClick={() => handleDeleteEvent(row._id)}
+                size="small"
+                sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
       ),
     },
@@ -642,24 +832,24 @@ function EventsList() {
       </Paper>
 
       {/* 1. Main Confirmed & Active Events Table */}
-      <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5}>
-            <EventIcon color="primary" />
-            <Typography variant="h6" fontWeight={700}>
-              Confirmed & Scheduled Events
-            </Typography>
-            <Chip
-              label={`${scheduledEvents.length} Active`}
-              size="small"
-              color="primary"
-              variant="outlined"
-              sx={{ fontWeight: 600, height: 22, fontSize: '0.75rem' }}
-            />
-          </Stack>
-        </Box>
-
+      <Box sx={{ mb: 3.5 }}>
         <DataTable
+          title={
+            <Stack direction="row" alignItems="center" spacing={1.5}>
+              <EventIcon color="primary" sx={{ fontSize: 22 }} />
+              <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.05rem' }}>
+                Confirmed & Scheduled Events
+              </Typography>
+              <Chip
+                label={`${scheduledEvents.length} Active`}
+                size="small"
+                color="primary"
+                variant="outlined"
+                sx={{ fontWeight: 600, height: 22, fontSize: '0.75rem' }}
+              />
+            </Stack>
+          }
+          searchable={false}
           columns={mainColumns}
           data={scheduledEvents}
           actions={false}
@@ -675,34 +865,36 @@ function EventsList() {
       </Box>
 
       {/* 2. Drafts & Unconfirmed Events Table */}
-      <Box sx={{ mt: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5}>
-            <HourglassEmptyIcon sx={{ color: '#d97706' }} />
-            <Typography variant="h6" fontWeight={700}>
-              Drafts / Unconfirmed Events
-            </Typography>
-            <Chip
-              label={`${draftEvents.length} Pending`}
-              size="small"
-              sx={{
-                fontWeight: 600,
-                height: 22,
-                fontSize: '0.75rem',
-                bgcolor: 'rgba(245, 158, 11, 0.1)',
-                color: '#d97706',
-                border: '1px solid rgba(245, 158, 11, 0.3)',
-              }}
-            />
-          </Stack>
-          <Typography variant="caption" color="text.secondary">
-            {isAdminOrSubAdmin
-              ? 'Review and click Confirm to publish events for church members.'
-              : 'Events created by team members awaiting admin confirmation.'}
-          </Typography>
-        </Box>
-
+      <Box sx={{ mb: 3.5 }}>
         <DataTable
+          title={
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 1 }}>
+              <Stack direction="row" alignItems="center" spacing={1.5}>
+                <HourglassEmptyIcon sx={{ color: '#d97706', fontSize: 22 }} />
+                <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.05rem' }}>
+                  Drafts / Unconfirmed Events
+                </Typography>
+                <Chip
+                  label={`${draftEvents.length} Pending`}
+                  size="small"
+                  sx={{
+                    fontWeight: 600,
+                    height: 22,
+                    fontSize: '0.75rem',
+                    bgcolor: 'rgba(245, 158, 11, 0.1)',
+                    color: '#d97706',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                  }}
+                />
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.78rem' }}>
+                {isFullAdmin
+                  ? 'Review and click Confirm to publish events for church members.'
+                  : 'Events created by team members awaiting admin confirmation.'}
+              </Typography>
+            </Box>
+          }
+          searchable={false}
           columns={draftColumns}
           data={draftEvents}
           actions={false}
@@ -711,6 +903,48 @@ function EventsList() {
             <Box textAlign="center" py={4}>
               <Typography variant="body2" color="text.secondary">
                 No draft or unconfirmed events at this time.
+              </Typography>
+            </Box>
+          }
+        />
+      </Box>
+
+      {/* 3. Completed Worship Events Archive Table */}
+      <Box sx={{ mb: 2 }}>
+        <DataTable
+          title={
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 1 }}>
+              <Stack direction="row" alignItems="center" spacing={1.5}>
+                <CheckCircleIcon sx={{ color: '#059669', fontSize: 22 }} />
+                <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.05rem' }}>
+                  Completed Worship Events
+                </Typography>
+                <Chip
+                  label={`${completedEvents.length} Completed`}
+                  size="small"
+                  color="success"
+                  variant="outlined"
+                  sx={{
+                    fontWeight: 600,
+                    height: 22,
+                    fontSize: '0.75rem',
+                  }}
+                />
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.78rem' }}>
+                Finished worship services with recorded song performance histories.
+              </Typography>
+            </Box>
+          }
+          searchable={false}
+          columns={completedColumns}
+          data={completedEvents}
+          actions={false}
+          onRowClick={(row) => navigate(`/events/${row._id}`)}
+          emptyMessage={
+            <Box textAlign="center" py={4}>
+              <Typography variant="body2" color="text.secondary">
+                No completed worship events yet.
               </Typography>
             </Box>
           }

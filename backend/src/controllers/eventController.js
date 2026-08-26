@@ -101,16 +101,15 @@ function sanitizeEventPayload(body) {
 // Create event
 exports.createEvent = async (req, res) => {
   try {
-    const isAdmin = Boolean(
+    const isFullAdmin = Boolean(
       req.user?.role === "admin" ||
-      req.user?.isAdmin ||
-      req.user?.isSubAdmin
+      req.user?.isAdmin
     );
 
     const payload = sanitizeEventPayload(req.body);
 
-    // If created by someone other than admin/subadmin, status is always 'draft' (Unconfirmed)
-    if (!isAdmin) {
+    // If created by someone other than full admin (sub-admin, instrumentalist, etc.), status is always 'draft' (Unconfirmed)
+    if (!isFullAdmin) {
       payload.event.status = 'draft';
     } else if (!payload.event.status) {
       payload.event.status = 'published';
@@ -223,10 +222,9 @@ exports.updateEvent = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    const isAdmin = Boolean(
+    const isFullAdmin = Boolean(
       req.user?.role === "admin" ||
-      req.user?.isAdmin ||
-      req.user?.isSubAdmin
+      req.user?.isAdmin
     );
 
     const payload = sanitizeEventPayload(req.body);
@@ -234,26 +232,26 @@ exports.updateEvent = async (req, res) => {
     const newStatus = payload["event.status"] || payload.event?.status;
     const oldStatus = existing.event?.status;
 
-    // Only Admin and Sub-Admin can confirm an event (draft -> published)
-    if (newStatus === "published" && oldStatus !== "published" && !isAdmin) {
-      return res.status(403).json({ message: "Only administrators and sub-administrators can confirm events" });
+    // Only full Admin can confirm an event (draft -> published)
+    if (newStatus === "published" && oldStatus !== "published" && !isFullAdmin) {
+      return res.status(403).json({ message: "Only administrators can confirm events" });
     }
 
-    // Only Admin and Sub-Admin can unconfirm an event (published -> draft)
-    if (newStatus === "draft" && oldStatus !== "draft" && !isAdmin) {
-      return res.status(403).json({ message: "Only administrators and sub-administrators can unconfirm events" });
+    // Only full Admin can unconfirm an event (published -> draft)
+    if (newStatus === "draft" && oldStatus !== "draft" && !isFullAdmin) {
+      return res.status(403).json({ message: "Only administrators can unconfirm events" });
     }
 
-    // Only Admin and Sub-Admin can mark as completed
-    if (newStatus === "completed" && oldStatus !== "completed" && !isAdmin) {
+    // Only full Admin can mark as completed
+    if (newStatus === "completed" && oldStatus !== "completed" && !isFullAdmin) {
       return res.status(403).json({ message: "Only administrators can mark events as completed" });
     }
 
-    if (oldStatus === "completed" && newStatus && newStatus !== "completed" && !isAdmin) {
+    if (oldStatus === "completed" && newStatus && newStatus !== "completed" && !isFullAdmin) {
       return res.status(403).json({ message: "Only administrators can change status of completed events" });
     }
 
-    if (oldStatus === "completed" && !isAdmin) {
+    if (oldStatus === "completed" && !isFullAdmin) {
       return res.status(403).json({ message: "This event is completed and locked. Only administrators can make changes." });
     }
 
@@ -316,6 +314,14 @@ exports.updateEvent = async (req, res) => {
 // Delete event
 exports.deleteEvent = async (req, res) => {
   try {
+    const isFullAdmin = Boolean(
+      req.user?.role === "admin" ||
+      req.user?.isAdmin
+    );
+    if (!isFullAdmin) {
+      return res.status(403).json({ message: "Only administrators can delete events" });
+    }
+
     const event = await Event.findByIdAndDelete(req.params.id);
     if (!event) return res.status(404).json({ message: "Event not found" });
     await Assignment.deleteMany({ event: req.params.id });

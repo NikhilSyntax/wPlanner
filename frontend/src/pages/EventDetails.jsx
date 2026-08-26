@@ -96,13 +96,10 @@ function EventDetails() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useSelector((state) => state.auth);
-  const isAdminOrSubAdmin = Boolean(
+  const isFullAdmin = Boolean(
     user?.isAdmin ||
-    user?.isSubAdmin ||
     user?.role === 'admin' ||
-    user?.role === 'sub_admin' ||
-    user?.roles?.includes('admin') ||
-    user?.roles?.includes('sub_admin')
+    user?.roles?.includes('admin')
   );
   const [event, setEvent] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
@@ -606,7 +603,7 @@ function EventDetails() {
               justifyContent: { xs: 'flex-start', sm: 'flex-start', md: 'flex-end' },
             }}
           >
-            {isAdminOrSubAdmin && (
+            {isFullAdmin && (
               <>
                 {eventInfo.status === 'draft' && (
                   <Button
@@ -1302,7 +1299,7 @@ function EventDetails() {
                     Edit Event
                   </Button>
                 )}
-                {isAdminOrSubAdmin && event.event?.status === 'draft' && (
+                {isFullAdmin && event.event?.status === 'draft' && (
                   <Button
                     variant="contained"
                     color="primary"
@@ -1314,7 +1311,7 @@ function EventDetails() {
                     Confirm Event
                   </Button>
                 )}
-                {isAdminOrSubAdmin && event.event?.status === 'published' && (
+                {isFullAdmin && event.event?.status === 'published' && (
                   <>
                     <Button
                       variant="outlined"
@@ -1337,7 +1334,7 @@ function EventDetails() {
                     </Button>
                   </>
                 )}
-                {isAdminOrSubAdmin && event.event?.status === 'completed' && (
+                {isFullAdmin && event.event?.status === 'completed' && (
                   <Button
                     variant="outlined"
                     color="warning"
@@ -1405,7 +1402,7 @@ function EventDetails() {
                     {reminderMessage}
                   </Alert>
                 )}
-                {canEdit && (
+                {isFullAdmin && (
                   <>
                     <Divider sx={{ my: 1 }} />
                     <Button
