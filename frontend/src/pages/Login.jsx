@@ -140,6 +140,30 @@ function Login() {
               </Link>
             </Typography>
           </Paper>
+
+          {/* Scripture */}
+          <Typography
+            variant="body2"
+            sx={{
+              mt: 1,
+              maxWidth: 360,
+              textAlign: 'center',
+              fontStyle: 'italic',
+              color: 'text.secondary',
+              lineHeight: 1.6,
+              opacity: 0.75,
+              fontSize: '0.8rem',
+            }}
+          >
+            "That the man of God may be perfect, thoroughly equipped for every good work."
+            <Typography
+              component="span"
+              variant="caption"
+              sx={{ display: 'block', mt: 0.5, fontStyle: 'normal', fontWeight: 600, letterSpacing: '0.03em' }}
+            >
+              — 2 Timothy 3:17
+            </Typography>
+          </Typography>
         </Stack>
       </Container>
     </Box>
