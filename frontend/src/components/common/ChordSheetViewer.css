@@ -200,13 +200,16 @@
 
 /* ================= Chord Highlight Styles ================= */
 
-/* Style: Modern Pill (Default) */
+/* Style: Modern Pill (Default)
+   Uses negative margin to compensate for padding+border so chord
+   positions stay aligned with the lyric line below. */
 .chord-badge-pill {
   display: inline-block;
   background-color: var(--cs-chord-pill-bg);
   color: var(--cs-chord-pill-text);
   border: 1px solid var(--cs-chord-pill-border);
-  padding: 0px 5px;
+  padding: 0px 4px;
+  margin: 0 -5px; /* compensate: 4px padding + 1px border each side */
   border-radius: 4px;
   font-weight: 700;
   font-size: 0.95em;
@@ -234,13 +237,15 @@
   text-decoration: underline;
 }
 
-/* Style: Vibrant Stage Glow */
+/* Style: Vibrant Stage Glow
+   Same negative-margin trick as pill to preserve chord alignment. */
 .chord-badge-glow {
   display: inline-block;
   background: linear-gradient(135deg, rgba(37, 99, 235, 0.25) 0%, rgba(139, 92, 246, 0.25) 100%);
   color: #38bdf8;
   border: 1px solid rgba(56, 189, 248, 0.4);
-  padding: 0px 6px;
+  padding: 0px 4px;
+  margin: 0 -5px; /* compensate: 4px padding + 1px border each side */
   border-radius: 5px;
   font-weight: 700;
   text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
