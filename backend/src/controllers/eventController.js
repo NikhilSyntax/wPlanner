@@ -82,6 +82,23 @@ exports.getEvent = async (req, res) => {
 };
 
 // Create event
+// Sanitize event payload to prevent casting empty strings to ObjectIds
+function sanitizeEventPayload(body) {
+  const payload = ensureEventPayloadHasTitle(body);
+  if (!payload.event) payload.event = {};
+  if (payload.team === "" || payload.team === null || payload.team === "null" || payload.team === "undefined") {
+    delete payload.team;
+  }
+  if (payload.chat === "" || payload.chat === null || payload.chat === "null" || payload.chat === "undefined") {
+    delete payload.chat;
+  }
+  if (Array.isArray(payload.setlist)) {
+    payload.setlist = payload.setlist.filter(Boolean);
+  }
+  return payload;
+}
+
+// Create event
 exports.createEvent = async (req, res) => {
   try {
     const isAdmin = Boolean(
@@ -90,8 +107,7 @@ exports.createEvent = async (req, res) => {
       req.user?.isSubAdmin
     );
 
-    const payload = ensureEventPayloadHasTitle(req.body);
-    if (!payload.event) payload.event = {};
+    const payload = sanitizeEventPayload(req.body);
 
     // If created by someone other than admin/subadmin, status is always 'draft' (Unconfirmed)
     if (!isAdmin) {
@@ -213,7 +229,7 @@ exports.updateEvent = async (req, res) => {
       req.user?.isSubAdmin
     );
 
-    const payload = ensureEventPayloadHasTitle(req.body);
+    const payload = sanitizeEventPayload(req.body);
 
     const newStatus = payload["event.status"] || payload.event?.status;
     const oldStatus = existing.event?.status;

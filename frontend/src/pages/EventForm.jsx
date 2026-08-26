@@ -201,7 +201,7 @@ function EventForm() {
           end: new Date(formData.end).toISOString(),
           timezone: formData.timezone,
         },
-        team: formData.teamId,
+        ...(formData.teamId ? { team: formData.teamId } : {}),
       };
 
       if (isEdit) {
