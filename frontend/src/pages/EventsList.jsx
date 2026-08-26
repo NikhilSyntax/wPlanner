@@ -16,6 +16,8 @@ import {
   InputLabel,
   Select,
   TextField,
+  Stack,
+  Divider,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -25,13 +27,16 @@ import {
   FilterList as FilterIcon,
   Event as EventIcon,
   Clear as ClearIcon,
-  Group as GroupIcon,
   QueueMusic as QueueMusicIcon,
+  CheckCircle as CheckCircleIcon,
+  HourglassEmpty as HourglassEmptyIcon,
+  EditNote as EditNoteIcon,
 } from '@mui/icons-material';
 import { fetchEvents, deleteEvent } from '../store/slices/eventSlice';
 import { fetchTeams } from '../store/slices/teamSlice';
 import DataTable from '../components/common/DataTable';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import api from '../services/api';
 
 const statusColors = {
   draft: 'default',
@@ -54,6 +59,16 @@ function EventsList() {
   const navigate = useNavigate();
   const { events, loading, error } = useSelector((state) => state.events);
   const { teams } = useSelector((state) => state.teams);
+  const { user } = useSelector((state) => state.auth);
+
+  const isAdminOrSubAdmin = Boolean(
+    user?.isAdmin ||
+    user?.isSubAdmin ||
+    user?.role === 'admin' ||
+    user?.role === 'sub_admin' ||
+    user?.roles?.includes('admin') ||
+    user?.roles?.includes('sub_admin')
+  );
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -120,6 +135,18 @@ function EventsList() {
     }
   };
 
+  const handleQuickConfirmEvent = async (e, eventId) => {
+    e.stopPropagation();
+    try {
+      await api.put(`/events/${eventId}`, {
+        event: { status: 'published' },
+      });
+      dispatch(fetchEvents());
+    } catch (err) {
+      console.error('Failed to confirm event:', err);
+    }
+  };
+
   const formatDateTime = (dateString) => {
     const date = new Date(dateString);
     return {
@@ -136,7 +163,15 @@ function EventsList() {
     };
   };
 
-  const columns = [
+  // Split into confirmed/scheduled events and drafts/unconfirmed events
+  const scheduledEvents = filteredEvents.filter(
+    (e) => (e.event?.status || 'draft') !== 'draft'
+  );
+  const draftEvents = filteredEvents.filter(
+    (e) => (e.event?.status || 'draft') === 'draft'
+  );
+
+  const mainColumns = [
     {
       id: 'title',
       label: 'Event Plan',
@@ -228,20 +263,6 @@ function EventsList() {
       sortKey: (row) => new Date(getScheduleStart(row) || 0),
     },
     {
-      id: 'team',
-      label: 'Assigned Team',
-      render: (row) => (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <GroupIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-          <Typography variant="body2" color={row.team?.name ? 'text.primary' : 'text.secondary'}>
-            {row.team?.name || 'Unassigned'}
-          </Typography>
-        </Box>
-      ),
-      sortable: true,
-      sortKey: (row) => row.team?.name || '',
-    },
-    {
       id: 'setlist',
       label: 'Setlist Songs',
       render: (row) => (
@@ -323,10 +344,181 @@ function EventsList() {
     },
   ];
 
+  const draftColumns = [
+    {
+      id: 'title',
+      label: 'Draft Event Plan',
+      render: (row) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: 2,
+              bgcolor: 'rgba(245, 158, 11, 0.1)',
+              color: '#d97706',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <EditNoteIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Box>
+            <Typography variant="body2" fontWeight={600} color="text.primary">
+              {getEventTitle(row)}
+            </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{
+                maxWidth: 240,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                display: 'block',
+              }}
+            >
+              {getEventDescription(row) || 'Draft proposal / Unconfirmed'}
+            </Typography>
+          </Box>
+        </Box>
+      ),
+      sortable: true,
+      sortKey: (row) => getEventTitle(row),
+    },
+    {
+      id: 'type',
+      label: 'Category',
+      render: (row) => (
+        <Chip
+          label={getEventType(row)}
+          size="small"
+          sx={{
+            textTransform: 'capitalize',
+            fontWeight: 600,
+            fontSize: '0.75rem',
+            bgcolor: 'action.hover',
+          }}
+        />
+      ),
+      sortable: true,
+      sortKey: (row) => getEventType(row),
+    },
+    {
+      id: 'schedule',
+      label: 'Proposed Date & Time',
+      render: (row) => {
+        const startValue = getScheduleStart(row);
+        const endValue = getScheduleEnd(row);
+        if (!startValue || !endValue) {
+          return (
+            <Typography variant="caption" color="text.secondary">
+              Not scheduled
+            </Typography>
+          );
+        }
+        const start = formatDateTime(startValue);
+        const end = formatDateTime(endValue);
+        return (
+          <Box>
+            <Typography variant="body2" fontWeight={600}>
+              {start.date}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {start.time} – {end.time}
+            </Typography>
+          </Box>
+        );
+      },
+      sortable: true,
+      sortKey: (row) => new Date(getScheduleStart(row) || 0),
+    },
+    {
+      id: 'setlist',
+      label: 'Setlist Songs',
+      render: (row) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+          <QueueMusicIcon sx={{ fontSize: 16, color: '#f59e0b' }} />
+          <Typography variant="body2" fontWeight={600}>
+            {row.setlist?.length || 0} Songs
+          </Typography>
+        </Box>
+      ),
+      sortable: true,
+      sortKey: (row) => row.setlist?.length || 0,
+    },
+    {
+      id: 'status',
+      label: 'Status',
+      render: () => (
+        <Chip
+          label="Draft (Unconfirmed)"
+          size="small"
+          sx={{
+            fontWeight: 600,
+            fontSize: '0.75rem',
+            bgcolor: 'rgba(245, 158, 11, 0.1)',
+            color: '#d97706',
+            border: '1px solid rgba(245, 158, 11, 0.25)',
+          }}
+        />
+      ),
+    },
+    {
+      id: 'actions',
+      label: 'Actions',
+      render: (row) => (
+        <Box display="flex" alignItems="center" gap={1} onClick={(e) => e.stopPropagation()}>
+          {isAdminOrSubAdmin && (
+            <Button
+              size="small"
+              variant="contained"
+              color="primary"
+              startIcon={<CheckCircleIcon sx={{ fontSize: 15 }} />}
+              onClick={(e) => handleQuickConfirmEvent(e, row._id)}
+              sx={{
+                fontSize: '0.75rem',
+                textTransform: 'none',
+                height: 28,
+                borderRadius: 1.5,
+                fontWeight: 600,
+                px: 1.25,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Confirm
+            </Button>
+          )}
+          <Tooltip title="Edit Event Details">
+            <IconButton
+              component={Link}
+              to={`/events/${row._id}/edit`}
+              size="small"
+              sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' } }}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Delete Event">
+            <IconButton
+              onClick={() => handleDeleteEvent(row._id)}
+              size="small"
+              sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      ),
+    },
+  ];
+
   if (loading) return <LoadingSpinner />;
 
   return (
-    <Box className="fade-in">
+    <Box className="fade-in" sx={{ pb: 6 }}>
       {/* Header Banner */}
       <Box
         sx={{
@@ -403,7 +595,7 @@ function EventsList() {
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <MenuItem value="">All Statuses</MenuItem>
-              <MenuItem value="draft">Draft</MenuItem>
+              <MenuItem value="draft">Drafts / Unconfirmed</MenuItem>
               <MenuItem value="published">Confirmed</MenuItem>
               <MenuItem value="in_progress">In Progress</MenuItem>
               <MenuItem value="completed">Completed</MenuItem>
@@ -449,35 +641,81 @@ function EventsList() {
         </Typography>
       </Paper>
 
-      {/* Events Data Table */}
-      <DataTable
-        columns={columns}
-        data={filteredEvents}
-        actions={false}
-        onRowClick={(row) => navigate(`/events/${row._id}`)}
-        emptyMessage={
-          <Box textAlign="center" py={6}>
-            <EventIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              No events found
+      {/* 1. Main Confirmed & Active Events Table */}
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={1.5}>
+            <EventIcon color="primary" />
+            <Typography variant="h6" fontWeight={700}>
+              Confirmed & Scheduled Events
             </Typography>
-            <Typography variant="body2" color="text.secondary" mb={2}>
-              {searchTerm || statusFilter || teamFilter
-                ? 'Try adjusting your filters to see more events.'
-                : 'Create your first worship service or rehearsal plan.'}
+            <Chip
+              label={`${scheduledEvents.length} Active`}
+              size="small"
+              color="primary"
+              variant="outlined"
+              sx={{ fontWeight: 600, height: 22, fontSize: '0.75rem' }}
+            />
+          </Stack>
+        </Box>
+
+        <DataTable
+          columns={mainColumns}
+          data={scheduledEvents}
+          actions={false}
+          onRowClick={(row) => navigate(`/events/${row._id}`)}
+          emptyMessage={
+            <Box textAlign="center" py={4}>
+              <Typography variant="body2" color="text.secondary">
+                No confirmed events match your filter.
+              </Typography>
+            </Box>
+          }
+        />
+      </Box>
+
+      {/* 2. Drafts & Unconfirmed Events Table */}
+      <Box sx={{ mt: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={1.5}>
+            <HourglassEmptyIcon sx={{ color: '#d97706' }} />
+            <Typography variant="h6" fontWeight={700}>
+              Drafts / Unconfirmed Events
             </Typography>
-            <Button
-              variant="contained"
-              component={Link}
-              to="/events/new"
-              startIcon={<AddIcon />}
-              sx={{ borderRadius: 2 }}
-            >
-              Create Event
-            </Button>
-          </Box>
-        }
-      />
+            <Chip
+              label={`${draftEvents.length} Pending`}
+              size="small"
+              sx={{
+                fontWeight: 600,
+                height: 22,
+                fontSize: '0.75rem',
+                bgcolor: 'rgba(245, 158, 11, 0.1)',
+                color: '#d97706',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+              }}
+            />
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            {isAdminOrSubAdmin
+              ? 'Review and click Confirm to publish events for church members.'
+              : 'Events created by team members awaiting admin confirmation.'}
+          </Typography>
+        </Box>
+
+        <DataTable
+          columns={draftColumns}
+          data={draftEvents}
+          actions={false}
+          onRowClick={(row) => navigate(`/events/${row._id}`)}
+          emptyMessage={
+            <Box textAlign="center" py={4}>
+              <Typography variant="body2" color="text.secondary">
+                No draft or unconfirmed events at this time.
+              </Typography>
+            </Box>
+          }
+        />
+      </Box>
     </Box>
   );
 }

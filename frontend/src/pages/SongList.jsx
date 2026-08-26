@@ -165,11 +165,14 @@ function SongList() {
     {
       field: 'bpm',
       headerName: 'Tempo',
-      render: (value, row) => (
-        <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-          {row.tempo ? `${row.tempo} BPM` : '—'}
-        </Typography>
-      ),
+      render: (value, row) => {
+        const bpmVal = row.bpm || row.tempo || value;
+        return (
+          <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
+            {bpmVal ? `${bpmVal} BPM` : '—'}
+          </Typography>
+        );
+      },
     },
     {
       field: 'lastUsed',
@@ -183,11 +186,19 @@ function SongList() {
             </Typography>
           );
         }
+        const d = new Date(lastUsed);
+        if (Number.isNaN(d.getTime())) {
+          return (
+            <Typography variant="caption" color="text.secondary">
+              Never used
+            </Typography>
+          );
+        }
         return (
           <Tooltip title="View performance history">
             <Chip
               icon={<HistoryIcon sx={{ fontSize: '14px !important' }} />}
-              label={new Date(lastUsed).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+              label={d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
               size="small"
               onClick={(e) => {
                 e.stopPropagation();
@@ -413,6 +424,7 @@ function SongList() {
                   <TableRow>
                     <TableCell>Worship Event</TableCell>
                     <TableCell>Date Performed</TableCell>
+                    <TableCell align="center">Key Performed</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -434,6 +446,15 @@ function SongList() {
                               year: 'numeric',
                             })}
                           </Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip
+                            label={`Key of ${usage.key || selectedSongHistory.key || 'C'}`}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                            sx={{ fontWeight: 700, fontSize: '0.75rem' }}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}

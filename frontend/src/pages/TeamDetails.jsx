@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Box, Button, Typography, Divider, Alert } from '@mui/material';
+import { Chat as ChatIcon } from '@mui/icons-material';
 import api from '../services/api';
 
 const INSTRUMENT_ROLES = [
@@ -83,15 +84,29 @@ function TeamDetails() {
         }}
       >
         <Box sx={{ flex: 2 }}>
-          <Typography variant="h4" component="h2" gutterBottom>
-            {team.team?.name || 'Unnamed Team'}
-          </Typography>
-          <Typography variant="body1" sx={{ mb: 1 }}>
-            <strong>Type:</strong> {team.team?.type || 'other'}
-          </Typography>
-          <Typography variant="body1" sx={{ mb: 2 }}>
-            <strong>Description:</strong> {team.team?.description || 'N/A'}
-          </Typography>
+          <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} mb={1}>
+            <Box>
+              <Typography variant="h4" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
+                {team.team?.name || 'Unnamed Team'}
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 1 }}>
+                <strong>Type:</strong> {team.team?.type || 'other'}
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                <strong>Description:</strong> {team.team?.description || 'N/A'}
+              </Typography>
+            </Box>
+
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<ChatIcon />}
+              onClick={() => navigate(`/teams/${id}/chat`)}
+              sx={{ borderRadius: 2, textTransform: 'none', px: 2.5, py: 1, fontWeight: 700 }}
+            >
+              Team Chat
+            </Button>
+          </Box>
           <Typography variant="h6" gutterBottom>
             Members
           </Typography>

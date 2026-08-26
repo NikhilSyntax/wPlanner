@@ -5,6 +5,12 @@ const authMiddleware = require('../middleware/authMiddleware');
 
 router.use(authMiddleware.verifyToken);
 
+// Web Push VAPID public key & subscription endpoints
+router.get('/vapid-public-key', notificationController.getVapidPublicKey);
+router.post('/push-subscribe', notificationController.subscribePush);
+router.post('/push-unsubscribe', notificationController.unsubscribePush);
+router.post('/test-push', notificationController.sendTestPush);
+
 // Get notifications for current user
 router.get('/', notificationController.getNotifications);
 

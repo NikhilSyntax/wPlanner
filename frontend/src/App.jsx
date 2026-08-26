@@ -13,6 +13,7 @@ import {
   RequireApprovedForChurchApp,
 } from './components/auth/RouteGuards';
 import { getCurrentUser } from './store/slices/authSlice';
+import { syncPushSubscriptionWithUser } from './services/pushNotificationService';
 
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
@@ -31,17 +32,25 @@ const ProductionPlanning = lazy(() => import('./pages/ProductionPlanning'));
 const ProfileSettings = lazy(() => import('./pages/ProfileSettings'));
 const TeamList = lazy(() => import('./pages/TeamList'));
 const TeamDetails = lazy(() => import('./pages/TeamDetails'));
+const TeamChat = lazy(() => import('./pages/TeamChat'));
 const TeamForm = lazy(() => import('./pages/TeamForm'));
 
 function App() {
   const dispatch = useDispatch();
   const isAuthenticated = useSelector((state) => state.auth.isAuthenticated);
+  const user = useSelector((state) => state.auth.user);
 
   useEffect(() => {
     if (localStorage.getItem('accessToken')) {
       dispatch(getCurrentUser());
     }
   }, [dispatch]);
+
+  useEffect(() => {
+    if (user?.id) {
+      syncPushSubscriptionWithUser(user.id);
+    }
+  }, [user?.id]);
 
   return (
     <Router>
@@ -74,6 +83,7 @@ function App() {
                 <Route path="teams" element={<TeamList />} />
                 <Route path="teams/new" element={<TeamForm />} />
                 <Route path="teams/:id" element={<TeamDetails />} />
+                <Route path="teams/:id/chat" element={<TeamChat />} />
                 <Route path="teams/:id/edit" element={<TeamForm />} />
                 <Route path="songs" element={<SongList />} />
                 <Route path="songs/new" element={<SongForm />} />

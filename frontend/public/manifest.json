@@ -1,0 +1,17 @@
+{
+  "short_name": "wPlanner",
+  "name": "wPlanner - Worship Team Planner",
+  "description": "Coordinate worship services, team rosters, setlists, and chords in real-time.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

@@ -6,7 +6,10 @@ const Song = require("../models/Song");
 const {
   getEventDisplayTitle,
   ensureEventHasTitle,
+  ensureEventPayloadHasTitle,
 } = require("../utils/eventTitle");
+const { sendNotification } = require("../utils/notificationService");
+const { send24HourRemindersForEvent } = require("../utils/reminderScheduler");
 
 const SETLIST_SONG_FIELDS = "title artist key timeSignature";
 
@@ -30,10 +33,24 @@ exports.getEvents = async (req, res) => {
         $lte: new Date(endDate),
       };
     }
-    const events = await Event.find({ ...filter, churchId: req.user.churchId })
-      .populate("team", "team.name")
+    // Scope to user's church
+    if (req.user && req.user.churchId) {
+      filter.churchId = req.user.churchId;
+    }
+
+    const events = await Event.find(filter)
+      .populate("team", "team.name members")
+      .populate("setlist", SETLIST_SONG_FIELDS)
+      .populate("assignments.userId", "name email role")
       .sort({ "schedule.start": 1 });
-    res.json(events);
+
+    const withTitles = events.map((doc) => {
+      const obj = doc.toObject();
+      obj.title = getEventDisplayTitle(obj);
+      return obj;
+    });
+
+    res.json(withTitles);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -43,23 +60,21 @@ exports.getEvents = async (req, res) => {
 // Get single event
 exports.getEvent = async (req, res) => {
   try {
-    const event = await Event.findOne({
-      _id: req.params.id,
-      churchId: req.user.churchId,
-    });
+    const event = await populateEventDetails(req.params.id);
     if (!event) return res.status(404).json({ message: "Event not found" });
 
-    const populated = await populateEventDetails(event._id);
-    if (!populated) return res.status(404).json({ message: "Event not found" });
-
-    const title = await ensureEventHasTitle(populated);
-    if (populated.event?.status === "completed") {
-      await syncCompletedEventSongUsage(populated, null, title);
-    } else if (title) {
-      await syncEventNameInSongUsage(populated._id, title);
+    // Double-check church scoping
+    if (
+      req.user &&
+      req.user.churchId &&
+      !event.churchId.equals(req.user.churchId)
+    ) {
+      return res.status(403).json({ message: "Access denied" });
     }
 
-    res.json(populated);
+    const obj = event.toObject();
+    obj.title = getEventDisplayTitle(obj);
+    res.json(obj);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -69,235 +84,213 @@ exports.getEvent = async (req, res) => {
 // Create event
 exports.createEvent = async (req, res) => {
   try {
-    // Support both legacy flat payload and current nested payload.
-    const rawTitle = req.body?.event?.title ?? req.body?.title;
-    const description = req.body?.event?.description ?? req.body?.description;
-    const type = req.body?.event?.type ?? req.body?.type ?? "service";
-    const start = req.body?.schedule?.start ?? req.body?.start;
-    const end = req.body?.schedule?.end ?? req.body?.end;
-    const timezone = req.body?.schedule?.timezone ?? req.body?.timezone;
-    const teamId = req.body?.team ?? req.body?.teamId;
-    // Setlists removed: ignore any setlist fields from older clients
-    const title = typeof rawTitle === "string" ? rawTitle.trim() : rawTitle;
+    const isAdmin = Boolean(
+      req.user?.role === "admin" ||
+      req.user?.isAdmin ||
+      req.user?.isSubAdmin
+    );
 
-    const missingFields = [];
-    if (!title) missingFields.push("title");
-    if (!start) missingFields.push("start");
-    if (!end) missingFields.push("end");
+    const payload = ensureEventPayloadHasTitle(req.body);
+    if (!payload.event) payload.event = {};
 
-    if (missingFields.length > 0) {
-      return res.status(400).json({
-        message: `Missing required field(s): ${missingFields.join(", ")}`,
-      });
-    }
-
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-      return res.status(400).json({ message: "Invalid start or end datetime" });
-    }
-    if (startDate >= endDate) {
-      return res
-        .status(400)
-        .json({ message: "End time must be after start time" });
+    // If created by someone other than admin/subadmin, status is always 'draft' (Unconfirmed)
+    if (!isAdmin) {
+      payload.event.status = 'draft';
+    } else if (!payload.event.status) {
+      payload.event.status = 'published';
     }
 
     const event = new Event({
-      event: { title, description, type: type || "service" },
-      schedule: { start: startDate, end: endDate, timezone },
-      team: teamId || undefined,
+      ...payload,
       createdBy: req.user.userId,
       churchId: req.user.churchId,
     });
     await event.save();
-    res.status(201).json(event);
+    const populated = await populateEventDetails(event._id);
+
+    // 1. If draft event created: notify Admin & Sub-Admin
+    if (event.event?.status === 'draft') {
+      (async () => {
+        try {
+          const creator = await User.findById(req.user.userId).select('name').lean();
+          const creatorName = creator?.name || 'A team member';
+          const eventTitle = getEventDisplayTitle(event);
+          const dateFormatted = event.schedule?.start
+            ? new Date(event.schedule.start).toLocaleDateString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+              })
+            : '';
+
+          const admins = await User.find({
+            churchId: req.user.churchId,
+            _id: { $ne: req.user.userId },
+            approvalStatus: { $ne: 'rejected' },
+            $or: [
+              { isAdmin: true },
+              { isSubAdmin: true },
+              { role: { $in: ['Admin', 'Sub-Admin', 'admin', 'sub_admin'] } },
+            ],
+          }).select('_id name email').lean();
+
+          for (const admin of admins) {
+            await sendNotification({
+              recipientId: admin._id,
+              senderId: req.user.userId,
+              type: 'event_draft',
+              title: 'New Draft Event Created 📝',
+              message: `${creatorName} created a new draft event "${eventTitle}"${dateFormatted ? ` for ${dateFormatted}` : ''}. Review and confirm it.`,
+              link: `/events/${event._id}`,
+            });
+          }
+        } catch (notifyErr) {
+          console.error('[EventController] Error notifying admins of draft event:', notifyErr);
+        }
+      })();
+    } else if (event.event?.status === 'published') {
+      // 2. If published directly: broadcast confirmation to all church members
+      (async () => {
+        try {
+          const eventTitle = getEventDisplayTitle(event);
+          const dateFormatted = event.schedule?.start
+            ? new Date(event.schedule.start).toLocaleDateString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })
+            : '';
+
+          const members = await User.find({
+            churchId: req.user.churchId,
+            _id: { $ne: req.user.userId },
+            approvalStatus: { $ne: 'rejected' },
+          }).select('_id name email').lean();
+
+          for (const member of members) {
+            await sendNotification({
+              recipientId: member._id,
+              senderId: req.user.userId,
+              type: 'event_confirmed',
+              title: 'New Event Scheduled! 🎉',
+              message: `"${eventTitle}" has been scheduled${dateFormatted ? ` for ${dateFormatted}` : ''}. Check the setlist and schedule!`,
+              link: `/events/${event._id}`,
+            });
+          }
+        } catch (notifyErr) {
+          console.error('[EventController] Error broadcasting new event:', notifyErr);
+        }
+      })();
+    }
+
+    res.status(201).json(populated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-function normalizeSetlistIds(setlist) {
-  if (!Array.isArray(setlist)) return [];
-  return setlist
-    .map((item) => {
-      if (!item) return null;
-      if (typeof item === "string") return item;
-      return item._id || item;
-    })
-    .filter(Boolean);
-}
-
-/** Record last-used / times-used for each song when an event is completed (idempotent per event). */
-async function recordSetlistUsageOnCompletion(
-  eventId,
-  eventTitle,
-  songIds,
-  usedAt = new Date(),
-) {
-  const uniqueIds = [...new Set(normalizeSetlistIds(songIds).map((id) => String(id)))];
-  if (!uniqueIds.length) return;
-
-  const performedAt = usedAt instanceof Date ? usedAt : new Date(usedAt);
-
-  for (const songId of uniqueIds) {
-    const song = await Song.findById(songId).select("usage.usageHistory").lean();
-    if (!song) continue;
-
-    const alreadyRecorded = (song.usage?.usageHistory || []).some(
-      (entry) => String(entry.eventId) === String(eventId),
-    );
-    if (alreadyRecorded) {
-      if (eventTitle?.trim()) {
-        await syncEventNameInSongUsage(eventId, eventTitle, [songId]);
-      }
-      continue;
-    }
-
-    await Song.findByIdAndUpdate(songId, {
-      $set: { "usage.lastPerformed": performedAt },
-      $inc: { "usage.timesPerformed": 1 },
-      $push: {
-        "usage.usageHistory": {
-          eventId,
-          eventTitle: eventTitle?.trim() || "Unknown Event",
-          usedAt: performedAt,
-        },
-      },
-    });
-  }
-}
-
-/** Keep usage history event names in sync when the event is renamed or backfilled. */
-async function syncEventNameInSongUsage(eventId, eventTitle, songIds = null) {
-  const title = typeof eventTitle === "string" ? eventTitle.trim() : "";
-  if (!eventId || !title) return;
-
-  const eventIdStr = String(eventId);
-  const query = { "usage.usageHistory.0": { $exists: true } };
-  const ids = songIds ? normalizeSetlistIds(songIds) : [];
-  if (ids.length) query._id = { $in: ids };
-
-  const songs = await Song.find(query).select("usage.usageHistory");
-  for (const song of songs) {
-    let modified = false;
-    for (const entry of song.usage?.usageHistory || []) {
-      if (String(entry.eventId) === eventIdStr && entry.eventTitle !== title) {
-        entry.eventTitle = title;
-        modified = true;
-      }
-    }
-    if (modified) {
-      song.markModified("usage.usageHistory");
-      await song.save();
-    }
-  }
-}
-
-function resolveEventTitle(eventDoc, titleFallback, updates) {
-  const fromUpdate =
-    updates && updates["event.title"] !== undefined
-      ? updates["event.title"]
-      : undefined;
-  const merged = {
-    event: {
-      ...(eventDoc?.event?.toObject?.() || eventDoc?.event || {}),
-      ...(fromUpdate !== undefined ? { title: fromUpdate } : {}),
-    },
-    schedule: eventDoc?.schedule,
-  };
-  const resolved = getEventDisplayTitle(merged);
-  return resolved || (titleFallback || "").trim();
-}
-
-async function syncCompletedEventSongUsage(
-  eventDoc,
-  setlistOverride,
-  titleFallback,
-) {
-  if (!eventDoc || eventDoc.event?.status !== "completed") return;
-
-  const setlistIds = setlistOverride ?? eventDoc.setlist;
-  const ids = normalizeSetlistIds(setlistIds);
-  if (!ids.length) return;
-
-  const eventTitle = resolveEventTitle(eventDoc, titleFallback, null);
-  const performedAt = eventDoc.schedule?.end || new Date();
-
-  await recordSetlistUsageOnCompletion(
-    eventDoc._id,
-    eventTitle,
-    ids,
-    performedAt,
-  );
-
-  if (eventTitle) {
-    await syncEventNameInSongUsage(eventDoc._id, eventTitle, ids);
-  }
-}
-
 // Update event
 exports.updateEvent = async (req, res) => {
   try {
-    const updates = { ...req.body };
+    const { id } = req.params;
+    const existing = await Event.findById(id);
+    if (!existing) return res.status(404).json({ message: "Event not found" });
 
-    if (updates.team === "") {
-      updates.team = null;
-    }
-    if (Array.isArray(updates.setlist)) {
-      const seen = new Set();
-      updates.setlist = updates.setlist
-        .map((id) => String(id))
-        .filter((id) => id && !seen.has(id) && seen.add(id));
-    }
-
-    // Partial event fields (e.g. status) must use dot paths so we don't replace the whole event object
-    if (updates.event && typeof updates.event === "object" && !Array.isArray(updates.event)) {
-      const nestedEvent = updates.event;
-      delete updates.event;
-      for (const [key, value] of Object.entries(nestedEvent)) {
-        updates[`event.${key}`] = value;
-      }
+    // Double-check church scoping
+    if (
+      req.user &&
+      req.user.churchId &&
+      !existing.churchId.equals(req.user.churchId)
+    ) {
+      return res.status(403).json({ message: "Access denied" });
     }
 
-    const eventBeforeUpdate = await Event.findById(req.params.id);
-    if (!eventBeforeUpdate) {
-      return res.status(404).json({ message: "Event not found" });
-    }
-
-    const updatedEvent = await Event.findByIdAndUpdate(
-      req.params.id,
-      { $set: { ...updates, updatedAt: Date.now() } },
-      { new: true },
-    );
-    if (!updatedEvent)
-      return res.status(404).json({ message: "Event not found" });
-
-    await ensureEventHasTitle(updatedEvent);
-
-    const resolvedTitle = resolveEventTitle(
-      updatedEvent,
-      getEventDisplayTitle(eventBeforeUpdate),
-      updates,
+    const isAdmin = Boolean(
+      req.user?.role === "admin" ||
+      req.user?.isAdmin ||
+      req.user?.isSubAdmin
     );
 
-    if (resolvedTitle) {
-      await syncEventNameInSongUsage(updatedEvent._id, resolvedTitle);
+    const payload = ensureEventPayloadHasTitle(req.body);
+
+    const newStatus = payload["event.status"] || payload.event?.status;
+    const oldStatus = existing.event?.status;
+
+    // Only Admin and Sub-Admin can confirm an event (draft -> published)
+    if (newStatus === "published" && oldStatus !== "published" && !isAdmin) {
+      return res.status(403).json({ message: "Only administrators and sub-administrators can confirm events" });
     }
 
-    if (updatedEvent.event?.status === "completed") {
-      const setlistForUsage = Array.isArray(updates.setlist)
-        ? updates.setlist
-        : updatedEvent.setlist;
-      await syncCompletedEventSongUsage(
-        updatedEvent,
-        setlistForUsage,
-        resolvedTitle,
-      );
+    // Only Admin and Sub-Admin can unconfirm an event (published -> draft)
+    if (newStatus === "draft" && oldStatus !== "draft" && !isAdmin) {
+      return res.status(403).json({ message: "Only administrators and sub-administrators can unconfirm events" });
     }
 
-    const populated = await populateEventDetails(updatedEvent._id);
-    res.json(populated || updatedEvent);
+    // Only Admin and Sub-Admin can mark as completed
+    if (newStatus === "completed" && oldStatus !== "completed" && !isAdmin) {
+      return res.status(403).json({ message: "Only administrators can mark events as completed" });
+    }
+
+    if (oldStatus === "completed" && newStatus && newStatus !== "completed" && !isAdmin) {
+      return res.status(403).json({ message: "Only administrators can change status of completed events" });
+    }
+
+    if (oldStatus === "completed" && !isAdmin) {
+      return res.status(403).json({ message: "This event is completed and locked. Only administrators can make changes." });
+    }
+
+    const updated = await Event.findByIdAndUpdate(
+      id,
+      { ...payload, updatedAt: Date.now() },
+      { new: true, runValidators: true },
+    )
+      .populate("team", "team.name")
+      .populate("assignments.userId", "name email role")
+      .populate("setlist", SETLIST_SONG_FIELDS);
+
+    if (!updated) return res.status(404).json({ message: "Event not found" });
+
+    // When an event is confirmed (published) by an admin: notify all church members
+    if (newStatus === "published" && oldStatus !== "published") {
+      (async () => {
+        try {
+          const eventTitle = getEventDisplayTitle(updated);
+          const dateFormatted = updated.schedule?.start
+            ? new Date(updated.schedule.start).toLocaleDateString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })
+            : '';
+
+          const members = await User.find({
+            churchId: req.user.churchId,
+            _id: { $ne: req.user.userId },
+            approvalStatus: { $ne: 'rejected' },
+          }).select('_id name email').lean();
+
+          for (const member of members) {
+            await sendNotification({
+              recipientId: member._id,
+              senderId: req.user.userId,
+              type: 'event_confirmed',
+              title: 'Event Confirmed! 🎉',
+              message: `"${eventTitle}" has been confirmed${dateFormatted ? ` for ${dateFormatted}` : ''}. Check the setlist and schedule!`,
+              link: `/events/${updated._id}`,
+            });
+          }
+        } catch (notifyErr) {
+          console.error('[EventController] Error broadcasting event confirmation:', notifyErr);
+        }
+      })();
+    }
+
+    const obj = updated.toObject();
+    obj.title = getEventDisplayTitle(obj);
+    res.json(obj);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -317,33 +310,133 @@ exports.deleteEvent = async (req, res) => {
   }
 };
 
-// Add assignment to event
-exports.addAssignment = async (req, res) => {
+// Add setlist song
+exports.addSetlistSong = async (req, res) => {
   try {
-    const { userId, role, notes } = req.body;
-    const assignment = new Assignment({
-      event: req.params.id,
-      user: userId,
-      role,
-      notes,
-      assignedBy: req.user.userId,
-      status: role.toLowerCase() === "member" ? "accepted" : "pending",
-    });
-    await assignment.save();
-    await Event.findByIdAndUpdate(req.params.id, {
-      $push: { assignments: { userId, role, notes } },
-    });
-    res.status(201).json(assignment);
+    const { id } = req.params;
+    const { songId } = req.body;
+    if (!songId) {
+      return res.status(400).json({ message: "songId is required" });
+    }
+    const song = await Song.findById(songId);
+    if (!song) {
+      return res.status(404).json({ message: "Song not found" });
+    }
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+    if (event.setlist.some((sId) => sId.equals(songId))) {
+      return res.status(400).json({ message: "Song already in setlist" });
+    }
+    event.setlist.push(songId);
+    event.updatedAt = Date.now();
+    await event.save();
+    const populated = await populateEventDetails(event._id);
+    res.json(populated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-/**
- * Replace event roster: remove all assignments, then add members from church
- * roster (must be approved users in the same church). team_leader or admin.
- */
+// Remove setlist song
+exports.removeSetlistSong = async (req, res) => {
+  try {
+    const { id, songId } = req.params;
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+    event.setlist = event.setlist.filter((sId) => !sId.equals(songId));
+    event.updatedAt = Date.now();
+    await event.save();
+    const populated = await populateEventDetails(event._id);
+    res.json(populated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Reorder setlist
+exports.reorderSetlist = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { setlist } = req.body;
+    if (!Array.isArray(setlist)) {
+      return res.status(400).json({ message: "setlist must be an array of song IDs" });
+    }
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+    event.setlist = setlist;
+    event.updatedAt = Date.now();
+    await event.save();
+    const populated = await populateEventDetails(event._id);
+    res.json(populated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Add assignment to event
+exports.addAssignment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, role, notes } = req.body;
+
+    const event = await Event.findById(id);
+    if (!event) return res.status(404).json({ message: "Event not found" });
+
+    // Validate that the assigned user belongs to the same church
+    const userToAssign = await User.findById(userId);
+    if (!userToAssign || !userToAssign.churchId.equals(req.user.churchId)) {
+      return res.status(400).json({
+        message: "Assigned user not found or does not belong to your church",
+      });
+    }
+
+    const assignment = new Assignment({
+      event: id,
+      user: userId,
+      role: role || userToAssign.role,
+      notes,
+      assignedBy: req.user.userId,
+      status: "assigned",
+    });
+    await assignment.save();
+
+    event.assignments.push({
+      userId,
+      role: role || userToAssign.role,
+      status: "assigned",
+      notes,
+    });
+    await event.save();
+
+    // Send notification to assigned user (if not self)
+    if (userId.toString() !== req.user.userId.toString()) {
+      sendNotification({
+        recipientId: userId,
+        type: "assignment",
+        title: "New Worship Assignment 🎵",
+        message: `You were assigned as ${role || userToAssign.role} for "${event.event?.title || 'Worship Service'}".`,
+        link: `/events/${event._id}`,
+      }).catch((err) => console.warn(err.message));
+    }
+
+    const populated = await populateEventDetails(event._id);
+    res.status(201).json(populated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Replace event roster
 exports.setEventTeamFromRoster = async (req, res) => {
   try {
     const event = await Event.findOne({
@@ -400,6 +493,20 @@ exports.setEventTeamFromRoster = async (req, res) => {
     event.updatedAt = new Date();
     await event.save();
 
+    // Notify assigned members asynchronously
+    const eventTitle = event.event?.title || "Worship Service";
+    for (const assignment of event.assignments) {
+      if (assignment.userId && !assignment.userId.equals(req.user.userId)) {
+        sendNotification({
+          recipientId: assignment.userId,
+          type: "assignment",
+          title: "New Worship Assignment 🎵",
+          message: `You were scheduled as ${assignment.role} for "${eventTitle}".`,
+          link: `/events/${event._id}`,
+        }).catch((err) => console.warn("Failed to notify user:", err.message));
+      }
+    }
+
     const populated = await Event.findById(event._id)
       .populate("assignments.userId", "name email role")
       .populate("team", "team.name")
@@ -425,13 +532,14 @@ exports.getAssignments = async (req, res) => {
   }
 };
 
-// Delete assignment
+// Delete an assignment
 exports.deleteAssignment = async (req, res) => {
   try {
     const { id, assignmentId } = req.params;
     const assignment = await Assignment.findByIdAndDelete(assignmentId);
     if (!assignment)
       return res.status(404).json({ message: "Assignment not found" });
+
     await Event.findByIdAndUpdate(id, {
       $pull: { assignments: { userId: assignment.user } },
     });
@@ -455,7 +563,6 @@ exports.approveAssignment = async (req, res) => {
     const assignment = await Assignment.findById(assignmentId);
     if (!assignment)
       return res.status(404).json({ message: "Assignment not found" });
-    // Ensure assignment belongs to same church via event
     const event = await Event.findById(assignment.event);
     if (!event || !event.churchId.equals(req.user.churchId)) {
       return res.status(403).json({ message: "Cross-church access denied" });
@@ -470,4 +577,19 @@ exports.approveAssignment = async (req, res) => {
   }
 };
 
-// Setlists removed
+// Trigger manual advance reminder for an event
+exports.triggerEventReminder = async (req, res) => {
+  try {
+    const event = await Event.findOne({
+      _id: req.params.id,
+      churchId: req.user.churchId,
+    });
+    if (!event) return res.status(404).json({ message: "Event not found" });
+
+    await send24HourRemindersForEvent(event, req.user.userId);
+    res.json({ success: true, message: "Reminder sent to assigned members and team." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to dispatch reminder" });
+  }
+};

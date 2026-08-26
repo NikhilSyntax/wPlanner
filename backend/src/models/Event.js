@@ -56,6 +56,9 @@ const eventSchema = new mongoose.Schema({
     sendAt: { type: Date, required: true },
     sent: { type: Boolean, default: false }
   }],
+  reminder24hSent: { type: Boolean, default: false },
+  reminder12hSent: { type: Boolean, default: false },
+  reminder2hSent: { type: Boolean, default: false },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   churchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Church', required: true },
   createdAt: { type: Date, default: Date.now },

@@ -382,9 +382,11 @@ function EventChat() {
                             textAlign: msg.isOwn ? 'right' : 'left',
                             mt: 0.5,
                             px: 0.5,
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
                           }}
                         >
-                          {new Date(msg.createdAt).toLocaleTimeString([], {
+                          {msg.senderName} • {new Date(msg.createdAt).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
                           })}

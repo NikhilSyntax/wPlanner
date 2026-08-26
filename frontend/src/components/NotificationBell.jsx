@@ -1,51 +1,161 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { Link } from 'react-router-dom';
-import api from '../services/api';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Box,
+  IconButton,
+  Badge,
+  Popover,
+  Typography,
+  Button,
+  Divider,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Chip,
+  Tooltip,
+  Alert,
+  CircularProgress,
+  Paper,
+} from '@mui/material';
+import {
+  Notifications as NotificationsIcon,
+  Event as EventIcon,
+  AssignmentInd as AssignmentIcon,
+  MusicNote as MusicNoteIcon,
+  Chat as ChatIcon,
+  Info as InfoIcon,
+  DoneAll as DoneAllIcon,
+  PhoneAndroid as PhoneAndroidIcon,
+  NotificationsActive as NotificationsActiveIcon,
+  Send as SendIcon,
+  CheckCircle as CheckCircleIcon,
+} from '@mui/icons-material';
+import { io } from 'socket.io-client';
+import api, { API_ORIGIN } from '../services/api';
+import {
+  isPushNotificationSupported,
+  getPushSubscriptionStatus,
+  subscribeUserToPush,
+  sendTestPushNotification,
+} from '../services/pushNotificationService';
+
+const getNotificationIcon = (type) => {
+  switch (type) {
+    case 'assignment':
+      return <AssignmentIcon color="primary" fontSize="small" />;
+    case 'setlist_update':
+      return <MusicNoteIcon color="secondary" fontSize="small" />;
+    case 'event_reminder':
+      return <EventIcon color="warning" fontSize="small" />;
+    case 'chat_mention':
+      return <ChatIcon color="info" fontSize="small" />;
+    default:
+      return <InfoIcon color="action" fontSize="small" />;
+  }
+};
+
+const formatTime = (dateStr) => {
+  if (!dateStr) return '';
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
 
 function NotificationBell() {
+  const navigate = useNavigate();
+  const [anchorEl, setAnchorEl] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [open, setOpen] = useState(false);
-  const dropdownRef = useRef(null);
-  const headerRef = useRef(null);
-  const firstItemRef = useRef(null);
-  const [itemHeight, setItemHeight] = useState(72);
-  const [headerHeight, setHeaderHeight] = useState(48);
+  const [loading, setLoading] = useState(false);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // Push subscription state
+  const [pushStatus, setPushStatus] = useState({
+    isSupported: false,
+    isSubscribed: false,
+    permission: 'default',
+  });
+  const [pushActionLoading, setPushActionLoading] = useState(false);
+  const [testPushSuccess, setTestPushSuccess] = useState('');
+  const [pushError, setPushError] = useState('');
 
-  // Poll for notifications every 30s
-  useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  const socketRef = useRef(null);
+  const open = Boolean(anchorEl);
 
+  // 1. Fetch notifications from backend
   const fetchNotifications = async () => {
     try {
       const res = await api.get('/notifications', {
-        params: { limit: 10 },
+        params: { limit: 12 },
       });
       setNotifications(res.data.notifications || []);
       setUnreadCount(res.data.unreadCount || 0);
     } catch (err) {
-      console.error('Failed to load notifications', err);
+      console.error('[NotificationBell] Failed to load notifications:', err);
     }
+  };
+
+  // 2. Refresh Push Status
+  const refreshPushStatus = async () => {
+    const status = await getPushSubscriptionStatus();
+    setPushStatus(status);
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    refreshPushStatus();
+
+    // Poll every 45s as a fallback
+    const interval = setInterval(fetchNotifications, 45000);
+
+    // Connect real-time socket for instant delivery
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      const socket = io(API_ORIGIN, {
+        path: '/socket.io',
+        transports: ['websocket', 'polling'],
+        query: { token },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      socket.on('notification:new', (newNotif) => {
+        setNotifications((prev) => [newNotif, ...prev.filter((n) => n._id !== newNotif._id)]);
+        setUnreadCount((count) => count + 1);
+      });
+
+      socketRef.current = socket;
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (socketRef.current) socketRef.current.disconnect();
+    };
+  }, []);
+
+  const handleClick = (event) => {
+    setAnchorEl(event.currentTarget);
+    refreshPushStatus();
+    setTestPushSuccess('');
+    setPushError('');
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
   };
 
   const markAsRead = async (id) => {
     try {
       await api.put(`/notifications/${id}/read`, {});
-      fetchNotifications();
+      setNotifications((prev) =>
+        prev.map((n) => (n._id === id ? { ...n, read: true } : n))
+      );
+      setUnreadCount((c) => Math.max(0, c - 1));
     } catch (err) {
       console.error(err);
     }
@@ -54,175 +164,322 @@ function NotificationBell() {
   const markAllAsRead = async () => {
     try {
       await api.put('/notifications/read-all', {});
-      fetchNotifications();
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setUnreadCount(0);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const formatTime = (dateStr) => {
-    const now = new Date();
-    const date = new Date(dateStr);
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHrs = Math.floor(diffMins / 60);
-    if (diffHrs < 24) return `${diffHrs}h ago`;
-    return date.toLocaleDateString();
+  const handleNotificationClick = (notif) => {
+    if (!notif.read) {
+      markAsRead(notif._id);
+    }
+    handleClose();
+    let targetLink = notif.link;
+    if (!targetLink) {
+      if (notif.title?.includes('Church Roster') || notif.type === 'chat_mention') {
+        targetLink = '/teams?chat=open';
+      }
+    } else if (targetLink === '/teams' && (notif.title?.includes('Church Roster') || notif.type === 'chat_mention')) {
+      targetLink = '/teams?chat=open';
+    }
+    if (targetLink) {
+      navigate(targetLink);
+    }
   };
 
-  // Measure header and item heights to compute maxHeight dynamically
-  useLayoutEffect(() => {
-    if (headerRef.current) {
-      setHeaderHeight(headerRef.current.offsetHeight);
+  // Push Subscription Handler
+  const handleEnablePush = async () => {
+    try {
+      setPushActionLoading(true);
+      setPushError('');
+      setTestPushSuccess('');
+      await subscribeUserToPush();
+      await refreshPushStatus();
+      setTestPushSuccess('Phone alerts enabled! You will now receive lock-screen notifications.');
+    } catch (err) {
+      setPushError(err.message || 'Failed to enable push notifications.');
+    } finally {
+      setPushActionLoading(false);
     }
-    if (firstItemRef.current) {
-      setItemHeight(firstItemRef.current.offsetHeight);
+  };
+
+  // Test Notification Handler
+  const handleSendTestPush = async () => {
+    try {
+      setPushActionLoading(true);
+      setPushError('');
+      setTestPushSuccess('');
+      const res = await sendTestPushNotification();
+      setTestPushSuccess(res.message || 'Test push notification sent! Check your phone/screen.');
+    } catch (err) {
+      setPushError(err?.response?.data?.message || err.message || 'Failed to send test push.');
+    } finally {
+      setPushActionLoading(false);
     }
-  }, [notifications, open]);
+  };
 
   return (
-    <div
-      className="notification-bell"
-      ref={dropdownRef}
-      style={{ position: 'relative', display: 'inline-block' }}
-    >
-      <button
-        onClick={() => setOpen(!open)}
-        style={{
-          background: 'none',
-          border: 'none',
-          fontSize: '1.2rem',
-          cursor: 'pointer',
-          color: 'white',
-          position: 'relative',
-        }}
-      >
-        🔔
-        {unreadCount > 0 && (
-          <span
-            style={{
-              position: 'absolute',
-              top: '-6px',
-              right: '-6px',
-              background: 'red',
-              color: 'white',
-              borderRadius: '50%',
-              fontSize: '0.7rem',
-              width: '18px',
-              height: '18px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div
-          style={{
-            position: 'absolute',
-            right: 0,
-            top: '100%',
-            width: '320px',
-            background: 'white',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-            zIndex: 1000,
+    <Box sx={{ display: 'inline-block' }}>
+      <Tooltip title="Notifications">
+        <IconButton
+          onClick={handleClick}
+          size="medium"
+          sx={{
+            color: 'inherit',
+            transition: 'transform 0.15s ease-in-out',
+            '&:hover': { transform: 'scale(1.05)' },
           }}
         >
-          <div
-            ref={headerRef}
-            style={{
-              padding: '0.5rem 1rem',
-              borderBottom: '1px solid #eee',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
+          <Badge
+            badgeContent={unreadCount}
+            color="error"
+            max={99}
+            sx={{
+              '& .MuiBadge-badge': {
+                fontWeight: 700,
+                fontSize: '0.7rem',
+                minWidth: 18,
+                height: 18,
+                px: 0.5,
+              },
             }}
           >
-            <strong>Notifications</strong>
+            <NotificationsIcon />
+          </Badge>
+        </IconButton>
+      </Tooltip>
+
+      <Popover
+        open={open}
+        anchorEl={anchorEl}
+        onClose={handleClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        PaperProps={{
+          sx: {
+            width: { xs: 320, sm: 380 },
+            maxHeight: 520,
+            borderRadius: 3,
+            boxShadow: '0 12px 36px rgba(0,0,0,0.18)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          },
+        }}
+      >
+        {/* Header */}
+        <Box
+          sx={{
+            p: 2,
+            px: 2.5,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: 1,
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="subtitle1" fontWeight={700}>
+              Notifications
+            </Typography>
             {unreadCount > 0 && (
-              <button
-                onClick={markAllAsRead}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#3498db',
-                  cursor: 'pointer',
-                  fontSize: '0.8rem',
+              <Chip
+                label={`${unreadCount} new`}
+                size="small"
+                color="primary"
+                sx={{ height: 20, fontSize: '0.7rem', fontWeight: 700 }}
+              />
+            )}
+          </Box>
+
+          {unreadCount > 0 && (
+            <Button
+              size="small"
+              startIcon={<DoneAllIcon sx={{ fontSize: 14 }} />}
+              onClick={markAllAsRead}
+              sx={{ textTransform: 'none', fontSize: '0.78rem', p: 0 }}
+            >
+              Mark all read
+            </Button>
+          )}
+        </Box>
+
+        {/* Notifications List */}
+        <List sx={{ p: 0, overflowY: 'auto', flex: 1 }}>
+          {notifications.length === 0 ? (
+            <Box textAlign="center" py={5} px={3}>
+              <NotificationsActiveIcon sx={{ fontSize: 36, color: 'text.secondary', opacity: 0.4, mb: 1 }} />
+              <Typography variant="body2" color="text.secondary" fontWeight={500}>
+                You're all caught up!
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                New worship setlists, assignments, and reminders will appear here.
+              </Typography>
+            </Box>
+          ) : (
+            notifications.map((notif) => (
+              <ListItem
+                key={notif._id}
+                onClick={() => handleNotificationClick(notif)}
+                sx={{
+                  py: 1.5,
+                  px: 2.5,
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                  cursor: notif.link ? 'pointer' : 'default',
+                  bgcolor: notif.read ? 'transparent' : 'rgba(37, 99, 235, 0.05)',
+                  transition: 'background-color 0.15s ease',
+                  '&:hover': {
+                    bgcolor: 'action.hover',
+                  },
                 }}
               >
-                Mark all read
-              </button>
-            )}
-          </div>
-          <div
-            style={{
-              maxHeight:
-                notifications.length >= 4
-                  ? `${headerHeight + itemHeight * 3}px`
-                  : undefined,
-              overflowY: notifications.length >= 4 ? 'auto' : 'hidden',
-            }}
-          >
-            {notifications.length === 0 ? (
-              <div
-                style={{ padding: '1rem', textAlign: 'center', color: '#666' }}
+                <ListItemIcon sx={{ minWidth: 36 }}>
+                  {getNotificationIcon(notif.type)}
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1}>
+                      <Typography
+                        variant="body2"
+                        fontWeight={notif.read ? 600 : 700}
+                        color="text.primary"
+                        sx={{ lineHeight: 1.3 }}
+                      >
+                        {notif.title}
+                      </Typography>
+                      {!notif.read && (
+                        <Box
+                          sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            bgcolor: 'primary.main',
+                            flexShrink: 0,
+                            mt: 0.5,
+                          }}
+                        />
+                      )}
+                    </Box>
+                  }
+                  secondary={
+                    <Box component="span" sx={{ display: 'block', mt: 0.3 }}>
+                      <Typography
+                        component="span"
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {notif.message}
+                      </Typography>
+                      <Typography
+                        component="span"
+                        variant="caption"
+                        color="text.disabled"
+                        sx={{ display: 'block', mt: 0.5, fontSize: '0.7rem' }}
+                      >
+                        {formatTime(notif.createdAt)}
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </ListItem>
+            ))
+          )}
+        </List>
+
+        {/* Footer: Phone Push Notification Controls */}
+        <Paper
+          square
+          elevation={0}
+          sx={{
+            p: 1.5,
+            px: 2,
+            borderTop: 1,
+            borderColor: 'divider',
+            bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'background.default' : '#f8fafc'),
+          }}
+        >
+          {testPushSuccess && (
+            <Alert severity="success" sx={{ mb: 1, py: 0.3, fontSize: '0.75rem' }} onClose={() => setTestPushSuccess('')}>
+              {testPushSuccess}
+            </Alert>
+          )}
+
+          {pushError && (
+            <Alert severity="warning" sx={{ mb: 1, py: 0.3, fontSize: '0.75rem' }} onClose={() => setPushError('')}>
+              {pushError}
+            </Alert>
+          )}
+
+          <Box display="flex" alignItems="center" justifyContent="space-between" gap={1}>
+            <Box display="flex" alignItems="center" gap={1}>
+              <PhoneAndroidIcon sx={{ fontSize: 20, color: pushStatus.isSubscribed ? 'success.main' : 'primary.main' }} />
+              <Typography variant="caption" fontWeight={600} color="text.secondary">
+                {pushStatus.isSubscribed ? 'Phone Push Active' : 'Phone Push Alerts'}
+              </Typography>
+            </Box>
+
+            {pushStatus.isSubscribed ? (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<SendIcon sx={{ fontSize: 13 }} />}
+                disabled={pushActionLoading}
+                onClick={handleSendTestPush}
+                sx={{
+                  textTransform: 'none',
+                  fontSize: '0.72rem',
+                  py: 0.3,
+                  px: 1.2,
+                  borderRadius: 1.5,
+                }}
               >
-                No notifications yet.
-              </div>
+                {pushActionLoading ? <CircularProgress size={14} /> : 'Send Test Alert'}
+              </Button>
             ) : (
-              notifications.map((notif, idx) => (
-                <div
-                  key={notif._id}
-                  ref={idx === 0 ? firstItemRef : null}
-                  onClick={() => {
-                    if (!notif.read) markAsRead(notif._id);
-                    if (notif.link) {
-                      window.location.href = notif.link;
-                    }
-                  }}
-                  style={{
-                    padding: '0.75rem 1rem',
-                    borderBottom: '1px solid #f0f0f0',
-                    background: notif.read ? 'white' : '#f0f7ff',
-                    cursor: notif.link ? 'pointer' : 'default',
-                  }}
-                >
-                  <div style={{ fontWeight: notif.read ? 'normal' : 'bold' }}>
-                    {notif.title}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '0.85rem',
-                      color: '#555',
-                      marginTop: '0.25rem',
-                    }}
-                  >
-                    {notif.message}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '0.75rem',
-                      color: '#999',
-                      marginTop: '0.25rem',
-                    }}
-                  >
-                    {formatTime(notif.createdAt)}
-                  </div>
-                </div>
-              ))
+              <Button
+                size="small"
+                variant="contained"
+                disabled={pushActionLoading || !pushStatus.isSupported}
+                onClick={handleEnablePush}
+                sx={{
+                  textTransform: 'none',
+                  fontSize: '0.72rem',
+                  py: 0.4,
+                  px: 1.4,
+                  borderRadius: 1.5,
+                  fontWeight: 700,
+                  boxShadow: 'none',
+                }}
+              >
+                {pushActionLoading ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : (
+                  'Enable on Phone'
+                )}
+              </Button>
             )}
-          </div>
-        </div>
-      )}
-    </div>
+          </Box>
+        </Paper>
+      </Popover>
+    </Box>
   );
 }
 

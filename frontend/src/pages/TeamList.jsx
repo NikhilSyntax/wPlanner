@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Box,
@@ -32,6 +32,10 @@ import {
   Radio,
   FormControlLabel,
   FormLabel,
+  Drawer,
+  Avatar,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import {
   Group as GroupIcon,
@@ -39,10 +43,16 @@ import {
   ManageAccounts as ManageAccountsIcon,
   Shield as ShieldIcon,
   WorkspacePremium as CrownIcon,
+  Chat as ChatIcon,
+  Send as SendIcon,
+  Close as CloseIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
+import { io } from 'socket.io-client';
 import { fetchTeams } from '../store/slices/teamSlice';
 import LoadingSpinner from '../components/common/LoadingSpinner';
-import api from '../services/api';
+import api, { API_ORIGIN } from '../services/api';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 
 const MINISTRY_ROLES = [
   'Worship Leader',
@@ -78,6 +88,95 @@ function TeamList() {
   const isSubAdmin = !!user?.isSubAdmin;
   const isPrivileged = isFullAdmin || isSubAdmin;
   const currentUserId = user?._id?.toString?.() || user?.id?.toString?.() || '';
+  const churchId = user?.churchId?._id || user?.churchId;
+
+  // Church Roster Chat state
+  const [searchParams] = useSearchParams();
+  const shouldOpenChat =
+    searchParams.get('chat') === 'open' ||
+    searchParams.get('chat') === '1' ||
+    searchParams.get('tab') === 'chat';
+  const [chatOpen, setChatOpen] = useState(shouldOpenChat);
+
+  useEffect(() => {
+    if (shouldOpenChat) {
+      setChatOpen(true);
+    }
+  }, [shouldOpenChat]);
+
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatSocketRef = useRef(null);
+  const chatEndRef = useRef(null);
+
+  const fetchChurchMessages = async () => {
+    try {
+      setChatLoading(true);
+      const res = await api.get('/church/messages').catch(() => api.get('/church-messages'));
+      setChatMessages(res.data?.messages || []);
+    } catch (e) {
+      console.warn('Failed to load church messages:', e);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (chatOpen) {
+      fetchChurchMessages();
+      const token = localStorage.getItem('accessToken');
+      if (token && churchId) {
+        const socket = io(API_ORIGIN, {
+          path: '/socket.io',
+          transports: ['websocket', 'polling'],
+          query: { token },
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        chatSocketRef.current = socket;
+        socket.on('connect', () => {
+          socket.emit('joinChurch', { churchId });
+        });
+        socket.on('newMessage', (msg) => {
+          setChatMessages((prev) => {
+            const exists = prev.some((m) => String(m._id) === String(msg._id));
+            if (exists) return prev;
+            return [...prev, msg];
+          });
+        });
+        return () => socket.disconnect();
+      }
+    }
+  }, [chatOpen, churchId]);
+
+  useEffect(() => {
+    if (chatOpen) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, chatOpen]);
+
+  const handleSendChurchMessage = async (e) => {
+    e?.preventDefault();
+    const trimmed = chatInput.trim();
+    if (!trimmed || chatSending) return;
+    try {
+      setChatSending(true);
+      const res = await api.post('/church/messages', { content: trimmed }).catch(() =>
+        api.post('/church-messages', { content: trimmed })
+      );
+      setChatMessages((prev) => {
+        const exists = prev.some((m) => String(m._id) === String(res.data._id));
+        if (exists) return prev;
+        return [...prev, res.data];
+      });
+      setChatInput('');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setChatSending(false);
+    }
+  };
 
   useEffect(() => {
     dispatch(fetchTeams());
@@ -260,70 +359,106 @@ function TeamList() {
             borderColor: 'divider',
           }}
         >
-          <Stack
-            direction="row"
-            spacing={2}
-            alignItems="center"
-            sx={{ mb: 1 }}
-          >
-            <Box
-              sx={{
-                width: 48,
-                height: 48,
-                borderRadius: 2,
-                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                color: '#ffffff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
-              }}
+          <Box display="flex" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2} mb={1}>
+            <Stack
+              direction="row"
+              spacing={2}
+              alignItems="center"
             >
-              <GroupIcon sx={{ fontSize: 26 }} />
-            </Box>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography
-                variant="h4"
-                component="h1"
+              <Box
                 sx={{
-                  fontWeight: 700,
-                  letterSpacing: '-0.02em',
-                  lineHeight: 1.2,
+                  width: 48,
+                  height: 48,
+                  borderRadius: 2,
+                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
                 }}
               >
-                Church Roster
-              </Typography>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mt: 0.5, maxWidth: 720 }}
+                <GroupIcon sx={{ fontSize: 26 }} />
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography
+                  variant="h4"
+                  component="h1"
+                  sx={{
+                    fontWeight: 700,
+                    letterSpacing: '-0.02em',
+                    lineHeight: 1.2,
+                  }}
+                >
+                  Church Roster
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mt: 0.5, maxWidth: 720 }}
+                >
+                  Manage church members, assign Sub-Admins or Admins, and communicate in real-time.
+                </Typography>
+              </Box>
+            </Stack>
+
+            <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<ChatIcon />}
+                onClick={() => setChatOpen(true)}
+                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, px: 2 }}
               >
-                Manage church members, assign Sub-Admins or Admins, and view live availability.
-              </Typography>
+                Roster Chat
+              </Button>
+              {isPrivileged && (
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  component={Link}
+                  to="/teams/new"
+                  sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                >
+                  New Team
+                </Button>
+              )}
             </Box>
-          </Stack>
+          </Box>
 
           {teams.length > 0 && (
-            <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mt: 2 }}>
+            <Stack direction="row" flexWrap="wrap" alignItems="center" gap={1} sx={{ mt: 2 }}>
               <Typography
                 variant="caption"
                 color="text.secondary"
-                sx={{ alignSelf: 'center', mr: 0.5 }}
+                sx={{ alignSelf: 'center', mr: 0.5, fontWeight: 600 }}
               >
-                Open a team:
+                Teams:
               </Typography>
               {teams.map((t) => (
-                <Chip
-                  key={t._id}
-                  component={Link}
-                  to={`/teams/${t._id}`}
-                  label={t.team?.name || 'Team'}
-                  clickable
-                  color="primary"
-                  variant="outlined"
-                  sx={{ fontWeight: 600 }}
-                />
+                <Box key={t._id} display="flex" alignItems="center" gap={0.5}>
+                  <Chip
+                    component={Link}
+                    to={`/teams/${t._id}`}
+                    label={t.team?.name || 'Team'}
+                    clickable
+                    color="primary"
+                    variant="outlined"
+                    sx={{ fontWeight: 600 }}
+                  />
+                  <Tooltip title={`Chat in ${t.team?.name || 'Team'}`}>
+                    <IconButton
+                      component={Link}
+                      to={`/teams/${t._id}/chat`}
+                      size="small"
+                      color="primary"
+                      sx={{ p: 0.5 }}
+                    >
+                      <ChatIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
               ))}
             </Stack>
           )}
@@ -673,6 +808,205 @@ function TeamList() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Church Roster Real-Time Chat Drawer */}
+      <Drawer
+        anchor="right"
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        PaperProps={{
+          sx: {
+            width: { xs: '100%', sm: 440 },
+            display: 'flex',
+            flexDirection: 'column',
+          },
+        }}
+      >
+        <Box
+          sx={{
+            p: 2,
+            px: 2.5,
+            borderBottom: 1,
+            borderColor: 'divider',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Box display="flex" alignItems="center" gap={1.5}>
+            <ChatIcon color="primary" />
+            <Box>
+              <Typography variant="subtitle1" fontWeight={700}>
+                Church Roster Chat
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Messages alert all members with phone banners
+              </Typography>
+            </Box>
+          </Box>
+          <IconButton onClick={() => setChatOpen(false)} size="small">
+            <CloseIcon />
+          </IconButton>
+        </Box>
+
+        {/* Message stream */}
+        <Box
+          sx={{
+            flex: 1,
+            overflowY: 'auto',
+            p: 2.5,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1.5,
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark' ? 'background.default' : '#f8fafc',
+          }}
+        >
+          {chatLoading && chatMessages.length === 0 ? (
+            <Box display="flex" justifyContent="center" py={5}>
+              <LoadingSpinner size={30} />
+            </Box>
+          ) : chatMessages.length === 0 ? (
+            <Box textAlign="center" my="auto" py={6} color="text.secondary">
+              <ChatIcon sx={{ fontSize: 44, opacity: 0.3, mb: 1 }} />
+              <Typography variant="body2" fontWeight={600}>
+                No messages yet.
+              </Typography>
+              <Typography variant="caption">
+                Send an announcement or message to everyone in the church roster.
+              </Typography>
+            </Box>
+          ) : (
+            chatMessages.map((m) => {
+              const sender = m.sender;
+              const senderId = (typeof sender === 'object' ? sender?._id : sender) || m.userId;
+              const isOwn = String(senderId) === String(currentUserId);
+              const senderName = (typeof sender === 'object' ? sender?.name : null) || m.senderName || 'Unknown';
+              const senderPhoto = (typeof sender === 'object' ? sender?.profilePhotoUrl : null) || (isOwn ? user?.profilePhotoUrl : null);
+
+              return (
+                <Box
+                  key={m._id}
+                  sx={{
+                    display: 'flex',
+                    flexDirection: isOwn ? 'row-reverse' : 'row',
+                    alignItems: 'flex-end',
+                    gap: 1,
+                  }}
+                >
+                  <Avatar
+                    sx={{ width: 30, height: 30, fontSize: '0.8rem' }}
+                    src={senderPhoto ? resolveMediaUrl(senderPhoto) : undefined}
+                  >
+                    {senderName?.charAt(0)?.toUpperCase() || 'U'}
+                  </Avatar>
+                  <Box sx={{ maxWidth: '78%' }}>
+                    {!isOwn && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        fontWeight={600}
+                        sx={{ display: 'block', mb: 0.25, ml: 1 }}
+                      >
+                        {senderName}
+                      </Typography>
+                    )}
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        p: 1.25,
+                        px: 2,
+                        borderRadius: 3,
+                        bgcolor: isOwn ? 'primary.main' : 'background.paper',
+                        color: isOwn ? '#ffffff' : 'text.primary',
+                        border: isOwn ? 'none' : '1px solid',
+                        borderColor: 'divider',
+                        boxShadow: isOwn
+                          ? '0 2px 8px rgba(37, 99, 235, 0.25)'
+                          : '0 1px 3px rgba(0,0,0,0.05)',
+                        wordBreak: 'break-word',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: isOwn ? '#ffffff !important' : 'text.primary',
+                          fontWeight: 500,
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        {m.content}
+                      </Typography>
+                    </Paper>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{
+                        display: 'block',
+                        mt: 0.35,
+                        textAlign: isOwn ? 'right' : 'left',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        px: 0.5,
+                      }}
+                    >
+                      {senderName} • {new Date(m.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </Typography>
+                  </Box>
+                </Box>
+              );
+            })
+          )}
+          <div ref={chatEndRef} />
+        </Box>
+
+        {/* Input Bar */}
+        <Box
+          component="form"
+          onSubmit={handleSendChurchMessage}
+          sx={{
+            p: 2,
+            borderTop: 1,
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+            display: 'flex',
+            gap: 1.5,
+            alignItems: 'center',
+          }}
+        >
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Message Church Roster..."
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            disabled={chatSending}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 3,
+              },
+            }}
+          />
+          <IconButton
+            color="primary"
+            type="submit"
+            disabled={!chatInput.trim() || chatSending}
+            sx={{
+              bgcolor: 'primary.main',
+              color: 'white',
+              '&:hover': { bgcolor: 'primary.dark' },
+              '&.Mui-disabled': { bgcolor: 'action.disabledBackground' },
+            }}
+          >
+            <SendIcon fontSize="small" />
+          </IconButton>
+        </Box>
+      </Drawer>
     </Box>
   );
 }

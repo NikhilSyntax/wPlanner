@@ -42,6 +42,9 @@ import {
   Remove as RemoveIcon,
   ArrowUpward as ArrowUpwardIcon,
   ArrowDownward as ArrowDownwardIcon,
+  NotificationsActive as NotificationsActiveIcon,
+  CheckCircle as CheckCircleIcon,
+  AccessTime as AccessTimeIcon,
 } from '@mui/icons-material';
 import api, { apiUrl } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -93,6 +96,14 @@ function EventDetails() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useSelector((state) => state.auth);
+  const isAdminOrSubAdmin = Boolean(
+    user?.isAdmin ||
+    user?.isSubAdmin ||
+    user?.role === 'admin' ||
+    user?.role === 'sub_admin' ||
+    user?.roles?.includes('admin') ||
+    user?.roles?.includes('sub_admin')
+  );
   const [event, setEvent] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -105,6 +116,8 @@ function EventDetails() {
   const [addSongLoading, setAddSongLoading] = useState(false);
   const [addSongError, setAddSongError] = useState('');
   const [setlist, setSetlist] = useState([]);
+  const [reminderLoading, setReminderLoading] = useState(false);
+  const [reminderMessage, setReminderMessage] = useState('');
   // ----- edit mode for title/description -----
   const [editMode, setEditMode] = useState(false);
   const [titleDraft, setTitleDraft] = useState(event?.title || '');
@@ -210,6 +223,24 @@ function EventDetails() {
       fetchEvent();
       setSaveMessage('');
     }, 1500);
+  };
+
+  const handleConfirmEvent = async () => {
+    try {
+      await updateEventStatus('published', 'Event confirmed and published!');
+    } catch (err) {
+      console.error('Failed to confirm event:', err);
+      setError('Failed to confirm event');
+    }
+  };
+
+  const handleUnconfirmEvent = async () => {
+    try {
+      await updateEventStatus('draft', 'Event unconfirmed and set to draft.');
+    } catch (err) {
+      console.error('Failed to unconfirm event:', err);
+      setError('Failed to unconfirm event');
+    }
   };
 
   const handleMarkCompleted = async () => {
@@ -392,17 +423,76 @@ function EventDetails() {
 
   return (
     <Box sx={{ pb: 4 }}>
-      {/* Header with back button */}
-      <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} mb={3}>
-        <Box display="flex" alignItems="center" gap={2}>
-          <IconButton onClick={() => navigate('/events')} sx={{ mr: 1 }}>
-            <ArrowBackIcon />
+      {/* Aesthetic & Ergonomic Header Section */}
+      <Paper
+        elevation={0}
+        sx={{
+          mb: 2.5,
+          p: { xs: 2, sm: '14px 20px' },
+          borderRadius: 3,
+          bgcolor: (theme) =>
+            theme.palette.mode === 'dark'
+              ? 'rgba(30, 41, 59, 0.4)'
+              : 'background.paper',
+          border: '1px solid',
+          borderColor: 'divider',
+          display: 'flex',
+          flexDirection: { xs: 'column', md: 'row' },
+          justifyContent: 'space-between',
+          alignItems: { xs: 'stretch', md: 'center' },
+          gap: { xs: 1.75, md: 2 },
+        }}
+      >
+        {/* Left Side: Back Button + Title & Badges & Date */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.75,
+            minWidth: 0,
+          }}
+        >
+          <IconButton
+            onClick={() => navigate('/events')}
+            size="small"
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: 2,
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'action.hover',
+              '&:hover': { bgcolor: 'action.selected' },
+              flexShrink: 0,
+            }}
+            title="Back to Events"
+          >
+            <ArrowBackIcon sx={{ fontSize: 18 }} />
           </IconButton>
-          <Box>
-            <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
-              {getEventDisplayTitle(event) || 'Event Details'}
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
+
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            {/* Title & Status Chips Inline Row */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.25,
+                flexWrap: 'wrap',
+              }}
+            >
+              <Typography
+                variant="h5"
+                component="h1"
+                sx={{
+                  fontWeight: 700,
+                  fontSize: { xs: '1.25rem', sm: '1.45rem' },
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.25,
+                }}
+              >
+                {getEventDisplayTitle(event) || 'Event Details'}
+              </Typography>
+
               {eventInfo.type && (
                 <Chip
                   label={
@@ -412,9 +502,15 @@ function EventDetails() {
                   size="small"
                   color={eventTypeColors[eventInfo.type] || 'default'}
                   variant="outlined"
-                  sx={{ mr: 1, mt: 1 }}
+                  sx={{
+                    fontWeight: 600,
+                    fontSize: '0.72rem',
+                    height: 22,
+                    textTransform: 'capitalize',
+                  }}
                 />
               )}
+
               {(() => {
                 const backendStatus = eventInfo.status || 'draft';
                 const start = scheduleInfo.start
@@ -442,46 +538,176 @@ function EventDetails() {
                     label={label}
                     size="small"
                     color={statusColors[display] || 'default'}
-                    sx={{ mt: 1 }}
+                    sx={{
+                      fontWeight: 600,
+                      fontSize: '0.72rem',
+                      height: 22,
+                    }}
                   />
                 );
               })()}
-            </Typography>
+            </Box>
+
+            {/* Event Schedule Subtitle */}
+            {scheduleInfo.start && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.75,
+                  mt: 0.5,
+                }}
+              >
+                <AccessTimeIcon
+                  sx={{ fontSize: 14, color: 'text.secondary' }}
+                />
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontSize: '0.8rem', fontWeight: 500 }}
+                >
+                  {new Date(scheduleInfo.start).toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                  {' • '}
+                  {new Date(scheduleInfo.start).toLocaleTimeString('en-US', {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                  {scheduleInfo.end && (
+                    <>
+                      {' - '}
+                      {new Date(scheduleInfo.end).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </>
+                  )}
+                </Typography>
+              </Box>
+            )}
           </Box>
         </Box>
+
+        {/* Right Side: Action Buttons */}
         {canEdit && (
-          <Box display="flex" gap={1} flexWrap="wrap" justifyContent="flex-end">
-            {eventInfo.status === 'completed' ? (
-              (user?.isAdmin || user?.isSubAdmin) && (
-                <Button
-                  variant="outlined"
-                  color="warning"
-                  onClick={handleUndoCompleted}
-                  sx={{ textTransform: 'none' }}
-                >
-                  Undo Completed
-                </Button>
-              )
-            ) : (
-              <Button
-                variant="contained"
-                color="success"
-                onClick={handleMarkCompleted}
-                sx={{ textTransform: 'none' }}
-              >
-                Mark Completed
-              </Button>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.25,
+              flexWrap: 'wrap',
+              pt: { xs: 1.5, md: 0 },
+              borderTop: { xs: '1px solid', md: 'none' },
+              borderColor: { xs: 'divider', md: 'transparent' },
+              justifyContent: { xs: 'flex-start', sm: 'flex-start', md: 'flex-end' },
+            }}
+          >
+            {isAdminOrSubAdmin && (
+              <>
+                {eventInfo.status === 'draft' && (
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    size="small"
+                    startIcon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
+                    onClick={handleConfirmEvent}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.8125rem',
+                      height: 34,
+                      px: 2,
+                      boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
+                    }}
+                  >
+                    Confirm Event
+                  </Button>
+                )}
+
+                {eventInfo.status === 'published' && (
+                  <>
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      size="small"
+                      onClick={handleUnconfirmEvent}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.8125rem',
+                        height: 34,
+                        px: 1.75,
+                      }}
+                    >
+                      Unconfirm Event
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      size="small"
+                      startIcon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
+                      onClick={handleMarkCompleted}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.8125rem',
+                        height: 34,
+                        px: 2,
+                        boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
+                      }}
+                    >
+                      Mark Completed
+                    </Button>
+                  </>
+                )}
+
+                {eventInfo.status === 'completed' && (
+                  <Button
+                    variant="outlined"
+                    color="warning"
+                    size="small"
+                    onClick={handleUndoCompleted}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.8125rem',
+                      height: 34,
+                      px: 2,
+                    }}
+                  >
+                    Undo Completed
+                  </Button>
+                )}
+              </>
             )}
+
             <Button
               variant="outlined"
               color="error"
+              size="small"
               onClick={() => setDeleteDialogOpen(true)}
+              sx={{
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '0.8125rem',
+                height: 34,
+                px: 2,
+              }}
             >
               Delete
             </Button>
           </Box>
         )}
-      </Box>
+      </Paper>
 
       {isLocked && (
         <Alert severity="info" sx={{ mb: 3 }}>
@@ -498,72 +724,35 @@ function EventDetails() {
       <Grid container spacing={3}>
         {/* Main Content */}
         <Grid item xs={12} lg={8}>
-          {/* Event Information */}
-          <Card sx={{ borderRadius: 3, mb: 2 }}>
-            <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
-              <Box display="flex" alignItems="center" gap={2} mb={3}>
-                <EventIcon color="primary" />
-                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  Event Information
+          {/* Event Description (Compact) */}
+          <Card sx={{ borderRadius: 2.5, mb: 2.5 }}>
+            <CardContent
+              sx={{
+                p: '12px 16px !important',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1.5,
+              }}
+            >
+              <EventIcon color="primary" sx={{ fontSize: 20, mt: 0.2, flexShrink: 0 }} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  fontWeight={700}
+                  textTransform="uppercase"
+                  letterSpacing="0.04em"
+                  sx={{ display: 'block', mb: 0.25, fontSize: '0.7rem' }}
+                >
+                  Description
                 </Typography>
-              </Box>
-
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-                <Box>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ mb: 0.25 }}
-                  >
-                    Description
-                  </Typography>
-                  <Typography variant="body2">
-                    {eventInfo.description || 'No description provided'}
-                  </Typography>
-                </Box>
-
-                <Divider />
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ mb: 0.25 }}
-                    >
-                      Start Time
-                    </Typography>
-                    <Typography variant="body2">
-                      {startDate.toLocaleString('en-US', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ mb: 0.25 }}
-                    >
-                      End Time
-                    </Typography>
-                    <Typography variant="body2">
-                      {endDate.toLocaleString('en-US', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </Typography>
-                  </Grid>
-                </Grid>
+                <Typography
+                  variant="body2"
+                  color="text.primary"
+                  sx={{ lineHeight: 1.5, fontSize: '0.875rem' }}
+                >
+                  {eventInfo.description || 'No description provided.'}
+                </Typography>
               </Box>
             </CardContent>
           </Card>
@@ -576,7 +765,7 @@ function EventDetails() {
                 alignItems="center"
                 justifyContent="space-between"
                 gap={2}
-                mb={2}
+                mb={2.5}
                 flexWrap="wrap"
               >
                 <Box display="flex" alignItems="center" gap={2}>
@@ -585,64 +774,7 @@ function EventDetails() {
                     Songs & Setlist
                   </Typography>
                 </Box>
-                {canEdit && (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      gap: 1,
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      width: { xs: '100%', sm: 'auto' },
-                    }}
-                  >
-                    <TextField
-                      inputRef={addSongTitleInputRef}
-                      size="small"
-                      label="Quick add song title"
-                      value={newSongTitle}
-                      onChange={(e) => setNewSongTitle(e.target.value)}
-                      sx={{ flex: { xs: 1, sm: 'none' }, minWidth: { xs: 130, sm: 180 } }}
-                    />
-                    <FormControl size="small" sx={{ minWidth: 85 }}>
-                      <InputLabel>Key</InputLabel>
-                      <Select
-                        value={newSongKey}
-                        label="Key"
-                        onChange={(e) => setNewSongKey(e.target.value)}
-                      >
-                        {keyOptions.map((k) => (
-                          <MenuItem key={k} value={k}>
-                            {k}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    <Button
-                      variant="contained"
-                      startIcon={<AddIcon />}
-                      onClick={handleQuickAddSong}
-                      disabled={addSongLoading}
-                      sx={{ borderRadius: 2, textTransform: 'none', whiteSpace: 'nowrap' }}
-                    >
-                      {addSongLoading ? 'Adding...' : 'Add'}
-                    </Button>
-                  </Box>
-                )}
               </Box>
-
-              <TextField
-                fullWidth
-                size="small"
-                label="Search recommended songs by title or artist"
-                value={songQuery}
-                onChange={(e) => setSongQuery(e.target.value)}
-                sx={{ mb: 2 }}
-              />
-              {addSongError && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {addSongError}
-                </Alert>
-              )}
 
               {saveMessage && (
                 <Alert
@@ -656,363 +788,429 @@ function EventDetails() {
                 </Alert>
               )}
 
-              <Typography
-                variant="subtitle2"
-                sx={{ fontWeight: 600, mb: 2, mt: 2 }}
-              >
-                Recommended Songs
-              </Typography>
+              {/* 1. Current Setlist Section (At the Top) */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2 }}>
+                  Current Setlist ({setlist.length} {setlist.length === 1 ? 'song' : 'songs'})
+                </Typography>
 
-              {/* Recommended Songs */}
-              {songs.length > 0 ? (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 1.5,
-                    mb: 3,
-                  }}
-                >
-                  {recommendedSongs.map((song) => {
-                    const displaySong = mergeSongWithBank(song, songsById);
-                    return (
-                      <Paper
-                        key={displaySong._id}
-                        variant="outlined"
-                        sx={{
-                          p: { xs: 1.5, sm: 2 },
-                          borderRadius: 2,
-                          bgcolor: 'background.paper',
-                          display: 'flex',
-                          flexDirection: { xs: 'column', sm: 'row' },
-                          alignItems: { xs: 'stretch', sm: 'center' },
-                          justifyContent: 'space-between',
-                          gap: 1.5,
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, flex: 1 }}>
-                          <Box
-                            sx={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 1.5,
-                              bgcolor: 'rgba(245, 158, 11, 0.1)',
-                              color: '#f59e0b',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                            }}
-                          >
-                            <MusicIcon sx={{ fontSize: 18 }} />
-                          </Box>
-                          <Box sx={{ minWidth: 0, flex: 1 }}>
-                            <SongTitleWithTimeSignature
-                              title={displaySong.title}
-                              timeSignature={displaySong.timeSignature}
-                            />
-                            {displaySong.artist && (
-                              <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ mt: 0.2 }}>
-                                {displaySong.artist}
-                              </Typography>
-                            )}
-                          </Box>
-                        </Box>
-                        <Box
+                {setlist.length > 0 ? (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 1.5,
+                      mb: 2.5,
+                    }}
+                  >
+                    {setlist.map((song, idx) => {
+                      const displaySong = mergeSongWithBank(song, songsById);
+                      return (
+                        <Paper
+                          key={`${displaySong._id}-${idx}`}
+                          variant="outlined"
                           sx={{
+                            p: { xs: 1.5, sm: 2 },
+                            borderRadius: 2,
+                            bgcolor: 'background.paper',
+                            transition: 'all 0.15s ease',
                             display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            justifyContent: { xs: 'space-between', sm: 'flex-end' },
-                            borderTop: { xs: '1px solid', sm: 'none' },
-                            borderColor: 'divider',
-                            pt: { xs: 1, sm: 0 },
+                            flexDirection: { xs: 'column', sm: 'row' },
+                            alignItems: { xs: 'stretch', sm: 'center' },
+                            justifyContent: 'space-between',
+                            gap: 1.5,
+                            '&:hover': {
+                              borderColor: 'primary.main',
+                            },
                           }}
                         >
-                          {renderKeySelect(displaySong)}
-                          {canEdit && (
-                            <Button
-                              size="small"
-                              variant={setlist.some((s) => s._id === displaySong._id) ? 'outlined' : 'contained'}
-                              startIcon={setlist.some((s) => s._id === displaySong._id) ? null : <AddIcon />}
-                              onClick={() => {
-                                if (!setlist.find((s) => s._id === displaySong._id)) {
-                                  setSetlist([
-                                    ...setlist,
-                                    mergeSongWithBank(displaySong, songsById),
-                                  ]);
-                                }
-                              }}
-                              disabled={setlist.some((s) => s._id === displaySong._id)}
-                              sx={{ borderRadius: 1.5, textTransform: 'none', height: 32, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}
-                            >
-                              {setlist.some((s) => s._id === displaySong._id) ? 'Added' : 'Add to Setlist'}
-                            </Button>
-                          )}
-                        </Box>
-                      </Paper>
-                    );
-                  })}
-                </Box>
-              ) : (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 3 }}
-                >
-                  No songs available.
-                </Typography>
-              )}
-              {songs.length > 0 && recommendedSongs.length === 0 && (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 3 }}
-                >
-                  {setlist.length > 0
-                    ? 'No recommendations match your search. Add a different song or clear search.'
-                    : 'Add at least one song to the setlist to get key-based recommendations.'}
-                </Typography>
-              )}
-
-              <Divider sx={{ my: 2.5 }} />
-
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2 }}>
-                Current Setlist ({setlist.length} {setlist.length === 1 ? 'song' : 'songs'})
-              </Typography>
-
-              {setlist.length > 0 ? (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 1.5,
-                    mb: 3,
-                  }}
-                >
-                  {setlist.map((song, idx) => {
-                    const displaySong = mergeSongWithBank(song, songsById);
-                    return (
-                      <Paper
-                        key={`${displaySong._id}-${idx}`}
-                        variant="outlined"
-                        sx={{
-                          p: { xs: 1.5, sm: 2 },
-                          borderRadius: 2,
-                          bgcolor: 'background.paper',
-                          transition: 'all 0.15s ease',
-                          display: 'flex',
-                          flexDirection: { xs: 'column', sm: 'row' },
-                          alignItems: { xs: 'stretch', sm: 'center' },
-                          justifyContent: 'space-between',
-                          gap: 1.5,
-                          '&:hover': {
-                            borderColor: 'primary.main',
-                          },
-                        }}
-                      >
-                        {/* Song Details Row */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, flex: 1 }}>
-                          <Box
-                            sx={{
-                              width: 28,
-                              height: 28,
-                              borderRadius: 1.5,
-                              bgcolor: 'rgba(37, 99, 235, 0.1)',
-                              color: 'primary.main',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: 700,
-                              fontSize: '0.8125rem',
-                              flexShrink: 0,
-                            }}
-                          >
-                            {idx + 1}
-                          </Box>
-                          <Box sx={{ minWidth: 0, flex: 1 }}>
-                            <SongTitleWithTimeSignature
-                              title={displaySong.title}
-                              timeSignature={displaySong.timeSignature}
-                            />
-                            {displaySong.artist && (
-                              <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ mt: 0.2 }}>
-                                {displaySong.artist}
-                              </Typography>
-                            )}
-                          </Box>
-
-                          {/* Mobile-only remove icon */}
-                          {canEdit && (
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => setSetlist(setlist.filter((_, i) => i !== idx))}
-                              sx={{ display: { xs: 'inline-flex', sm: 'none' }, ml: 'auto' }}
-                              title="Remove song"
-                            >
-                              <RemoveIcon fontSize="small" />
-                            </IconButton>
-                          )}
-                        </Box>
-
-                        {/* Actions Toolbar */}
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            flexWrap: 'wrap',
-                            justifyContent: { xs: 'space-between', sm: 'flex-end' },
-                            borderTop: { xs: '1px solid', sm: 'none' },
-                            borderColor: 'divider',
-                            pt: { xs: 1, sm: 0 },
-                          }}
-                        >
-                          {/* Key select */}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            {renderKeySelect(displaySong)}
-                          </Box>
-
-                          {/* Reorder Arrows */}
-                          {canEdit && (
+                          {/* Song Details Row */}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, flex: 1 }}>
                             <Box
                               sx={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 1.5,
+                                bgcolor: 'rgba(37, 99, 235, 0.1)',
+                                color: 'primary.main',
                                 display: 'flex',
                                 alignItems: 'center',
-                                bgcolor: 'action.hover',
-                                borderRadius: 1.5,
-                                p: 0.25,
+                                justifyContent: 'center',
+                                fontWeight: 700,
+                                fontSize: '0.8125rem',
+                                flexShrink: 0,
                               }}
                             >
-                              <IconButton
-                                size="small"
-                                onClick={() => handleMoveSongUp(idx)}
-                                disabled={idx === 0}
-                                title="Move up"
-                                sx={{ p: 0.5 }}
-                              >
-                                <ArrowUpwardIcon fontSize="small" />
-                              </IconButton>
-                              <IconButton
-                                size="small"
-                                onClick={() => handleMoveSongDown(idx)}
-                                disabled={idx === setlist.length - 1}
-                                title="Move down"
-                                sx={{ p: 0.5 }}
-                              >
-                                <ArrowDownwardIcon fontSize="small" />
-                              </IconButton>
+                              {idx + 1}
                             </Box>
-                          )}
+                            <Box sx={{ minWidth: 0, flex: 1 }}>
+                              <SongTitleWithTimeSignature
+                                title={displaySong.title}
+                                timeSignature={displaySong.timeSignature}
+                              />
+                              {displaySong.artist && (
+                                <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ mt: 0.2 }}>
+                                  {displaySong.artist}
+                                </Typography>
+                              )}
+                            </Box>
 
-                          {/* Lyrics & Chords Viewer Buttons */}
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              onClick={() =>
-                                navigate(
-                                  `/events/${id}/setlist/${displaySong._id}?view=lyrics`
-                                )
-                              }
-                              sx={{
-                                fontSize: '0.75rem',
-                                py: 0.5,
-                                px: 1.2,
-                                borderRadius: 1.5,
-                                textTransform: 'none',
-                                height: 32,
-                              }}
-                            >
-                              Lyrics
-                            </Button>
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              onClick={() =>
-                                navigate(
-                                  `/events/${id}/setlist/${displaySong._id}?view=chords`
-                                )
-                              }
-                              sx={{
-                                fontSize: '0.75rem',
-                                py: 0.5,
-                                px: 1.2,
-                                borderRadius: 1.5,
-                                textTransform: 'none',
-                                height: 32,
-                              }}
-                            >
-                              Chords
-                            </Button>
+                            {/* Mobile-only remove icon */}
+                            {canEdit && (
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => setSetlist(setlist.filter((_, i) => i !== idx))}
+                                sx={{ display: { xs: 'inline-flex', sm: 'none' }, ml: 'auto' }}
+                                title="Remove song"
+                              >
+                                <RemoveIcon fontSize="small" />
+                              </IconButton>
+                            )}
                           </Box>
 
-                          {/* Desktop-only remove icon */}
-                          {canEdit && (
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => {
-                                setSetlist(setlist.filter((_, i) => i !== idx));
-                              }}
-                              sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
-                              title="Remove song from setlist"
-                            >
-                              <RemoveIcon fontSize="small" />
-                            </IconButton>
-                          )}
-                        </Box>
-                      </Paper>
-                    );
-                  })}
-                </Box>
-              ) : (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 3 }}
-                >
-                  No songs in setlist yet. Add songs from the list above.
-                </Typography>
-              )}
+                          {/* Actions Toolbar */}
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                              flexWrap: 'wrap',
+                              justifyContent: { xs: 'space-between', sm: 'flex-end' },
+                              borderTop: { xs: '1px solid', sm: 'none' },
+                              borderColor: 'divider',
+                              pt: { xs: 1, sm: 0 },
+                            }}
+                          >
+                            {/* Key select */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              {renderKeySelect(displaySong)}
+                            </Box>
 
-              {canEdit && (
-                <Button
-                  variant="contained"
-                  fullWidth
-                  size="large"
-                  onClick={async () => {
-                    try {
-                      await api.put(`/events/${id}`, {
-                        setlist: setlist.map((s) => s._id),
-                      });
-                      await loadPageData(false);
-                      setSaveMessage({
-                        type: 'success',
-                        text: 'Setlist saved successfully!',
-                      });
-                      setTimeout(() => setSaveMessage(''), 3000);
-                    } catch (err) {
-                      console.error('Failed to save setlist:', err);
-                      setSaveMessage({
-                        type: 'error',
-                        text:
-                          err?.response?.data?.message ||
-                          'Failed to save setlist. Please try again.',
-                      });
-                    }
-                  }}
-                  sx={{
-                    borderRadius: 2,
-                    py: 1.3,
-                    fontSize: '0.9375rem',
-                    fontWeight: 700,
-                  }}
-                >
-                  Save Setlist
-                </Button>
-              )}
+                            {/* Reorder Arrows */}
+                            {canEdit && (
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  bgcolor: 'action.hover',
+                                  borderRadius: 1.5,
+                                  p: 0.25,
+                                }}
+                              >
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleMoveSongUp(idx)}
+                                  disabled={idx === 0}
+                                  title="Move up"
+                                  sx={{ p: 0.5 }}
+                                >
+                                  <ArrowUpwardIcon fontSize="small" />
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleMoveSongDown(idx)}
+                                  disabled={idx === setlist.length - 1}
+                                  title="Move down"
+                                  sx={{ p: 0.5 }}
+                                >
+                                  <ArrowDownwardIcon fontSize="small" />
+                                </IconButton>
+                              </Box>
+                            )}
+
+                            {/* Lyrics & Chords Viewer Buttons */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() =>
+                                  navigate(
+                                    `/events/${id}/setlist/${displaySong._id}?view=lyrics`
+                                  )
+                                }
+                                sx={{
+                                  fontSize: '0.75rem',
+                                  py: 0.5,
+                                  px: 1.2,
+                                  borderRadius: 1.5,
+                                  textTransform: 'none',
+                                  height: 32,
+                                }}
+                              >
+                                Lyrics
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() =>
+                                  navigate(
+                                    `/events/${id}/setlist/${displaySong._id}?view=chords`
+                                  )
+                                }
+                                sx={{
+                                  fontSize: '0.75rem',
+                                  py: 0.5,
+                                  px: 1.2,
+                                  borderRadius: 1.5,
+                                  textTransform: 'none',
+                                  height: 32,
+                                }}
+                              >
+                                Chords
+                              </Button>
+                            </Box>
+
+                            {/* Desktop-only remove icon */}
+                            {canEdit && (
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => {
+                                  setSetlist(setlist.filter((_, i) => i !== idx));
+                                }}
+                                sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+                                title="Remove song from setlist"
+                              >
+                                <RemoveIcon fontSize="small" />
+                              </IconButton>
+                            )}
+                          </Box>
+                        </Paper>
+                      );
+                    })}
+                  </Box>
+                ) : (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: 2.5 }}
+                  >
+                    No songs in setlist yet. Add songs using quick add or recommendations below.
+                  </Typography>
+                )}
+
+                {canEdit && (
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    size="large"
+                    onClick={async () => {
+                      try {
+                        await api.put(`/events/${id}`, {
+                          setlist: setlist.map((s) => s._id),
+                        });
+                        await loadPageData(false);
+                        setSaveMessage({
+                          type: 'success',
+                          text: 'Setlist saved successfully!',
+                        });
+                        setTimeout(() => setSaveMessage(''), 3000);
+                      } catch (err) {
+                        console.error('Failed to save setlist:', err);
+                        setSaveMessage({
+                          type: 'error',
+                          text:
+                            err?.response?.data?.message ||
+                            'Failed to save setlist. Please try again.',
+                        });
+                      }
+                    }}
+                    sx={{
+                      borderRadius: 2,
+                      py: 1.2,
+                      fontSize: '0.9375rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    Save Setlist
+                  </Button>
+                )}
+              </Box>
+
+              <Divider sx={{ my: 3 }} />
+
+              {/* 2. Quick Add Song & Recommended Songs (At the Bottom) */}
+              <Box>
+                {canEdit && (
+                  <Box sx={{ mb: 2.5 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
+                      Quick Add Song
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        gap: 1,
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <TextField
+                        inputRef={addSongTitleInputRef}
+                        size="small"
+                        placeholder="Enter song title..."
+                        label="Quick add song title"
+                        value={newSongTitle}
+                        onChange={(e) => setNewSongTitle(e.target.value)}
+                        sx={{ flex: 1, minWidth: { xs: 150, sm: 220 } }}
+                      />
+                      <FormControl size="small" sx={{ minWidth: 85 }}>
+                        <InputLabel>Key</InputLabel>
+                        <Select
+                          value={newSongKey}
+                          label="Key"
+                          onChange={(e) => setNewSongKey(e.target.value)}
+                        >
+                          {keyOptions.map((k) => (
+                            <MenuItem key={k} value={k}>
+                              {k}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={handleQuickAddSong}
+                        disabled={addSongLoading}
+                        sx={{ borderRadius: 2, textTransform: 'none', height: 40, whiteSpace: 'nowrap' }}
+                      >
+                        {addSongLoading ? 'Adding...' : 'Add'}
+                      </Button>
+                    </Box>
+                  </Box>
+                )}
+
+                {addSongError && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {addSongError}
+                  </Alert>
+                )}
+
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
+                    Recommended Songs
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Search recommended songs by title or artist..."
+                    label="Search recommended songs"
+                    value={songQuery}
+                    onChange={(e) => setSongQuery(e.target.value)}
+                    sx={{ mb: 2 }}
+                  />
+                </Box>
+
+                {/* Recommended Songs List */}
+                {songs.length > 0 ? (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 1.5,
+                    }}
+                  >
+                    {recommendedSongs.map((song) => {
+                      const displaySong = mergeSongWithBank(song, songsById);
+                      return (
+                        <Paper
+                          key={displaySong._id}
+                          variant="outlined"
+                          sx={{
+                            p: { xs: 1.5, sm: 2 },
+                            borderRadius: 2,
+                            bgcolor: 'background.paper',
+                            display: 'flex',
+                            flexDirection: { xs: 'column', sm: 'row' },
+                            alignItems: { xs: 'stretch', sm: 'center' },
+                            justifyContent: 'space-between',
+                            gap: 1.5,
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, flex: 1 }}>
+                            <Box
+                              sx={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: 1.5,
+                                bgcolor: 'rgba(245, 158, 11, 0.1)',
+                                color: '#f59e0b',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <MusicIcon sx={{ fontSize: 18 }} />
+                            </Box>
+                            <Box sx={{ minWidth: 0, flex: 1 }}>
+                              <SongTitleWithTimeSignature
+                                title={displaySong.title}
+                                timeSignature={displaySong.timeSignature}
+                              />
+                              {displaySong.artist && (
+                                <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ mt: 0.2 }}>
+                                  {displaySong.artist}
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                              justifyContent: { xs: 'space-between', sm: 'flex-end' },
+                              borderTop: { xs: '1px solid', sm: 'none' },
+                              borderColor: 'divider',
+                              pt: { xs: 1, sm: 0 },
+                            }}
+                          >
+                            {renderKeySelect(displaySong)}
+                            {canEdit && (
+                              <Button
+                                size="small"
+                                variant={setlist.some((s) => s._id === displaySong._id) ? 'outlined' : 'contained'}
+                                startIcon={setlist.some((s) => s._id === displaySong._id) ? null : <AddIcon />}
+                                onClick={() => {
+                                  if (!setlist.find((s) => s._id === displaySong._id)) {
+                                    setSetlist([
+                                      ...setlist,
+                                      mergeSongWithBank(displaySong, songsById),
+                                    ]);
+                                  }
+                                }}
+                                disabled={setlist.some((s) => s._id === displaySong._id)}
+                                sx={{ borderRadius: 1.5, textTransform: 'none', height: 32, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}
+                              >
+                                {setlist.some((s) => s._id === displaySong._id) ? 'Added' : 'Add to Setlist'}
+                              </Button>
+                            )}
+                          </Box>
+                        </Paper>
+                      );
+                    })}
+                  </Box>
+                ) : (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                  >
+                    No songs available.
+                  </Typography>
+                )}
+                {songs.length > 0 && recommendedSongs.length === 0 && (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                  >
+                    {setlist.length > 0
+                      ? 'No recommendations match your search. Add a different song or clear search.'
+                      : 'Add at least one song to the setlist to get key-based recommendations.'}
+                  </Typography>
+                )}
+              </Box>
             </CardContent>
           </Card>
 
@@ -1104,63 +1302,42 @@ function EventDetails() {
                     Edit Event
                   </Button>
                 )}
-                {canEdit && event.event?.status === 'draft' && (
+                {isAdminOrSubAdmin && event.event?.status === 'draft' && (
                   <Button
                     variant="contained"
                     color="primary"
-                    onClick={async () => {
-                      try {
-                        const token = localStorage.getItem('accessToken');
-                        await fetch(apiUrl(`/api/events/${id}`), {
-                          method: 'PUT',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            Authorization: `Bearer ${token}`,
-                          },
-                          body: JSON.stringify({
-                            event: { status: 'published' },
-                          }),
-                        });
-                        await fetchEvent();
-                      } catch (err) {
-                        console.error('Failed to confirm event', err);
-                      }
-                    }}
+                    startIcon={<CheckCircleIcon />}
+                    onClick={handleConfirmEvent}
                     fullWidth
                     sx={{ borderRadius: 2 }}
                   >
                     Confirm Event
                   </Button>
                 )}
-                {canEdit && event.event?.status === 'published' && (
-                  <Button
-                    variant="outlined"
-                    color="warning"
-                    onClick={async () => {
-                      if (!window.confirm('Revert this event to Draft?'))
-                        return;
-                      try {
-                        const token = localStorage.getItem('accessToken');
-                        await fetch(apiUrl(`/api/events/${id}`), {
-                          method: 'PUT',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            Authorization: `Bearer ${token}`,
-                          },
-                          body: JSON.stringify({ event: { status: 'draft' } }),
-                        });
-                        await fetchEvent();
-                      } catch (err) {
-                        console.error('Failed to unconfirm event', err);
-                      }
-                    }}
-                    fullWidth
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Unconfirm Event
-                  </Button>
+                {isAdminOrSubAdmin && event.event?.status === 'published' && (
+                  <>
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      onClick={handleUnconfirmEvent}
+                      fullWidth
+                      sx={{ borderRadius: 2 }}
+                    >
+                      Unconfirm Event
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      startIcon={<CheckCircleIcon />}
+                      onClick={handleMarkCompleted}
+                      fullWidth
+                      sx={{ borderRadius: 2, boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)' }}
+                    >
+                      Mark Completed
+                    </Button>
+                  </>
                 )}
-                {(user?.isAdmin || user?.isSubAdmin) && event.event?.status === 'completed' && (
+                {isAdminOrSubAdmin && event.event?.status === 'completed' && (
                   <Button
                     variant="outlined"
                     color="warning"
@@ -1189,6 +1366,45 @@ function EventDetails() {
                 >
                   Open Chat
                 </Button>
+                {canEdit && (
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<NotificationsActiveIcon />}
+                    onClick={async () => {
+                      try {
+                        setReminderLoading(true);
+                        setReminderMessage('');
+                        const token = localStorage.getItem('accessToken');
+                        const res = await fetch(apiUrl(`/api/events/${id}/send-reminder`), {
+                          method: 'POST',
+                          headers: { Authorization: `Bearer ${token}` },
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                          setReminderMessage(data.message || 'Reminder sent!');
+                          setTimeout(() => setReminderMessage(''), 4000);
+                        } else {
+                          alert(data.message || 'Failed to send reminder');
+                        }
+                      } catch (err) {
+                        alert(err.message || 'Failed to send reminder');
+                      } finally {
+                        setReminderLoading(false);
+                      }
+                    }}
+                    disabled={reminderLoading}
+                    fullWidth
+                    sx={{ borderRadius: 2, textTransform: 'none' }}
+                  >
+                    {reminderLoading ? 'Sending Reminder...' : 'Send Reminder'}
+                  </Button>
+                )}
+                {reminderMessage && (
+                  <Alert severity="success" sx={{ py: 0.5, fontSize: '0.78rem' }}>
+                    {reminderMessage}
+                  </Alert>
+                )}
                 {canEdit && (
                   <>
                     <Divider sx={{ my: 1 }} />

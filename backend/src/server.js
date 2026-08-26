@@ -17,6 +17,7 @@ const { createServer } = require("./sockets/socketServer");
 const { apiLimiter, authLimiter } = require("./middleware/rateLimiter");
 const { helmetConfig, sanitizeInput } = require("./middleware/security");
 const { getRedisClient } = require("./config/redis");
+const { startReminderScheduler } = require("./utils/reminderScheduler");
 
 const app = express();
 app.set('trust proxy', 1);
@@ -68,8 +69,10 @@ app.use("/api/teams", teamRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/songs", songRoutes);
 app.use("/api/church", churchRoutes);
-// Chat routes for event real‑time messaging (REST fallback)
+// Chat routes for real-time team & event messaging
 app.use("/api/events", chatRoutes);
+app.use("/api/teams", chatRoutes);
+app.use("/api", chatRoutes);
 // Notification routes
 app.use("/api/notifications", notificationRoutes);
 
@@ -105,5 +108,7 @@ app.get("/health", async (req, res) => {
 
   server.listen(config.port, () => {
     console.log(`Server running on port ${config.port}`);
+    // Start automated 24h event advance reminder scheduler
+    startReminderScheduler();
   });
 })();

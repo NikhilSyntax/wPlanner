@@ -54,8 +54,23 @@ async function ensureEventHasTitle(eventDoc) {
   return eventDoc.event.title?.trim() || displayTitle;
 }
 
+/** Ensure create/update payload objects maintain a fallback title if event is present */
+function ensureEventPayloadHasTitle(body = {}) {
+  const payload = { ...body };
+  if (payload.event && typeof payload.event === "object") {
+    if (!payload.event.title || !payload.event.title.trim()) {
+      const display = getEventDisplayTitle(payload);
+      if (display) {
+        payload.event.title = display;
+      }
+    }
+  }
+  return payload;
+}
+
 module.exports = {
   getEventDisplayTitle,
   ensureEventHasTitle,
+  ensureEventPayloadHasTitle,
   TYPE_LABELS,
 };

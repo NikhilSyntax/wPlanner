@@ -67,6 +67,20 @@ function Dashboard() {
   const nextUpcomingEvent = upcomingEvents[0];
   const recentEvents = events.slice(0, 3);
 
+  // Determine if the currently logged in user is part of the next upcoming event team / roster
+  const currentUserId = user?.id || user?._id;
+  const userAssignment = nextUpcomingEvent?.assignments?.find((a) => {
+    const aId = a.userId?._id ? String(a.userId._id) : String(a.userId || '');
+    return aId && currentUserId && aId === String(currentUserId);
+  });
+  const isUserInTeamMembers =
+    Array.isArray(nextUpcomingEvent?.team?.members) &&
+    nextUpcomingEvent.team.members.some((m) => {
+      const mId = m.userId?._id ? String(m.userId._id) : String(m.userId || '');
+      return mId && currentUserId && mId === String(currentUserId);
+    });
+  const isUserInTeam = Boolean(userAssignment || isUserInTeamMembers);
+
   // Time to next event calculation
   let timeUntilNext = 'No upcoming events';
   if (nextUpcomingEvent) {
@@ -166,8 +180,479 @@ function Dashboard() {
         </Box>
       </Box>
 
-      {/* KPI Stats Grid */}
-      <Grid container spacing={2.5} sx={{ mb: 4 }}>
+      {/* Main Content Grid: Hero Next Service + Quick Actions */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        {/* Next Service Spotlight Hero Card */}
+        <Grid item xs={12} lg={8}>
+          <Card
+            sx={{
+              height: '100%',
+              position: 'relative',
+              overflow: 'hidden',
+              borderRadius: 3,
+              border: isUserInTeam ? '1.5px solid #10b981' : '1px solid',
+              borderColor: isUserInTeam ? '#10b981' : 'divider',
+              boxShadow: isUserInTeam
+                ? '0 4px 20px rgba(16, 185, 129, 0.15)'
+                : '0 2px 10px rgba(0,0,0,0.04)',
+              background: isUserInTeam
+                ? (theme) =>
+                    theme.palette.mode === 'dark'
+                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(15, 23, 42, 0.9) 100%)'
+                      : 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)'
+                : undefined,
+            }}
+          >
+            <Box
+              sx={{
+                p: { xs: 1.75, sm: 2.25 },
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                justifyContent: 'space-between',
+              }}
+            >
+              <Box>
+                {/* Header line: Spotlight Tag + Service Type + You're in the Team Badge */}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mb: 1,
+                    gap: 1,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: 800,
+                        color: isUserInTeam ? '#059669' : 'primary.main',
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        fontSize: '0.72rem',
+                      }}
+                    >
+                      Upcoming Spotlight
+                    </Typography>
+                    {nextUpcomingEvent && (
+                      <Chip
+                        label={nextUpcomingEvent.event?.type || 'Service'}
+                        size="small"
+                        sx={{
+                          textTransform: 'capitalize',
+                          fontWeight: 600,
+                          fontSize: '0.7rem',
+                          height: 20,
+                          bgcolor: isUserInTeam ? 'rgba(16, 185, 129, 0.15)' : 'rgba(37, 99, 235, 0.1)',
+                          color: isUserInTeam ? '#059669' : 'primary.main',
+                        }}
+                      />
+                    )}
+                  </Box>
+
+                  {isUserInTeam && (
+                    <Chip
+                      icon={<CheckCircleIcon sx={{ fontSize: '13px !important', color: '#ffffff !important' }} />}
+                      label="You're in the Team!"
+                      size="small"
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: '0.72rem',
+                        bgcolor: '#10b981',
+                        color: '#ffffff',
+                        boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+                        height: 22,
+                        '& .MuiChip-icon': { ml: 0.5 },
+                      }}
+                    />
+                  )}
+                </Box>
+
+                {nextUpcomingEvent ? (
+                  <>
+                    <Typography
+                      variant="h6"
+                      fontWeight={700}
+                      sx={{
+                        fontSize: { xs: '1.15rem', sm: '1.25rem' },
+                        lineHeight: 1.25,
+                        mb: 0.25,
+                      }}
+                    >
+                      {nextUpcomingEvent.event?.title || 'Untitled Worship Service'}
+                    </Typography>
+                    {nextUpcomingEvent.event?.description && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        noWrap
+                        sx={{ display: 'block', mb: 1.5, fontSize: '0.78rem' }}
+                      >
+                        {nextUpcomingEvent.event?.description}
+                      </Typography>
+                    )}
+
+                    {/* Compact 3-Column Stats Grid */}
+                    <Grid container spacing={1.25} sx={{ mb: 1.5 }}>
+                      <Grid item xs={12} sm={4}>
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            p: 1,
+                            px: 1.25,
+                            borderRadius: 2,
+                            borderColor: isUserInTeam ? 'rgba(16, 185, 129, 0.25)' : 'divider',
+                            bgcolor: isUserInTeam ? 'rgba(255,255,255,0.7)' : 'background.paper',
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.25 }}>
+                            <ScheduleIcon sx={{ fontSize: 14, color: isUserInTeam ? '#059669' : 'text.secondary' }} />
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', fontWeight: 600 }}>
+                              Date & Time
+                            </Typography>
+                          </Box>
+                          <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.8125rem', lineHeight: 1.2 }}>
+                            {new Date(nextUpcomingEvent.schedule.start).toLocaleDateString(undefined, {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                            <Box component="span" sx={{ fontWeight: 500, color: 'text.secondary', ml: 0.6 }}>
+                              {new Date(nextUpcomingEvent.schedule.start).toLocaleTimeString(undefined, {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                              })}
+                            </Box>
+                          </Typography>
+                        </Paper>
+                      </Grid>
+
+                      <Grid item xs={12} sm={4}>
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            p: 1,
+                            px: 1.25,
+                            borderRadius: 2,
+                            borderColor: isUserInTeam ? 'rgba(16, 185, 129, 0.25)' : 'divider',
+                            bgcolor: isUserInTeam ? 'rgba(255,255,255,0.7)' : 'background.paper',
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.25 }}>
+                            <GroupIcon sx={{ fontSize: 14, color: isUserInTeam ? '#059669' : 'text.secondary' }} />
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', fontWeight: 600 }}>
+                              Assigned Team
+                            </Typography>
+                          </Box>
+                          <Typography variant="body2" fontWeight={700} noWrap sx={{ fontSize: '0.8125rem', lineHeight: 1.2 }}>
+                            {nextUpcomingEvent.team?.team?.name || 'Worship Team'}
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            noWrap
+                            display="block"
+                            sx={{
+                              color: isUserInTeam ? '#059669' : 'text.secondary',
+                              fontWeight: isUserInTeam ? 700 : 500,
+                              fontSize: '0.72rem',
+                              mt: 0.1,
+                            }}
+                          >
+                            {userAssignment?.role
+                              ? `Your Role: ${userAssignment.role}`
+                              : isUserInTeam
+                              ? `Assigned in Roster`
+                              : `${nextUpcomingEvent.assignments?.length || 0} members assigned`}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+
+                      <Grid item xs={12} sm={4}>
+                        <Paper
+                          variant="outlined"
+                          sx={{
+                            p: 1,
+                            px: 1.25,
+                            borderRadius: 2,
+                            borderColor: isUserInTeam ? 'rgba(16, 185, 129, 0.25)' : 'divider',
+                            bgcolor: isUserInTeam ? 'rgba(255,255,255,0.7)' : 'background.paper',
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.25 }}>
+                            <MusicNoteIcon sx={{ fontSize: 14, color: isUserInTeam ? '#059669' : 'text.secondary' }} />
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', fontWeight: 600 }}>
+                              Setlist
+                            </Typography>
+                          </Box>
+                          <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.8125rem', lineHeight: 1.2 }}>
+                            {nextUpcomingEvent.setlist?.length || 0} Songs Selected
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.72rem', mt: 0.1 }}>
+                            Ready for rehearsal
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    </Grid>
+                  </>
+                ) : (
+                  <Box sx={{ py: 3, textAlign: 'center' }}>
+                    <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                      No upcoming services scheduled
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
+                      Create an upcoming event to schedule your worship team and songs.
+                    </Typography>
+                    <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => navigate('/events/new')}>
+                      Create Worship Event
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+
+              {nextUpcomingEvent && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    gap: 1,
+                    pt: 1.25,
+                    borderTop: '1px solid',
+                    borderColor: isUserInTeam ? 'rgba(16, 185, 129, 0.2)' : 'divider',
+                  }}
+                >
+                  <Button
+                    variant="contained"
+                    size="small"
+                    component={Link}
+                    to={`/events/${nextUpcomingEvent._id}`}
+                    endIcon={<ArrowForwardIcon sx={{ fontSize: 15 }} />}
+                    sx={{
+                      borderRadius: 1.5,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.8125rem',
+                      py: 0.6,
+                      px: 1.75,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Open Service Plan
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    component={Link}
+                    to={`/events/${nextUpcomingEvent._id}/team`}
+                    sx={{
+                      borderRadius: 1.5,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      fontSize: '0.8125rem',
+                      py: 0.6,
+                      px: 1.75,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Manage Roster
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          </Card>
+        </Grid>
+
+        {/* Quick Launch Panel */}
+        <Grid item xs={12} lg={4}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
+              <Typography variant="h6" fontWeight={700} sx={{ mb: 2.5 }}>
+                Quick Actions
+              </Typography>
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  component={Link}
+                  to="/events/new"
+                  startIcon={<EventIcon color="primary" />}
+                  sx={{
+                    justifyContent: 'flex-start',
+                    py: 1.3,
+                    px: 2,
+                    textAlign: 'left',
+                    borderRadius: 2,
+                  }}
+                >
+                  <Box sx={{ textAlign: 'left' }}>
+                    <Typography variant="body2" fontWeight={600} color="text.primary">
+                      Schedule New Event
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Create Sunday service or rehearsal
+                    </Typography>
+                  </Box>
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  component={Link}
+                  to="/songs/new"
+                  startIcon={<QueueMusicIcon sx={{ color: '#f59e0b' }} />}
+                  sx={{
+                    justifyContent: 'flex-start',
+                    py: 1.3,
+                    px: 2,
+                    textAlign: 'left',
+                    borderRadius: 2,
+                  }}
+                >
+                  <Box sx={{ textAlign: 'left' }}>
+                    <Typography variant="body2" fontWeight={600} color="text.primary">
+                      Add Song to Bank
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Chords, lyrics & audio keys
+                    </Typography>
+                  </Box>
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  component={Link}
+                  to="/teams"
+                  startIcon={<GroupIcon sx={{ color: '#10b981' }} />}
+                  sx={{
+                    justifyContent: 'flex-start',
+                    py: 1.3,
+                    px: 2,
+                    textAlign: 'left',
+                    borderRadius: 2,
+                  }}
+                >
+                  <Box sx={{ textAlign: 'left' }}>
+                    <Typography variant="body2" fontWeight={600} color="text.primary">
+                      Manage Church Roster
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Permissions & ministry roles
+                    </Typography>
+                  </Box>
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Recent Events Section */}
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
+          <Typography variant="h5" fontWeight={700}>
+            Recent Schedules
+          </Typography>
+          <Button
+            component={Link}
+            to="/events"
+            endIcon={<ArrowForwardIcon />}
+            sx={{ fontWeight: 600 }}
+          >
+            View All Events
+          </Button>
+        </Box>
+
+        {recentEvents.length === 0 ? (
+          <Card>
+            <CardContent sx={{ py: 6, textAlign: 'center' }}>
+              <Typography variant="body1" color="text.secondary" gutterBottom>
+                No events recorded in your church database yet.
+              </Typography>
+              <Button variant="contained" component={Link} to="/events/new" sx={{ mt: 1 }}>
+                Create First Event
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Grid container spacing={2.5}>
+            {recentEvents.map((event) => {
+              const eventDate = new Date(event.schedule?.start);
+              return (
+                <Grid item xs={12} md={4} key={event._id}>
+                  <Card
+                    sx={{
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <CardContent sx={{ p: 2.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+                        <Typography variant="h6" fontWeight={700} noWrap sx={{ maxWidth: '70%' }}>
+                          {event.event?.title || 'Untitled Event'}
+                        </Typography>
+                        <Chip
+                          label={event.event?.status || 'draft'}
+                          size="small"
+                          sx={{
+                            textTransform: 'capitalize',
+                            fontWeight: 700,
+                            fontSize: '0.6875rem',
+                            bgcolor: event.event?.status === 'completed' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(37, 99, 235, 0.1)',
+                            color: event.event?.status === 'completed' ? 'success.main' : 'primary.main',
+                          }}
+                        />
+                      </Box>
+
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, minHeight: 38 }}>
+                        {event.event?.description || 'No description provided.'}
+                      </Typography>
+
+                      <Divider sx={{ my: 1.5 }} />
+
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Box>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {eventDate.toLocaleDateString(undefined, {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </Typography>
+                          <Typography variant="caption" fontWeight={600}>
+                            {eventDate.toLocaleTimeString(undefined, {
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </Typography>
+                        </Box>
+
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          component={Link}
+                          to={`/events/${event._id}`}
+                          sx={{ borderRadius: 2 }}
+                        >
+                          Details
+                        </Button>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              );
+            })}
+          </Grid>
+        )}
+      </Box>
+
+      {/* KPI Stats Grid - At the Total Bottom */}
+      <Grid container spacing={2.5} sx={{ mb: 2 }}>
         {/* Metric 1: Total Events */}
         <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ height: '100%' }}>
@@ -293,327 +778,6 @@ function Dashboard() {
           </Card>
         </Grid>
       </Grid>
-
-      {/* Main Content Grid: Hero Next Service + Quick Actions */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* Next Service Spotlight Hero Card */}
-        <Grid item xs={12} lg={8}>
-          <Card sx={{ height: '100%', position: 'relative', overflow: 'hidden' }}>
-            <Box
-              sx={{
-                p: { xs: 2.5, sm: 3 },
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100%',
-                justifyContent: 'space-between',
-              }}
-            >
-              <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="overline" color="primary.main">
-                    Upcoming Spotlight
-                  </Typography>
-                  {nextUpcomingEvent && (
-                    <Chip
-                      label={nextUpcomingEvent.event?.type || 'Service'}
-                      size="small"
-                      sx={{
-                        textTransform: 'capitalize',
-                        fontWeight: 600,
-                        bgcolor: 'rgba(37, 99, 235, 0.1)',
-                        color: 'primary.main',
-                      }}
-                    />
-                  )}
-                </Box>
-
-                {nextUpcomingEvent ? (
-                  <>
-                    <Typography variant="h4" fontWeight={700} sx={{ mb: 1 }}>
-                      {nextUpcomingEvent.event?.title || 'Untitled Worship Service'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
-                      {nextUpcomingEvent.event?.description || 'Worship planning, team assignments, and setlist.'}
-                    </Typography>
-
-                    <Grid container spacing={2} sx={{ mb: 3 }}>
-                      <Grid item xs={12} sm={4}>
-                        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Date & Time
-                          </Typography>
-                          <Typography variant="body2" fontWeight={600} sx={{ mt: 0.3 }}>
-                            {new Date(nextUpcomingEvent.schedule.start).toLocaleDateString(undefined, {
-                              weekday: 'short',
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {new Date(nextUpcomingEvent.schedule.start).toLocaleTimeString(undefined, {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            })}
-                          </Typography>
-                        </Paper>
-                      </Grid>
-
-                      <Grid item xs={12} sm={4}>
-                        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Assigned Team
-                          </Typography>
-                          <Typography variant="body2" fontWeight={600} sx={{ mt: 0.3 }}>
-                            {nextUpcomingEvent.team?.team?.name || 'Worship Team'}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {nextUpcomingEvent.assignments?.length || 0} members assigned
-                          </Typography>
-                        </Paper>
-                      </Grid>
-
-                      <Grid item xs={12} sm={4}>
-                        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Setlist
-                          </Typography>
-                          <Typography variant="body2" fontWeight={600} sx={{ mt: 0.3 }}>
-                            {nextUpcomingEvent.setlist?.length || 0} Songs Selected
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Ready for rehearsal
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                    </Grid>
-                  </>
-                ) : (
-                  <Box sx={{ py: 4, textAlign: 'center' }}>
-                    <Typography variant="h6" color="text.secondary" gutterBottom>
-                      No upcoming services scheduled
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Create an upcoming event to schedule your worship team, select songs, and plan production.
-                    </Typography>
-                    <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/events/new')}>
-                      Create Worship Event
-                    </Button>
-                  </Box>
-                )}
-              </Box>
-
-              {nextUpcomingEvent && (
-                <Box sx={{ display: 'flex', gap: 1.5, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                  <Button
-                    variant="contained"
-                    component={Link}
-                    to={`/events/${nextUpcomingEvent._id}`}
-                    endIcon={<ArrowForwardIcon />}
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Open Service Plan
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    component={Link}
-                    to={`/events/${nextUpcomingEvent._id}/team`}
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Manage Roster
-                  </Button>
-                </Box>
-              )}
-            </Box>
-          </Card>
-        </Grid>
-
-        {/* Quick Launch Panel */}
-        <Grid item xs={12} lg={4}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent sx={{ p: { xs: 2.5, sm: 3 } }}>
-              <Typography variant="h6" fontWeight={700} sx={{ mb: 2.5 }}>
-                Quick Actions
-              </Typography>
-
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  component={Link}
-                  to="/events/new"
-                  startIcon={<EventIcon color="primary" />}
-                  sx={{
-                    justifyContent: 'flex-start',
-                    py: 1.3,
-                    px: 2,
-                    textAlign: 'left',
-                    borderRadius: 2,
-                  }}
-                >
-                  <Box sx={{ textAlign: 'left' }}>
-                    <Typography variant="body2" fontWeight={600} color="text.primary">
-                      Schedule New Event
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Create Sunday service or rehearsal
-                    </Typography>
-                  </Box>
-                </Button>
-
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  component={Link}
-                  to="/songs/new"
-                  startIcon={<QueueMusicIcon sx={{ color: '#f59e0b' }} />}
-                  sx={{
-                    justifyContent: 'flex-start',
-                    py: 1.3,
-                    px: 2,
-                    textAlign: 'left',
-                    borderRadius: 2,
-                  }}
-                >
-                  <Box sx={{ textAlign: 'left' }}>
-                    <Typography variant="body2" fontWeight={600} color="text.primary">
-                      Add Song to Bank
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Chords, lyrics & audio keys
-                    </Typography>
-                  </Box>
-                </Button>
-
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  component={Link}
-                  to="/teams"
-                  startIcon={<GroupIcon sx={{ color: '#10b981' }} />}
-                  sx={{
-                    justifyContent: 'flex-start',
-                    py: 1.3,
-                    px: 2,
-                    textAlign: 'left',
-                    borderRadius: 2,
-                  }}
-                >
-                  <Box sx={{ textAlign: 'left' }}>
-                    <Typography variant="body2" fontWeight={600} color="text.primary">
-                      Manage Church Roster
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Permissions & ministry roles
-                    </Typography>
-                  </Box>
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Recent Events Section */}
-      <Box sx={{ mb: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
-          <Typography variant="h5" fontWeight={700}>
-            Recent Schedules
-          </Typography>
-          <Button
-            component={Link}
-            to="/events"
-            endIcon={<ArrowForwardIcon />}
-            sx={{ fontWeight: 600 }}
-          >
-            View All Events
-          </Button>
-        </Box>
-
-        {recentEvents.length === 0 ? (
-          <Card>
-            <CardContent sx={{ py: 6, textAlign: 'center' }}>
-              <Typography variant="body1" color="text.secondary" gutterBottom>
-                No events recorded in your church database yet.
-              </Typography>
-              <Button variant="contained" component={Link} to="/events/new" sx={{ mt: 1 }}>
-                Create First Event
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <Grid container spacing={2.5}>
-            {recentEvents.map((event) => {
-              const eventDate = new Date(event.schedule?.start);
-              return (
-                <Grid item xs={12} md={4} key={event._id}>
-                  <Card
-                    sx={{
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <CardContent sx={{ p: 2.5 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
-                        <Typography variant="h6" fontWeight={700} noWrap sx={{ maxWidth: '70%' }}>
-                          {event.event?.title || 'Untitled Event'}
-                        </Typography>
-                        <Chip
-                          label={event.event?.status || 'draft'}
-                          size="small"
-                          sx={{
-                            textTransform: 'capitalize',
-                            fontWeight: 700,
-                            fontSize: '0.6875rem',
-                            bgcolor: event.event?.status === 'completed' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(37, 99, 235, 0.1)',
-                            color: event.event?.status === 'completed' ? 'success.main' : 'primary.main',
-                          }}
-                        />
-                      </Box>
-
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, minHeight: 38 }}>
-                        {event.event?.description || 'No description provided.'}
-                      </Typography>
-
-                      <Divider sx={{ my: 1.5 }} />
-
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Box>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            {eventDate.toLocaleDateString(undefined, {
-                              weekday: 'short',
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </Typography>
-                          <Typography variant="caption" fontWeight={600}>
-                            {eventDate.toLocaleTimeString(undefined, {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            })}
-                          </Typography>
-                        </Box>
-
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          component={Link}
-                          to={`/events/${event._id}`}
-                          sx={{ borderRadius: 2 }}
-                        >
-                          Details
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              );
-            })}
-          </Grid>
-        )}
-      </Box>
     </Box>
   );
 }

@@ -10,9 +10,13 @@ import { store } from './store';
 import { lightTheme, darkTheme } from './theme';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import NotificationSnackbar from './components/common/NotificationSnackbar';
+import { registerServiceWorker } from './services/pushNotificationService';
 import './index.css';
 import './styles/pages.css';
 import './styles/theme.css';
+
+// Register PWA / Web Push service worker
+registerServiceWorker();
 
 axios.defaults.baseURL = API_ORIGIN;
 

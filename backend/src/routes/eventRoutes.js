@@ -86,6 +86,22 @@ router.post(
   blockCompletedEventLock,
   eventController.setEventTeamFromRoster,
 );
+
+// Manual 24h Advance Reminder Dispatch
+router.post(
+  '/:id/send-reminder',
+  authMiddleware.roleRestriction([
+    'team_leader',
+    'admin',
+    'worship leader',
+    'worship_leader',
+    'pastor',
+    'elder',
+  ]),
+  requireSameChurch(Event),
+  eventController.triggerEventReminder,
+);
+
 // Get assignments for event
 router.get('/:id/assignments', requireSameChurch(Event), eventController.getAssignments);
 // Delete an assignment

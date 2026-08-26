@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "main": "src/server.js",
   "scripts": {
-  "start": "node src/server.js",
-  "dev": "nodemon src/server.js",
-  "test": "echo \"No tests configured\""
-},
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "echo \"No tests configured\""
+  },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
     "bcryptjs": "^2.4.3",
@@ -21,7 +21,8 @@
     "mongoose": "^7.0.0",
     "multer": "^2.1.1",
     "redis": "^4.6.0",
-    "socket.io": "^4.7.0"
+    "socket.io": "^4.7.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"

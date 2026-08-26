@@ -64,6 +64,7 @@ const songSchema = new mongoose.Schema({
         eventId: { type: mongoose.Schema.Types.ObjectId, ref: "Event" },
         eventTitle: String,
         usedAt: { type: Date, default: Date.now },
+        key: { type: String, default: "C" },
       },
     ],
     favorites: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],

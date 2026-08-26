@@ -28,6 +28,7 @@ import {
   Check as CheckIcon,
   ChevronRight as ChevronRightIcon,
   PersonRemove as PersonRemoveIcon,
+  Chat as ChatIcon,
 } from '@mui/icons-material';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import api from '../services/api';
@@ -252,14 +253,28 @@ function EventTeamBuild() {
         </Typography>
       </Stack>
 
-      <Typography variant="h4" component="h1" sx={{ fontWeight: 800, mb: 0.5 }}>
-        {canEdit ? 'Build event team' : 'Event team'}
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        {canEdit
-          ? `${eventTitle} — pick people from the church roster (left). They appear on the event team (right). Confirm when you are ready.`
-          : `${eventTitle} — team roster for this completed event.`}
-      </Typography>
+      <Box display="flex" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2} mb={0.5}>
+        <Box>
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 800, mb: 0.5 }}>
+            {canEdit ? 'Build event team' : 'Event team'}
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+            {canEdit
+              ? `${eventTitle} — pick people from the church roster (left). They appear on the event team (right). Confirm when you are ready.`
+              : `${eventTitle} — team roster for this completed event.`}
+          </Typography>
+        </Box>
+
+        <Button
+          variant="outlined"
+          color="primary"
+          startIcon={<ChatIcon />}
+          onClick={() => navigate(`/events/${id}/chat`)}
+          sx={{ borderRadius: 2, textTransform: 'none', px: 2, py: 0.8, fontWeight: 700 }}
+        >
+          Roster Chat
+        </Button>
+      </Box>
 
       {isLocked && (
         <Alert severity="info" sx={{ mb: 2 }}>

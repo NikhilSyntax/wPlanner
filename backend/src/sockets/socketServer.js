@@ -41,8 +41,9 @@ exports.createServer = (app) => {
       return;
     }
 
-    // Track connection
+    // Track connection and join private user room
     activeConnections.set(socket.id, { socket, userId: socket.userId });
+    socket.join(`user_${socket.userId}`);
 
     // Handle room events
     socket.on('joinRoom', ({ eventId }) => {
@@ -58,6 +59,46 @@ exports.createServer = (app) => {
       socket.join(eventId);
       socket.emit('roomJoined', { eventId });
       ioServer.to(eventId).emit('updatePresence', {
+        userId: socket.userId,
+        status: 'joined',
+      });
+    });
+
+    // Handle team chat room events
+    socket.on('joinTeam', ({ teamId }) => {
+      if (!teamId) return;
+      if (
+        socket.approvalStatus === 'pending' ||
+        socket.approvalStatus === 'rejected'
+      ) {
+        socket.emit('error', { message: 'Unauthorized to join team room' });
+        return;
+      }
+
+      const room = `team_${teamId}`;
+      socket.join(room);
+      socket.emit('teamJoined', { teamId });
+      ioServer.to(room).emit('updateTeamPresence', {
+        userId: socket.userId,
+        status: 'joined',
+      });
+    });
+
+    // Handle church roster chat room events
+    socket.on('joinChurch', ({ churchId }) => {
+      if (!churchId) return;
+      if (
+        socket.approvalStatus === 'pending' ||
+        socket.approvalStatus === 'rejected'
+      ) {
+        socket.emit('error', { message: 'Unauthorized to join church room' });
+        return;
+      }
+
+      const room = `church_${churchId}`;
+      socket.join(room);
+      socket.emit('churchJoined', { churchId });
+      ioServer.to(room).emit('updateChurchPresence', {
         userId: socket.userId,
         status: 'joined',
       });

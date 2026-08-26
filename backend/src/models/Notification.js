@@ -4,14 +4,22 @@ const notificationSchema = new mongoose.Schema({
   recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   type: {
     type: String,
-    enum: ['event_reminder', 'assignment', 'setlist_update', 'chat_mention', 'system'],
-    required: true
+    enum: [
+      'event_reminder',
+      'assignment',
+      'setlist_update',
+      'chat_mention',
+      'system',
+      'event_draft',
+      'event_confirmed',
+    ],
+    required: true,
   },
   title: { type: String, required: true },
   message: { type: String, required: true },
   link: String,
   read: { type: Boolean, default: false },
-  sentVia: [{ type: String, enum: ['email', 'sms', 'push'] }],
+  sentVia: [{ type: String, enum: ['in_app', 'push', 'email', 'sms', 'socket'] }],
   createdAt: { type: Date, default: Date.now }
 });
 
