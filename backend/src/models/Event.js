@@ -61,6 +61,9 @@ const eventSchema = new mongoose.Schema({
   reminder2hSent: { type: Boolean, default: false },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   churchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Church', required: true },
+  // Auto Event Scheduler: links generated events back to their recurring schedule
+  autoScheduleId: { type: mongoose.Schema.Types.ObjectId, ref: 'AutoEventSchedule', default: null },
+  occurrenceDate: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
@@ -71,5 +74,10 @@ eventSchema.index({ 'event.status': 1 });
 eventSchema.index({ churchId: 1 });
 eventSchema.index({ churchId: 1, 'event.status': 1, 'schedule.end': 1 });
 eventSchema.index({ 'assignments.userId': 1, 'assignments.status': 1 });
+// Auto Event Scheduler: prevent duplicate event generation for the same schedule + occurrence
+eventSchema.index(
+  { autoScheduleId: 1, occurrenceDate: 1 },
+  { unique: true, partialFilterExpression: { autoScheduleId: { $type: 'objectId' } } }
+);
 
 module.exports = mongoose.model('Event', eventSchema);

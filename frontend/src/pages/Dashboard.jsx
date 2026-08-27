@@ -86,7 +86,13 @@ function Dashboard() {
 
   useEffect(() => {
     dispatch(fetchEvents());
-    
+
+    const handleAssignmentUpdate = () => {
+      dispatch(fetchEvents());
+    };
+
+    window.addEventListener('wplanner:assignment_updated', handleAssignmentUpdate);
+
     // Fetch live counts for songs and church members
     Promise.all([
       api.get('/songs').catch(() => ({ data: [] })),
@@ -98,6 +104,10 @@ function Dashboard() {
       setMembersCount(m.length);
       setStatsLoading(false);
     });
+
+    return () => {
+      window.removeEventListener('wplanner:assignment_updated', handleAssignmentUpdate);
+    };
   }, [dispatch]);
 
   if (loading && statsLoading) return <LoadingSpinner />;

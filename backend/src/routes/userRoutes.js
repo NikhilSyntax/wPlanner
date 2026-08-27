@@ -49,6 +49,7 @@ router.use(authMiddleware.verifyToken);
 router.get("/", userController.getUsers);
 router.get("/me/statistics", userController.getMinistryStatistics);
 router.get("/:userId/statistics", userController.getMinistryStatistics);
+router.patch("/profile", userController.updateProfile);
 router.patch(
   "/profile-photo",
   (req, res, next) => {

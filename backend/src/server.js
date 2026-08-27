@@ -12,6 +12,7 @@ const userRoutes = require("./routes/userRoutes");
 const songRoutes = require("./routes/songRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const autoScheduleRoutes = require("./routes/autoScheduleRoutes");
 const churchRoutes = require("./routes/churchRoutes");
 const { createServer } = require("./sockets/socketServer");
 const { apiLimiter, authLimiter } = require("./middleware/rateLimiter");
@@ -75,6 +76,8 @@ app.use("/api/teams", chatRoutes);
 app.use("/api", chatRoutes);
 // Notification routes
 app.use("/api/notifications", notificationRoutes);
+// Auto Event Scheduler routes
+app.use("/api/auto-schedules", autoScheduleRoutes);
 
 // Health check
 app.get("/health", async (req, res) => {

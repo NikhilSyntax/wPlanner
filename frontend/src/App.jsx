@@ -34,6 +34,7 @@ const TeamList = lazy(() => import('./pages/TeamList'));
 const TeamDetails = lazy(() => import('./pages/TeamDetails'));
 const TeamChat = lazy(() => import('./pages/TeamChat'));
 const TeamForm = lazy(() => import('./pages/TeamForm'));
+const AutoEventScheduler = lazy(() => import('./pages/AutoEventScheduler'));
 
 function App() {
   const dispatch = useDispatch();
@@ -89,6 +90,7 @@ function App() {
                 <Route path="songs/new" element={<SongForm />} />
                 <Route path="songs/:id" element={<SongDetails />} />
                 <Route path="songs/:id/edit" element={<SongForm />} />
+                <Route path="auto-scheduler" element={<AutoEventScheduler />} />
               </Route>
             </Route>
           </Route>

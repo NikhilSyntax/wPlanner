@@ -1,6 +1,8 @@
 const Notification = require('../models/Notification');
 const Event = require('../models/Event');
 const Assignment = require('../models/Assignment');
+const Team = require('../models/Team');
+const Song = require('../models/Song');
 const { getVapidPublicKey, subscribeUser, unsubscribeUser, sendPushToUser } = require('../utils/pushService');
 const { sendNotification } = require('../utils/notificationService');
 
@@ -205,10 +207,11 @@ exports.respondToNotification = async (req, res) => {
     // If associated with an event, update event assignments and Assignment document
     let eventId = notification.eventId;
     if (!eventId && notification.link) {
-      const match = notification.link.match(/\/events\/([a-fA-F0-9]{24})/);
-      if (match) eventId = match[1];
+      const match = notification.link.match(/[a-fA-F0-9]{24}/);
+      if (match) eventId = match[0];
     }
 
+    let populatedEvent = null;
     if (eventId) {
       const event = await Event.findOne({
         _id: eventId,
@@ -246,6 +249,22 @@ exports.respondToNotification = async (req, res) => {
           },
           { upsert: true }
         );
+
+        // Sync all related assignment notifications for this user and event
+        await Notification.updateMany(
+          {
+            recipient: userId,
+            _id: { $ne: notification._id },
+            $or: [{ eventId: event._id }, { link: new RegExp(event._id.toString()) }],
+          },
+          { $set: { actionStatus: normalizedStatus, read: true } }
+        );
+
+        populatedEvent = await Event.findById(event._id)
+          .populate('team', 'team.name members')
+          .populate('assignments.userId', 'name email role profilePhotoUrl')
+          .populate('setlist', 'title artist key timeSignature')
+          .lean();
       }
     }
 
@@ -253,6 +272,8 @@ exports.respondToNotification = async (req, res) => {
       success: true,
       notification,
       status: normalizedStatus,
+      eventId: eventId || null,
+      event: populatedEvent,
     });
   } catch (err) {
     console.error('[NotificationController] Error responding to notification:', err);

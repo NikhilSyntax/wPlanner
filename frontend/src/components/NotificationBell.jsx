@@ -36,6 +36,7 @@ import {
   Cancel as CancelIcon,
 } from '@mui/icons-material';
 import { addNotification } from '../store/slices/uiSlice';
+import { fetchEvents } from '../store/slices/eventSlice';
 import { io } from 'socket.io-client';
 import api, { API_ORIGIN } from '../services/api';
 import {
@@ -113,6 +114,21 @@ function NotificationBell() {
       if (!notif.read) {
         setUnreadCount((c) => Math.max(0, c - 1));
       }
+
+      // Re-fetch all events in Redux so Dashboard, Spotlight, and Events lists update immediately
+      dispatch(fetchEvents());
+
+      // Broadcast custom event for active views (Dashboard, EventDetails)
+      window.dispatchEvent(
+        new CustomEvent('wplanner:assignment_updated', {
+          detail: {
+            notificationId: notif._id,
+            eventId: res.data?.eventId || notif.eventId,
+            status: newStatus,
+          },
+        })
+      );
+
       dispatch(
         addNotification({
           type: action === 'accept' ? 'success' : 'info',

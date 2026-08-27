@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   Avatar,
@@ -21,11 +22,13 @@ import {
   Send as SendIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
+  Logout as LogoutIcon,
+  MusicNote as MusicNoteIcon,
 } from '@mui/icons-material';
 import api from '../services/api';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 import { fetchTeams } from '../store/slices/teamSlice';
-import { updateUserProfilePhoto } from '../store/slices/authSlice';
+import { logout, updateUserProfilePhoto, updateUserProfile } from '../store/slices/authSlice';
 import {
   getPushSubscriptionStatus,
   subscribeUserToPush,
@@ -34,8 +37,21 @@ import {
 } from '../services/pushNotificationService';
 import MinistryActivity from '../components/profile/MinistryActivity';
 
+const INSTRUMENT_OPTIONS = [
+  { label: 'Singer / Vocals', value: 'Singer', icon: '🎤' },
+  { label: 'Guitarist', value: 'Guitarist', icon: '🎸' },
+  { label: 'Keyboardist / Piano', value: 'Keyboardist', icon: '🎹' },
+  { label: 'Drummer', value: 'Drummer', icon: '🥁' },
+  { label: 'Bassist', value: 'Bassist', icon: '🎸' },
+  { label: 'Production / Media', value: 'Production', icon: '🎛️' },
+  { label: 'Worship Leader', value: 'Worship Leader', icon: '🎼' },
+  { label: 'General Member', value: 'Member', icon: '👥' },
+  { label: 'Other', value: 'Other', icon: '🎵' },
+];
+
 function ProfileSettings() {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { user } = useSelector((state) => state.auth);
   const [church, setChurch] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +62,41 @@ function ProfileSettings() {
   const [photoLoading, setPhotoLoading] = useState(false);
   const [photoSuccess, setPhotoSuccess] = useState('');
   const [avatarCacheKey, setAvatarCacheKey] = useState(Date.now());
+
+  // Instrument / ministry role state (for non-admin members)
+  const [selectedRole, setSelectedRole] = useState(user?.role || 'Member');
+  const [roleLoading, setRoleLoading] = useState(false);
+  const [roleSuccess, setRoleSuccess] = useState('');
+  const [roleError, setRoleError] = useState('');
+
+  useEffect(() => {
+    if (user?.role) {
+      setSelectedRole(user.role);
+    }
+  }, [user?.role]);
+
+  const handleLogout = () => {
+    dispatch(logout());
+    navigate('/login');
+  };
+
+  const handleRoleSelect = async (newRole) => {
+    if (user?.isAdmin) return; // Feature is not for admins
+    setSelectedRole(newRole);
+    try {
+      setRoleLoading(true);
+      setRoleError('');
+      setRoleSuccess('');
+      const response = await api.patch('/users/profile', { role: newRole });
+      dispatch(updateUserProfile({ role: newRole }));
+      setRoleSuccess(`Instrument / ministry role updated to ${newRole}!`);
+      setTimeout(() => setRoleSuccess(''), 3500);
+    } catch (err) {
+      setRoleError(err?.response?.data?.message || 'Failed to update instrument / role');
+    } finally {
+      setRoleLoading(false);
+    }
+  };
 
   // Push notifications state
   const [pushStatus, setPushStatus] = useState({
@@ -189,11 +240,41 @@ function ProfileSettings() {
 
   return (
     <Box sx={{ maxWidth: 900, mx: 'auto', pb: 5 }}>
-      <Typography variant="h4" fontWeight={700} gutterBottom>
-        Profile Settings
-      </Typography>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 2,
+          mb: 1,
+        }}
+      >
+        <Typography variant="h4" fontWeight={700}>
+          Profile Settings
+        </Typography>
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<LogoutIcon />}
+          onClick={handleLogout}
+          sx={{
+            borderRadius: 2,
+            textTransform: 'none',
+            fontWeight: 700,
+            px: 2,
+            borderColor: 'rgba(239, 68, 68, 0.5)',
+            '&:hover': {
+              borderColor: 'error.main',
+              bgcolor: 'rgba(239, 68, 68, 0.08)',
+            },
+          }}
+        >
+          Log Out
+        </Button>
+      </Box>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        View your account, church details, and mobile notification preferences.
+        View and manage your account, instrument, church details, and mobile notifications.
       </Typography>
 
       {user?.approvalStatus === 'pending' && (
@@ -294,35 +375,92 @@ function ProfileSettings() {
                   </Typography>
                 </Box>
 
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Church Role & Status
-                  </Typography>
-                  <Stack direction="row" spacing={1} sx={{ mt: 0.5 }} flexWrap="wrap">
-                    <Chip
-                      size="small"
-                      color="primary"
-                      label={user?.role || 'Member'}
-                      sx={{ fontWeight: 700, fontSize: '0.75rem' }}
-                    />
-                    {user?.isAdmin && (
+                {!user?.isAdmin ? (
+                  <Box>
+                    <Typography
+                      variant="subtitle2"
+                      fontWeight={700}
+                      sx={{ mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}
+                    >
+                      <MusicNoteIcon color="primary" sx={{ fontSize: 20 }} />
+                      Primary Instrument & Ministry Role
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mb: 1.5 }}
+                    >
+                      Select your primary instrument or ministry position in the worship team.
+                    </Typography>
+
+                    {roleSuccess && (
+                      <Alert severity="success" sx={{ mb: 1.5, py: 0.25, fontSize: '0.8rem' }}>
+                        {roleSuccess}
+                      </Alert>
+                    )}
+                    {roleError && (
+                      <Alert severity="error" sx={{ mb: 1.5, py: 0.25, fontSize: '0.8rem' }}>
+                        {roleError}
+                      </Alert>
+                    )}
+
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                      {INSTRUMENT_OPTIONS.map((opt) => {
+                        const isSelected = selectedRole === opt.value;
+                        return (
+                          <Chip
+                            key={opt.value}
+                            label={`${opt.icon} ${opt.label}`}
+                            clickable
+                            onClick={() => handleRoleSelect(opt.value)}
+                            color={isSelected ? 'primary' : 'default'}
+                            variant={isSelected ? 'filled' : 'outlined'}
+                            disabled={roleLoading}
+                            sx={{
+                              fontWeight: isSelected ? 700 : 500,
+                              fontSize: '0.8125rem',
+                              py: 2.2,
+                              px: 0.75,
+                              borderRadius: 2,
+                              borderWidth: isSelected ? 2 : 1,
+                              borderColor: isSelected ? 'primary.main' : 'divider',
+                              transition: 'all 0.15s ease',
+                              boxShadow: isSelected
+                                ? '0 2px 8px rgba(37, 99, 235, 0.25)'
+                                : 'none',
+                              '&:hover': {
+                                borderColor: 'primary.main',
+                                bgcolor: isSelected ? 'primary.main' : 'action.hover',
+                              },
+                            }}
+                          />
+                        );
+                      })}
+                    </Box>
+                    {roleLoading && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                        <CircularProgress size={14} />
+                        <Typography variant="caption" color="text.secondary">
+                          Saving instrument / role...
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                ) : (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Church Role & Status
+                    </Typography>
+                    <Stack direction="row" spacing={1} sx={{ mt: 0.5 }} flexWrap="wrap">
                       <Chip
                         size="small"
                         color="secondary"
                         label="Admin"
                         sx={{ fontWeight: 700, fontSize: '0.75rem' }}
                       />
-                    )}
-                    {user?.isSubAdmin && (
-                      <Chip
-                        size="small"
-                        color="secondary"
-                        label="Sub-Admin"
-                        sx={{ fontWeight: 700, fontSize: '0.75rem' }}
-                      />
-                    )}
-                  </Stack>
-                </Box>
+                    </Stack>
+                  </Box>
+                )}
 
                 <Divider />
 
@@ -420,6 +558,38 @@ function ProfileSettings() {
                     </Box>
                   </>
                 )}
+
+                <Divider />
+
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    pt: 0.5,
+                    flexWrap: 'wrap',
+                    gap: 1.5,
+                  }}
+                >
+                  <Box>
+                    <Typography variant="body2" fontWeight={600}>
+                      Account Session
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Sign out of your account on this device
+                    </Typography>
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    startIcon={<LogoutIcon />}
+                    onClick={handleLogout}
+                    sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                  >
+                    Log Out
+                  </Button>
+                </Box>
               </Stack>
             )}
           </CardContent>

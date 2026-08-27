@@ -244,6 +244,15 @@ function EventDetails() {
 
   useEffect(() => {
     loadPageData(true);
+
+    const handleAssignmentUpdate = () => {
+      loadPageData(false);
+    };
+
+    window.addEventListener('wplanner:assignment_updated', handleAssignmentUpdate);
+    return () => {
+      window.removeEventListener('wplanner:assignment_updated', handleAssignmentUpdate);
+    };
   }, [id]);
 
   const loadPageData = async (showSpinner = false) => {

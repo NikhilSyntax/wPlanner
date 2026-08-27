@@ -3,6 +3,7 @@ import authReducer from './slices/authSlice';
 import eventReducer from './slices/eventSlice';
 import teamReducer from './slices/teamSlice';
 import uiReducer from './slices/uiSlice';
+import autoScheduleReducer from './slices/autoScheduleSlice';
 
 export const store = configureStore({
   reducer: {
@@ -10,5 +11,6 @@ export const store = configureStore({
     events: eventReducer,
     teams: teamReducer,
     ui: uiReducer,
+    autoSchedules: autoScheduleReducer,
   },
 });

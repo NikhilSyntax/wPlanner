@@ -76,6 +76,65 @@ exports.uploadProfilePhoto = async (req, res) => {
   }
 };
 
+// Update current user's profile settings (instrument / ministry role)
+exports.updateProfile = async (req, res) => {
+  try {
+    const { role } = req.body;
+    const userId = req.user.userId;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Admins cannot change their primary role through this member settings endpoint
+    if (user.isAdmin || req.user.isAdmin) {
+      return res.status(403).json({
+        message: "Administrators cannot change their primary role through member settings.",
+      });
+    }
+
+    // Valid non-admin instrument / ministry roles
+    const allowedRoles = [
+      "Singer",
+      "Guitarist",
+      "Keyboardist",
+      "Drummer",
+      "Bassist",
+      "Production",
+      "Worship Leader",
+      "Member",
+      "Other",
+    ];
+
+    if (!role || !allowedRoles.includes(role)) {
+      return res.status(400).json({
+        message: `Invalid instrument/role. Must be one of: ${allowedRoles.join(", ")}`,
+      });
+    }
+
+    user.role = role;
+    await user.save();
+
+    res.json({
+      message: "Instrument / ministry role updated successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isAdmin: user.isAdmin,
+        isSubAdmin: user.isSubAdmin,
+        profilePhotoUrl: user.profilePhotoUrl,
+        approvalStatus: user.approvalStatus,
+      },
+    });
+  } catch (err) {
+    console.error("Error updating user profile:", err);
+    res.status(500).json({ message: "Failed to update profile" });
+  }
+};
+
 // Get personal ministry activity statistics & serving history
 exports.getMinistryStatistics = async (req, res) => {
   try {

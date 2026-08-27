@@ -33,6 +33,7 @@ import {
   ContentCopy as ContentCopyIcon,
   Check as CheckIcon,
   Church as ChurchIcon,
+  AutoMode as AutoModeIcon,
 } from '@mui/icons-material';
 import { logout } from '../../store/slices/authSlice';
 import { isUserApproved } from '../../utils/isUserApproved';
@@ -45,6 +46,7 @@ const navigationItems = [
   { text: 'Events', icon: EventIcon, path: '/events' },
   { text: 'Teams & Roster', icon: GroupIcon, path: '/teams' },
   { text: 'Song Bank', icon: MusicNoteIcon, path: '/songs' },
+  { text: 'Auto Scheduler', icon: AutoModeIcon, path: '/auto-scheduler', requiresLeader: true },
 ];
 
 function Sidebar({ open, onClose, toggleTheme }) {
@@ -74,7 +76,13 @@ function Sidebar({ open, onClose, toggleTheme }) {
           path: '/pending-approval',
         },
       ]
-    : navigationItems;
+    : navigationItems.filter((item) => {
+        if (item.requiresLeader) {
+          return user?.isAdmin || user?.isSubAdmin
+            || ['Worship Leader', 'worship leader', 'worship_leader'].includes(user?.role);
+        }
+        return true;
+      });
 
   const handleMenuClick = (event) => {
     setAnchorEl(event.currentTarget);

@@ -3,6 +3,7 @@ const Team = require('../models/Team');
 const User = require('../models/User');
 const { sendNotification } = require('./notificationService');
 const { getEventDisplayTitle } = require('./eventTitle');
+const { processAutoSchedules } = require('./autoEventScheduler');
 
 /**
  * Dispatch advance reminder notifications for a single event to assigned members and team.
@@ -104,6 +105,9 @@ async function send24HourRemindersForEvent(event, excludeUserId = null) {
  */
 async function checkAndSendAutomatedReminders() {
   try {
+    // Auto Event Scheduler: generate events for upcoming occurrences
+    await processAutoSchedules();
+
     const now = new Date();
     const nowMs = now.getTime();
 
