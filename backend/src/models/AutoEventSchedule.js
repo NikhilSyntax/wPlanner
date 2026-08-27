@@ -72,7 +72,10 @@ const autoEventScheduleSchema = new mongoose.Schema({
     max: 14,
   },
   reminders: [{
-    offsetDays: { type: Number, required: true },
+    value: { type: Number },
+    unit: { type: String, enum: ['days', 'hours'], default: 'days' },
+    offsetDays: { type: Number },
+    offsetHours: { type: Number },
     enabled: { type: Boolean, default: true },
   }],
   isActive: {

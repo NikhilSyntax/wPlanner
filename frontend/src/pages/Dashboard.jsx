@@ -32,6 +32,7 @@ import {
   Cancel as CancelIcon,
   AssignmentInd as AssignmentIndIcon,
   VolunteerActivism as VolunteerActivismIcon,
+  Launch as LaunchIcon,
 } from '@mui/icons-material';
 import { fetchEvents } from '../store/slices/eventSlice';
 import { addNotification } from '../store/slices/uiSlice';
@@ -81,6 +82,20 @@ function Dashboard() {
       );
     } finally {
       setRespondingSpotlight(false);
+    }
+  };
+
+  const handleSpotlightSetlistClick = () => {
+    if (!nextUpcomingEvent?._id) return;
+    const firstSong = nextUpcomingEvent?.setlist?.[0];
+    const firstSongId =
+      firstSong?._id ||
+      (typeof firstSong === 'string' ? firstSong : firstSong?.song?._id || firstSong?.song);
+
+    if (firstSongId) {
+      navigate(`/events/${nextUpcomingEvent._id}/setlist/${firstSongId}?view=lyrics`);
+    } else {
+      navigate(`/events/${nextUpcomingEvent._id}`);
     }
   };
 
@@ -142,6 +157,7 @@ function Dashboard() {
         return aId && currentUserId && aId === String(currentUserId);
       })
     : null;
+  const isOptInPending = !isAdmin && userAssignment?.status === 'opt_in_pending';
   const isUserInTeamMembers =
     !isAdmin &&
     Array.isArray(nextUpcomingEvent?.team?.members) &&
@@ -149,7 +165,7 @@ function Dashboard() {
       const mId = m.userId?._id ? String(m.userId._id) : String(m.userId || '');
       return mId && currentUserId && mId === String(currentUserId);
     });
-  const isUserInTeam = !isAdmin && Boolean(userAssignment || isUserInTeamMembers);
+  const isUserInTeam = !isAdmin && !isOptInPending && Boolean(userAssignment || isUserInTeamMembers);
 
   // Time to next event calculation
   let timeUntilNext = 'No upcoming events';
@@ -320,7 +336,7 @@ function Dashboard() {
                     )}
                   </Box>
 
-                  {isUserInTeam && (
+                  {isUserInTeam ? (
                     userAssignment?.status === 'accepted' ? (
                       <Chip
                         icon={<CheckCircleIcon sx={{ fontSize: '13px !important', color: '#ffffff !important' }} />}
@@ -367,7 +383,22 @@ function Dashboard() {
                         }}
                       />
                     )
-                  )}
+                  ) : isOptInPending ? (
+                    <Chip
+                      icon={<VolunteerActivismIcon sx={{ fontSize: '13px !important', color: '#9333ea !important' }} />}
+                      label={`Offer Pending: ${userAssignment?.role || 'Volunteer'}`}
+                      size="small"
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: '0.72rem',
+                        bgcolor: 'rgba(147, 51, 234, 0.12)',
+                        color: '#9333ea',
+                        border: '1px solid rgba(147, 51, 234, 0.3)',
+                        height: 24,
+                        '& .MuiChip-icon': { ml: 0.5 },
+                      }}
+                    />
+                  ) : null}
                 </Box>
 
                 {nextUpcomingEvent ? (
@@ -467,14 +498,16 @@ function Dashboard() {
                             noWrap
                             display="block"
                             sx={{
-                              color: isUserInTeam ? '#059669' : 'text.secondary',
-                              fontWeight: isUserInTeam ? 700 : 500,
+                              color: isUserInTeam ? '#059669' : isOptInPending ? '#9333ea' : 'text.secondary',
+                              fontWeight: isUserInTeam || isOptInPending ? 700 : 500,
                               fontSize: '0.72rem',
                               mt: 0.2,
                             }}
                           >
-                            {userAssignment?.role
+                            {isUserInTeam && userAssignment?.role
                               ? `Your Role: ${userAssignment.role}`
+                              : isOptInPending
+                              ? `Offered: ${userAssignment?.role || 'Volunteer'} (Pending)`
                               : isUserInTeam
                               ? `Assigned in Roster`
                               : `${(nextUpcomingEvent.assignments || []).filter((a) => !a.userId?.isAdmin && a.userId?.role !== 'Admin').length} members assigned`}
@@ -483,38 +516,69 @@ function Dashboard() {
                       </Grid>
 
                       <Grid item xs={12} sm={4} sx={{ display: 'flex' }}>
-                        <Paper
-                          variant="outlined"
-                          sx={{
-                            p: 1.25,
-                            px: 1.5,
-                            borderRadius: 2,
-                            width: '100%',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            minHeight: 76,
-                            borderColor: isUserInTeam ? 'rgba(16, 185, 129, 0.25)' : 'divider',
-                            bgcolor: isUserInTeam ? 'rgba(255,255,255,0.7)' : 'background.paper',
-                          }}
+                        <Tooltip
+                          title={
+                            nextUpcomingEvent.setlist?.length > 0
+                              ? "Click to open chords & lyrics for this setlist"
+                              : "Click to open service plan"
+                          }
+                          arrow
                         >
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.5 }}>
-                            <MusicNoteIcon sx={{ fontSize: 14, color: isUserInTeam ? '#059669' : 'text.secondary' }} />
-                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', fontWeight: 600 }}>
-                              Setlist
+                          <Paper
+                            variant="outlined"
+                            onClick={handleSpotlightSetlistClick}
+                            sx={{
+                              p: 1.25,
+                              px: 1.5,
+                              borderRadius: 2,
+                              width: '100%',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              minHeight: 76,
+                              borderColor: isUserInTeam ? 'rgba(16, 185, 129, 0.25)' : 'divider',
+                              bgcolor: isUserInTeam ? 'rgba(255,255,255,0.7)' : 'background.paper',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                bgcolor: isUserInTeam ? 'rgba(16, 185, 129, 0.08)' : 'rgba(37, 99, 235, 0.05)',
+                                borderColor: isUserInTeam ? '#10b981' : 'primary.main',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                                transform: 'translateY(-2px)',
+                              },
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                                <QueueMusicIcon sx={{ fontSize: 14, color: isUserInTeam ? '#059669' : 'text.secondary' }} />
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', fontWeight: 600 }}>
+                                  Setlist
+                                </Typography>
+                              </Box>
+                              <LaunchIcon sx={{ fontSize: 12, color: 'text.disabled', opacity: 0.8 }} />
+                            </Box>
+                            <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.8125rem', lineHeight: 1.2 }}>
+                              {nextUpcomingEvent.setlist?.length || 0} Songs Selected
                             </Typography>
-                          </Box>
-                          <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.8125rem', lineHeight: 1.2 }}>
-                            {nextUpcomingEvent.setlist?.length || 0} Songs Selected
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.72rem', mt: 0.2 }}>
-                            Ready for rehearsal
-                          </Typography>
-                        </Paper>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              display="block"
+                              sx={{
+                                fontSize: '0.72rem',
+                                mt: 0.2,
+                                color: nextUpcomingEvent.setlist?.length > 0 ? (isUserInTeam ? '#059669' : 'primary.main') : 'text.secondary',
+                                fontWeight: nextUpcomingEvent.setlist?.length > 0 ? 600 : 400,
+                              }}
+                            >
+                              {nextUpcomingEvent.setlist?.length > 0 ? 'Click to view lyrics & chords →' : 'Ready for rehearsal'}
+                            </Typography>
+                          </Paper>
+                        </Tooltip>
                       </Grid>
                     </Grid>
 
-                    {/* Assignment Action Banner with Tick (Accept) and Cross (Reject) Buttons */}
+                    {/* Assignment Action Banner for Confirmed/Assigned Team Members */}
                     {isUserInTeam && (
                       <Paper
                         variant="outlined"
@@ -625,33 +689,6 @@ function Dashboard() {
                               </Button>
                             </Tooltip>
                           </>
-                        ) : userAssignment?.status === 'opt_in_pending' ? (
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              width: '100%',
-                              gap: 1,
-                              flexWrap: 'wrap',
-                            }}
-                          >
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <VolunteerActivismIcon color="secondary" sx={{ fontSize: 20 }} />
-                              <Typography variant="body2" fontWeight={600} color="text.primary">
-                                You offered to serve as <strong>{userAssignment?.role || 'Volunteer'}</strong>. (Awaiting leader confirmation)
-                              </Typography>
-                            </Box>
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              color="secondary"
-                              onClick={() => navigate(`/events/${nextUpcomingEvent._id}`)}
-                              sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: '0.75rem', fontWeight: 600 }}
-                            >
-                              View Event
-                            </Button>
-                          </Box>
                         ) : (
                           <>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -715,6 +752,43 @@ function Dashboard() {
                             </Box>
                           </>
                         )}
+                      </Paper>
+                    )}
+
+                    {/* Opt-In Pending Confirmation Banner */}
+                    {isOptInPending && (
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 1.25,
+                          px: 1.75,
+                          mb: 1.5,
+                          borderRadius: 2,
+                          borderColor: 'rgba(147, 51, 234, 0.35)',
+                          bgcolor: (theme) =>
+                            theme.palette.mode === 'dark' ? 'rgba(147, 51, 234, 0.12)' : '#faf5ff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 1.5,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <VolunteerActivismIcon color="secondary" sx={{ fontSize: 20 }} />
+                          <Typography variant="body2" fontWeight={600} color="text.primary">
+                            You offered to serve as <strong>{userAssignment?.role || 'Volunteer'}</strong>. (Awaiting leader confirmation)
+                          </Typography>
+                        </Box>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="secondary"
+                          onClick={() => navigate(`/events/${nextUpcomingEvent._id}`)}
+                          sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: '0.75rem', fontWeight: 600 }}
+                        >
+                          View Event
+                        </Button>
                       </Paper>
                     )}
 

@@ -192,6 +192,10 @@ exports.respondToNotification = async (req, res) => {
       return res.status(400).json({ message: 'Invalid action. Use "accept" or "decline".' });
     }
 
+    if (req.user?.role === 'admin' || req.user?.isAdmin) {
+      return res.status(403).json({ message: 'Admins cannot accept or decline team assignments.' });
+    }
+
     const notification = await Notification.findOne({
       _id: id,
       recipient: req.user.userId,

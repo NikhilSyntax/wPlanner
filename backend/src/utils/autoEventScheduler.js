@@ -1,5 +1,6 @@
 const AutoEventSchedule = require('../models/AutoEventSchedule');
 const Event = require('../models/Event');
+const User = require('../models/User');
 const { sendNotification } = require('./notificationService');
 
 // ─── Timezone-aware date helpers (no external dependencies) ────────────────
@@ -294,21 +295,29 @@ async function processOneSchedule(schedule) {
 async function sendAutoReminders(schedule, event, occ) {
   if (!Array.isArray(schedule.reminders)) return;
 
-  const tz = schedule.timezone || 'Asia/Kolkata';
-  const today = todayInTimezone(tz);
-  const todayDate = new Date(today.year, today.month - 1, today.day);
-  const occDate = new Date(occ.year, occ.month - 1, occ.day);
+  const now = new Date();
+  const eventStart = new Date(event.schedule?.start || occ);
 
   for (const reminder of schedule.reminders) {
     if (!reminder.enabled) continue;
 
-    const reminderDate = new Date(occDate.getTime() - (reminder.offsetDays * 24 * 60 * 60 * 1000));
+    const unit = reminder.unit === 'hours' ? 'hours' : 'days';
+    const val = Number(reminder.value != null ? reminder.value : reminder.offsetDays) || 1;
+    const offsetMs = unit === 'hours'
+      ? val * 60 * 60 * 1000
+      : val * 24 * 60 * 60 * 1000;
 
-    // Only send if today is the reminder date (or past it but event hasn't started)
-    if (todayDate.getTime() < reminderDate.getTime()) continue;
+    const reminderTargetTime = new Date(eventStart.getTime() - offsetMs);
+
+    // Only send if current time is past/at the reminder target time, and event hasn't started yet
+    if (now.getTime() < reminderTargetTime.getTime() || now.getTime() >= eventStart.getTime()) {
+      continue;
+    }
 
     // Build a unique reminder key to prevent duplicates
-    const reminderField = `autoReminder_${reminder.offsetDays}d_sent`;
+    const reminderField = unit === 'hours'
+      ? `autoReminder_${val}h_sent`
+      : `autoReminder_${val}d_sent`;
 
     // Check if this reminder was already sent
     const eventDoc = await Event.findById(event._id).lean();
@@ -320,44 +329,64 @@ async function sendAutoReminders(schedule, event, occ) {
       { $set: { [reminderField]: true } }
     );
 
-    const dateStr = new Date(event.schedule.start).toLocaleDateString('en-US', {
+    const dateStr = eventStart.toLocaleDateString('en-US', {
       weekday: 'short', month: 'short', day: 'numeric',
     });
-    const timeStr = new Date(event.schedule.start).toLocaleTimeString('en-US', {
+    const timeStr = eventStart.toLocaleTimeString('en-US', {
       hour: '2-digit', minute: '2-digit',
     });
 
-    const title = reminder.offsetDays === 1
-      ? `⏰ Tomorrow: ${schedule.name}`
-      : `🔔 ${reminder.offsetDays} days: ${schedule.name}`;
-    const message = reminder.offsetDays === 1
-      ? `"${schedule.name}" is tomorrow (${dateStr}) at ${timeStr}. Get ready for service!`
-      : `"${schedule.name}" is coming up on ${dateStr} at ${timeStr}. Please check your assigned role!`;
+    let title;
+    let message;
 
-    // Send to schedule creator (admin/leader) — individual volunteer reminders
-    // are handled by the existing reminderScheduler once volunteers are assigned
-    try {
-      await sendNotification({
-        recipientId: schedule.createdBy,
-        type: 'event_reminder',
-        title,
-        message,
-        link: `/events/${event._id}`,
-        eventId: event._id,
-      });
-    } catch (err) {
-      console.warn(`[AutoEventScheduler] Reminder notification failed for ${event._id}:`, err.message);
-      // Revert the sent flag so next run can retry
-      await Event.updateOne(
-        { _id: event._id },
-        { $set: { [reminderField]: false } }
-      );
+    if (unit === 'hours') {
+      title = `⏰ In ${val} hr${val > 1 ? 's' : ''}: ${schedule.name}`;
+      message = `"${schedule.name}" begins in ${val} hour${val > 1 ? 's' : ''} at ${timeStr}. Get ready for service!`;
+    } else if (val === 1) {
+      title = `⏰ Tomorrow: ${schedule.name}`;
+      message = `"${schedule.name}" is tomorrow (${dateStr}) at ${timeStr}. Get ready for service!`;
+    } else {
+      title = `🔔 ${val} days: ${schedule.name}`;
+      message = `"${schedule.name}" is coming up in ${val} days on ${dateStr} at ${timeStr}. Please check your assigned role!`;
+    }
+
+    // Fetch all active/approved church members and leaders in this church
+    const members = await User.find({
+      churchId: schedule.churchId,
+      approvalStatus: { $ne: 'rejected' },
+    }).select('_id').lean();
+
+    const recipientSet = new Set(members.map((m) => m._id.toString()));
+    if (schedule.createdBy) {
+      recipientSet.add(schedule.createdBy.toString());
+    }
+    const recipientIds = Array.from(recipientSet);
+
+    console.log(
+      `[AutoEventScheduler] Dispatching ${val}${unit === 'hours' ? 'h' : 'd'} reminder for "${schedule.name}" to ${recipientIds.length} recipient(s)`
+    );
+
+    // Send notifications to everyone in the church according to the timer set
+    for (const recipientId of recipientIds) {
+      try {
+        await sendNotification({
+          recipientId,
+          type: 'event_reminder',
+          title,
+          message,
+          link: `/events/${event._id}`,
+          eventId: event._id,
+        });
+      } catch (err) {
+        console.warn(`[AutoEventScheduler] Reminder notification failed for user ${recipientId} on event ${event._id}:`, err.message);
+      }
     }
   }
 }
 
 module.exports = {
   processAutoSchedules,
+  sendAutoReminders,
   getNextOccurrences,
   getNthWeekdayOfMonth,
   localToUTC,

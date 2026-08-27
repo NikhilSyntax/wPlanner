@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import {
   Box,
   IconButton,
@@ -34,6 +34,7 @@ import {
   Check as CheckIcon,
   Close as CloseIcon,
   Cancel as CancelIcon,
+  VolunteerActivism as VolunteerActivismIcon,
 } from '@mui/icons-material';
 import { addNotification } from '../store/slices/uiSlice';
 import { fetchEvents } from '../store/slices/eventSlice';
@@ -77,6 +78,13 @@ const formatTime = (dateStr) => {
 function NotificationBell() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { user } = useSelector((state) => state.auth);
+  const isAdmin = Boolean(
+    user?.isAdmin ||
+    user?.role === 'Admin' ||
+    user?.role === 'admin' ||
+    user?.roles?.some((r) => String(r).toLowerCase().trim() === 'admin')
+  );
   const [anchorEl, setAnchorEl] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -150,6 +158,22 @@ function NotificationBell() {
     } finally {
       setRespondingId(null);
     }
+  };
+
+  const handleContributeClick = (e, notif, eventId) => {
+    e.stopPropagation();
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n._id === notif._id
+          ? { ...n, actionStatus: 'contributed', read: true }
+          : n
+      )
+    );
+    if (!notif.read) {
+      markAsRead(notif._id);
+    }
+    handleClose();
+    navigate(`/events/${eventId}?volunteer=true`);
   };
 
   // 1. Fetch notifications from backend
@@ -392,13 +416,20 @@ function NotificationBell() {
             </Box>
           ) : (
             notifications.map((notif) => {
+              const eventId =
+                notif.eventId ||
+                (notif.link ? notif.link.match(/[a-fA-F0-9]{24}/)?.[0] : null);
+
+              // Direct individual assignment
               const isAssignment =
-                notif.type === 'assignment' ||
-                Boolean(notif.actionStatus) ||
-                Boolean(notif.assignmentRole) ||
-                (notif.title && notif.title.toLowerCase().includes('assignment')) ||
-                (notif.message && notif.message.toLowerCase().includes('assigned')) ||
-                (notif.message && notif.message.toLowerCase().includes('scheduled as'));
+                !isAdmin &&
+                notif.type === 'assignment';
+
+              // Unassigned church member receiving service notification / event reminder
+              const canContribute =
+                !isAdmin &&
+                !isAssignment &&
+                Boolean(eventId);
 
               return (
                 <ListItem
@@ -480,7 +511,7 @@ function NotificationBell() {
                             onClick={(e) => e.stopPropagation()}
                           >
                             {notif.actionStatus === 'accepted' ? (
-                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 1 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <Chip
                                   icon={<CheckIcon sx={{ fontSize: '13px !important', color: '#16a34a !important' }} />}
                                   label="Accepted ✓"
@@ -494,27 +525,9 @@ function NotificationBell() {
                                     border: '1px solid rgba(22, 163, 74, 0.3)',
                                   }}
                                 />
-                                <Tooltip title="Change to Decline">
-                                  <Button
-                                    size="small"
-                                    color="error"
-                                    startIcon={<CloseIcon sx={{ fontSize: 12 }} />}
-                                    onClick={(e) => handleRespondNotification(e, notif, 'decline')}
-                                    disabled={respondingId === notif._id}
-                                    sx={{
-                                      textTransform: 'none',
-                                      fontSize: '0.68rem',
-                                      py: 0.2,
-                                      px: 0.8,
-                                      minWidth: 'auto',
-                                    }}
-                                  >
-                                    Decline
-                                  </Button>
-                                </Tooltip>
                               </Box>
                             ) : notif.actionStatus === 'declined' ? (
-                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 1 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <Chip
                                   icon={<CloseIcon sx={{ fontSize: '13px !important', color: '#dc2626 !important' }} />}
                                   label="Declined ✕"
@@ -528,24 +541,6 @@ function NotificationBell() {
                                     border: '1px solid rgba(220, 38, 38, 0.3)',
                                   }}
                                 />
-                                <Tooltip title="Change to Accept">
-                                  <Button
-                                    size="small"
-                                    color="success"
-                                    startIcon={<CheckIcon sx={{ fontSize: 12 }} />}
-                                    onClick={(e) => handleRespondNotification(e, notif, 'accept')}
-                                    disabled={respondingId === notif._id}
-                                    sx={{
-                                      textTransform: 'none',
-                                      fontSize: '0.68rem',
-                                      py: 0.2,
-                                      px: 0.8,
-                                      minWidth: 'auto',
-                                    }}
-                                  >
-                                    Accept
-                                  </Button>
-                                </Tooltip>
                               </Box>
                             ) : (
                               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%', gap: 1 }}>
@@ -602,6 +597,74 @@ function NotificationBell() {
                                   </Button>
                                 </Tooltip>
                               </Box>
+                            )}
+                          </Box>
+                        )}
+
+                        {/* Contribute / Volunteer Action Control for Unassigned Church Members */}
+                        {canContribute && (
+                          <Box
+                            component="span"
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              mt: 1,
+                              pt: 0.75,
+                              borderTop: '1px dashed',
+                              borderColor: 'divider',
+                              gap: 0.8,
+                              flexWrap: 'wrap',
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {notif.actionStatus === 'contributed' ? (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Chip
+                                  icon={<VolunteerActivismIcon sx={{ fontSize: '13px !important', color: '#9333ea !important' }} />}
+                                  label="Volunteered 🤝"
+                                  size="small"
+                                  sx={{
+                                    height: 22,
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    bgcolor: 'rgba(147, 51, 234, 0.12)',
+                                    color: '#9333ea',
+                                    border: '1px solid rgba(147, 51, 234, 0.3)',
+                                  }}
+                                />
+                              </Box>
+                            ) : (
+                              <>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, fontSize: '0.7rem' }}>
+                                  Want to serve?
+                                </Typography>
+                                <Tooltip title="Offer to volunteer & contribute to this service">
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    color="secondary"
+                                    startIcon={<VolunteerActivismIcon sx={{ fontSize: 13 }} />}
+                                    onClick={(e) => handleContributeClick(e, notif, eventId)}
+                                    sx={{
+                                      textTransform: 'none',
+                                      fontWeight: 700,
+                                      fontSize: '0.72rem',
+                                      py: 0.3,
+                                      px: 1.2,
+                                      borderRadius: 1.5,
+                                      borderColor: 'secondary.main',
+                                      color: 'secondary.main',
+                                      '&:hover': {
+                                        bgcolor: 'rgba(147, 51, 234, 0.08)',
+                                        borderColor: 'secondary.main',
+                                      },
+                                    }}
+                                  >
+                                    Contribute / Volunteer
+                                  </Button>
+                                </Tooltip>
+                              </>
                             )}
                           </Box>
                         )}

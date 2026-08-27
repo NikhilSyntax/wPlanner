@@ -2,6 +2,35 @@ const AutoEventSchedule = require('../models/AutoEventSchedule');
 const Event = require('../models/Event');
 const { getNextOccurrences, processAutoSchedules } = require('../utils/autoEventScheduler');
 
+// Helper to sanitize dynamic multi-unit reminders (days or hours)
+function sanitizeScheduleReminders(reminders) {
+  if (!Array.isArray(reminders)) {
+    return [
+      { value: 3, unit: 'days', offsetDays: 3, offsetHours: 72, enabled: true },
+      { value: 1, unit: 'days', offsetDays: 1, offsetHours: 24, enabled: true },
+    ];
+  }
+  return reminders
+    .map((r) => {
+      const unit = r.unit === 'hours' ? 'hours' : 'days';
+      const rawVal = r.value != null ? r.value : r.offsetDays;
+      const num = parseInt(rawVal, 10) || 1;
+      const cleanVal = unit === 'hours'
+        ? Math.max(1, Math.min(72, num))
+        : Math.max(1, Math.min(30, num));
+      const offsetHours = unit === 'hours' ? cleanVal : cleanVal * 24;
+      return {
+        value: cleanVal,
+        unit,
+        offsetHours,
+        offsetDays: unit === 'days' ? cleanVal : undefined,
+        enabled: r.enabled !== false,
+      };
+    })
+    .filter((r, idx, self) => idx === self.findIndex((t) => t.offsetHours === r.offsetHours))
+    .sort((a, b) => b.offsetHours - a.offsetHours);
+}
+
 // ─── List all schedules for user's church ──────────────────────────────────
 
 exports.getSchedules = async (req, res) => {
@@ -94,12 +123,6 @@ exports.createSchedule = async (req, res) => {
       return res.status(400).json({ message: 'End time must be after start time' });
     }
 
-    // Build default reminders if not provided
-    const defaultReminders = [
-      { offsetDays: 3, enabled: true },
-      { offsetDays: 1, enabled: true },
-    ];
-
     const schedule = new AutoEventSchedule({
       churchId: req.user.churchId,
       createdBy: req.user.userId,
@@ -114,7 +137,7 @@ exports.createSchedule = async (req, res) => {
       timezone: timezone || 'Asia/Kolkata',
       eventType: eventType || 'service',
       creationOffsetDays: creationOffsetDays || 3,
-      reminders: reminders || defaultReminders,
+      reminders: sanitizeScheduleReminders(reminders),
     });
 
     await schedule.save();
@@ -183,7 +206,9 @@ exports.updateSchedule = async (req, res) => {
     if (timezone) schedule.timezone = timezone;
     if (eventType) schedule.eventType = eventType;
     if (creationOffsetDays !== undefined) schedule.creationOffsetDays = creationOffsetDays;
-    if (reminders !== undefined) schedule.reminders = reminders;
+    if (reminders !== undefined && Array.isArray(reminders)) {
+      schedule.reminders = sanitizeScheduleReminders(reminders);
+    }
 
     await schedule.save();
 

@@ -702,6 +702,10 @@ exports.respondToAssignment = async (req, res) => {
       return res.status(400).json({ message: 'Invalid status. Use "accepted" or "declined".' });
     }
 
+    if (req.user?.role === 'admin' || req.user?.isAdmin) {
+      return res.status(403).json({ message: 'Admins cannot accept or decline team assignments.' });
+    }
+
     const event = await Event.findOne({
       _id: id,
       churchId: req.user.churchId,

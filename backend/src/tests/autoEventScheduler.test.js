@@ -303,6 +303,84 @@ async function runTests() {
   assert.strictEqual(farEvents, 0, 'Should NOT generate event outside 1-day creation window');
   console.log('✅ Test 10 Passed: Event not generated outside creation window.');
 
+  // ─── Test 11: Dynamic Reminders (Days & Hours) Configuration ───────
+
+  console.log('Test 11: Dynamic reminders (Days and Hours configured)...');
+  const dynamicSchedule = await AutoEventSchedule.create({
+    churchId: churchA._id,
+    createdBy: adminA._id,
+    name: 'Dynamic Reminders Service',
+    frequency: 'weekly',
+    dayOfWeek: 0,
+    startTime: '10:00',
+    endTime: '12:00',
+    timezone: 'Asia/Kolkata',
+    creationOffsetDays: 3,
+    reminders: [
+      { value: 7, unit: 'days', offsetHours: 168, enabled: true },
+      { value: 1, unit: 'days', offsetHours: 24, enabled: true },
+      { value: 12, unit: 'hours', offsetHours: 12, enabled: true },
+      { value: 2, unit: 'hours', offsetHours: 2, enabled: true },
+    ],
+  });
+
+  const fetchedDynamic = await AutoEventSchedule.findById(dynamicSchedule._id).lean();
+  assert.strictEqual(fetchedDynamic.reminders.length, 4, 'Should store all 4 dynamic reminders');
+  assert.strictEqual(fetchedDynamic.reminders[3].unit, 'hours', 'Should support hours unit');
+  assert.strictEqual(fetchedDynamic.reminders[3].value, 2, 'Should store 2 hours reminder');
+  console.log('✅ Test 11 Passed: Dynamic reminders (Days and Hours) saved and verified successfully.');
+
+  // ─── Test 12: Reminder notifications dispatched to all church members ─
+
+  console.log('Test 12: Reminder notifications dispatched to all church members...');
+  // Create an event that starts 1 hour from now with a 2-hour reminder
+  const soonStart = new Date(Date.now() + 60 * 60 * 1000); // 1 hour ahead
+  const soonEnd = new Date(Date.now() + 2 * 60 * 60 * 1000);
+
+  const soonSchedule = await AutoEventSchedule.create({
+    churchId: churchA._id,
+    createdBy: adminA._id,
+    name: 'Upcoming Prayer Night',
+    frequency: 'weekly',
+    dayOfWeek: 0,
+    startTime: '19:00',
+    endTime: '21:00',
+    timezone: 'UTC',
+    creationOffsetDays: 3,
+    reminders: [
+      { value: 2, unit: 'hours', offsetHours: 2, enabled: true },
+    ],
+  });
+
+  const soonEvent = await Event.create({
+    event: {
+      title: 'Upcoming Prayer Night',
+      type: 'service',
+      status: 'published',
+    },
+    schedule: {
+      start: soonStart,
+      end: soonEnd,
+      timezone: 'UTC',
+    },
+    createdBy: adminA._id,
+    churchId: churchA._id,
+    autoScheduleId: soonSchedule._id,
+    occurrenceDate: '2026-08-27',
+  });
+
+  // Run the scheduler reminders
+  const { sendAutoReminders } = require('../utils/autoEventScheduler');
+  await sendAutoReminders(soonSchedule, soonEvent, { year: 2026, month: 8, day: 27 });
+
+  const notifsA = await Notification.find({ eventId: soonEvent._id }).lean();
+  const recipientIds = notifsA.map((n) => n.recipient.toString());
+
+  assert(recipientIds.includes(adminA._id.toString()), 'Admin A should receive reminder notification');
+  assert(recipientIds.includes(memberA._id.toString()), 'Member A should receive reminder notification');
+  assert(!recipientIds.includes(adminB._id.toString()), 'User from Church B should NOT receive notification');
+  console.log('✅ Test 12 Passed: All church members received reminder notification.');
+
   // ─── Cleanup ─────────────────────────────────────────────────────────
 
   await cleanup();

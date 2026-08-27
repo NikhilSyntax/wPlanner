@@ -73,8 +73,9 @@ const EMPTY_FORM = {
   eventType: 'service',
   creationOffsetDays: 3,
   reminders: [
-    { offsetDays: 3, enabled: true },
-    { offsetDays: 1, enabled: true },
+    { value: 3, unit: 'days', enabled: true },
+    { value: 1, unit: 'days', enabled: true },
+    { value: 2, unit: 'hours', enabled: true },
   ],
 };
 
@@ -113,10 +114,20 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
       ? `${['1st', '2nd', '3rd', '4th', 'Last'][schedule.weekOfMonth - 1]} ${DAY_NAMES[schedule.dayOfWeek]} of every month`
       : `${schedule.dayOfMonth}${['th', 'st', 'nd', 'rd'][(schedule.dayOfMonth % 100 > 10 && schedule.dayOfMonth % 100 < 14) ? 0 : Math.min(schedule.dayOfMonth % 10, 4)] || 'th'} of every month`;
 
-  const remindersLabel = (schedule.reminders || [])
-    .filter((r) => r.enabled)
-    .map((r) => `${r.offsetDays}d`)
-    .join(' + ');
+  const activeReminders = (schedule.reminders || []).filter((r) => r.enabled);
+  const remindersLabel = activeReminders.length > 0
+    ? [...activeReminders]
+        .map((r) => {
+          const unit = r.unit === 'hours' ? 'hours' : 'days';
+          const val = r.value != null ? r.value : r.offsetDays || 1;
+          const totalHours = unit === 'hours' ? val : val * 24;
+          const label = unit === 'hours' ? `${val}h` : `${val}d`;
+          return { label, totalHours };
+        })
+        .sort((a, b) => b.totalHours - a.totalHours)
+        .map((r) => r.label)
+        .join(' + ')
+    : null;
 
   return (
     <Card
@@ -307,8 +318,16 @@ export default function AutoEventScheduler() {
       eventType: schedule.eventType || 'service',
       creationOffsetDays: schedule.creationOffsetDays ?? 3,
       reminders: schedule.reminders?.length
-        ? schedule.reminders.map((r) => ({ ...r }))
-        : [{ offsetDays: 3, enabled: true }, { offsetDays: 1, enabled: true }],
+        ? schedule.reminders.map((r) => ({
+            value: r.value != null ? r.value : r.offsetDays || 1,
+            unit: r.unit || (r.offsetHours && r.offsetHours < 24 ? 'hours' : 'days'),
+            enabled: r.enabled !== false,
+          }))
+        : [
+            { value: 3, unit: 'days', enabled: true },
+            { value: 1, unit: 'days', enabled: true },
+            { value: 2, unit: 'hours', enabled: true },
+          ],
     });
     setFormError('');
     setDialogOpen(true);
@@ -372,8 +391,41 @@ export default function AutoEventScheduler() {
     }
   };
 
+  const handleAddReminder = () => {
+    const currentReminders = form.reminders || [];
+    const has2h = currentReminders.some((r) => r.unit === 'hours' && Number(r.value) === 2);
+    const nextReminder = !has2h
+      ? { value: 2, unit: 'hours', enabled: true }
+      : { value: 1, unit: 'days', enabled: true };
+    setForm({
+      ...form,
+      reminders: [...currentReminders, nextReminder],
+    });
+  };
+
+  const handleRemoveReminder = (idx) => {
+    const updated = (form.reminders || []).filter((_, i) => i !== idx);
+    setForm({ ...form, reminders: updated });
+  };
+
+  const handleReminderValueChange = (idx, value) => {
+    const num = Math.max(1, parseInt(value, 10) || 1);
+    const updated = [...(form.reminders || [])];
+    const maxVal = updated[idx]?.unit === 'hours' ? 72 : 30;
+    updated[idx] = { ...updated[idx], value: Math.min(maxVal, num) };
+    setForm({ ...form, reminders: updated });
+  };
+
+  const handleReminderUnitChange = (idx, unit) => {
+    const updated = [...(form.reminders || [])];
+    const curVal = updated[idx]?.value || 1;
+    const maxVal = unit === 'hours' ? 72 : 30;
+    updated[idx] = { ...updated[idx], unit, value: Math.min(maxVal, curVal) };
+    setForm({ ...form, reminders: updated });
+  };
+
   const handleReminderToggle = (idx) => {
-    const updated = [...form.reminders];
+    const updated = [...(form.reminders || [])];
     updated[idx] = { ...updated[idx], enabled: !updated[idx].enabled };
     setForm({ ...form, reminders: updated });
   };
@@ -991,42 +1043,189 @@ export default function AutoEventScheduler() {
             </Select>
           </FormControl>
 
-          {/* Reminders */}
+          {/* Reminders Section */}
           <Box sx={{ mb: 1 }}>
-            <Typography
-              variant="caption"
-              sx={{
-                color: '#475569',
-                fontWeight: 700,
-                fontSize: '0.75rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                mb: 1,
-                display: 'block',
-              }}
-            >
-              Reminders
-            </Typography>
-            {form.reminders.map((r, idx) => (
-              <FormControlLabel
-                key={idx}
-                control={
-                  <Checkbox
-                    checked={r.enabled}
-                    onChange={() => handleReminderToggle(idx)}
-                    sx={{
-                      color: '#94a3b8',
-                      '&.Mui-checked': { color: '#2563eb' },
-                    }}
-                  />
-                }
-                label={`${r.offsetDays} day${r.offsetDays > 1 ? 's' : ''} before`}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.25, flexWrap: 'wrap', gap: 1 }}>
+              <Box>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: '#475569',
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    display: 'block',
+                  }}
+                >
+                  Advance Reminders
+                </Typography>
+                <Typography variant="caption" sx={{ color: '#64748b', fontSize: '0.75rem' }}>
+                  Automatic notifications sent in advance of the service
+                </Typography>
+              </Box>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<AddIcon sx={{ fontSize: '15px !important' }} />}
+                onClick={handleAddReminder}
                 sx={{
-                  color: '#1e293b',
-                  '& .MuiFormControlLabel-label': { fontSize: '0.875rem', fontWeight: 500 },
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
+                  py: 0.4,
+                  px: 1.25,
+                  borderColor: '#cbd5e1',
+                  color: '#2563eb',
+                  '&:hover': { borderColor: '#2563eb', bgcolor: 'rgba(37, 99, 235, 0.04)' },
                 }}
-              />
-            ))}
+              >
+                Add Reminder
+              </Button>
+            </Box>
+
+            {(!form.reminders || form.reminders.length === 0) ? (
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  textAlign: 'center',
+                  borderRadius: 2,
+                  borderColor: '#e2e8f0',
+                  bgcolor: '#f8fafc',
+                }}
+              >
+                <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mb: 1 }}>
+                  No advance reminders configured for this schedule.
+                </Typography>
+                <Button
+                  size="small"
+                  variant="text"
+                  startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                  onClick={handleAddReminder}
+                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', color: '#2563eb' }}
+                >
+                  Add First Reminder
+                </Button>
+              </Paper>
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {form.reminders.map((r, idx) => {
+                  const unit = r.unit || 'days';
+                  const val = r.value != null ? r.value : r.offsetDays || 1;
+                  return (
+                    <Paper
+                      key={idx}
+                      variant="outlined"
+                      sx={{
+                        p: 1,
+                        px: 1.5,
+                        borderRadius: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 1.5,
+                        bgcolor: '#ffffff',
+                        borderColor: r.enabled ? '#cbd5e1' : '#e2e8f0',
+                        opacity: r.enabled ? 1 : 0.65,
+                        transition: 'all 0.15s ease',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
+                        <Checkbox
+                          checked={r.enabled}
+                          onChange={() => handleReminderToggle(idx)}
+                          size="small"
+                          sx={{
+                            p: 0.5,
+                            color: '#94a3b8',
+                            '&.Mui-checked': { color: '#2563eb' },
+                          }}
+                        />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <TextField
+                            type="number"
+                            size="small"
+                            value={val}
+                            onChange={(e) => handleReminderValueChange(idx, e.target.value)}
+                            disabled={!r.enabled}
+                            inputProps={{
+                              min: 1,
+                              max: unit === 'hours' ? 72 : 30,
+                              style: { width: 44, textAlign: 'center', padding: '4px 6px', fontWeight: 700, fontSize: '0.85rem' },
+                            }}
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                bgcolor: '#ffffff',
+                                color: '#0f172a',
+                                borderRadius: 1.5,
+                                '& fieldset': { borderColor: '#cbd5e1' },
+                                '&:hover fieldset': { borderColor: '#94a3b8' },
+                                '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+                              },
+                            }}
+                          />
+                          <Select
+                            size="small"
+                            value={unit}
+                            disabled={!r.enabled}
+                            onChange={(e) => handleReminderUnitChange(idx, e.target.value)}
+                            sx={{
+                              height: 32,
+                              fontSize: '0.85rem',
+                              fontWeight: 600,
+                              color: '#0f172a',
+                              bgcolor: '#ffffff',
+                              borderRadius: 1.5,
+                              '& fieldset': { borderColor: '#cbd5e1' },
+                              '&:hover fieldset': { borderColor: '#94a3b8' },
+                              '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+                            }}
+                            MenuProps={{
+                              PaperProps: {
+                                sx: {
+                                  bgcolor: '#ffffff',
+                                  color: '#0f172a',
+                                  boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                                  border: '1px solid #e2e8f0',
+                                  '& .MuiMenuItem-root': {
+                                    fontSize: '0.85rem',
+                                    color: '#0f172a',
+                                    '&:hover': { bgcolor: '#f1f5f9' },
+                                    '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
+                                  },
+                                },
+                              },
+                            }}
+                          >
+                            <MenuItem value="hours">hour{val > 1 ? 's' : ''}</MenuItem>
+                            <MenuItem value="days">day{val > 1 ? 's' : ''}</MenuItem>
+                          </Select>
+                          <Typography variant="body2" sx={{ color: '#475569', fontWeight: 500, fontSize: '0.85rem' }}>
+                            before service
+                          </Typography>
+                        </Box>
+                      </Box>
+
+                      <Tooltip title="Remove reminder">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemoveReminder(idx)}
+                          sx={{
+                            color: '#94a3b8',
+                            '&:hover': { color: '#ef4444', bgcolor: 'rgba(239, 68, 68, 0.08)' },
+                          }}
+                        >
+                          <DeleteIcon sx={{ fontSize: 17 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Paper>
+                  );
+                })}
+              </Box>
+            )}
           </Box>
         </DialogContent>
 

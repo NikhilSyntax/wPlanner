@@ -133,6 +133,18 @@ async function runTests() {
   assert.strictEqual(declinedAss.status, 'declined');
   console.log('✅ Test 2 Passed: Declining notification successfully updated event assignments to declined.');
 
+  // TEST 3: Admin blocked from responding
+  console.log('Test 3: Admin attempting to respond to notification is blocked...');
+  const mock3 = mockReqRes({
+    user: { userId: user._id.toString(), churchId: church._id.toString(), role: 'admin', isAdmin: true },
+    params: { id: notification._id.toString() },
+    body: { action: 'accept' },
+  });
+  await notificationController.respondToNotification(mock3.req, mock3.res);
+  const res3 = mock3.getResult();
+  assert.strictEqual(res3.status, 403, 'Admin response should be rejected with 403');
+  console.log('✅ Test 3 Passed: Admin properly blocked from responding to notifications with 403.');
+
   // Cleanup
   await Notification.deleteMany({ recipient: user._id });
   await Assignment.deleteMany({ user: user._id });

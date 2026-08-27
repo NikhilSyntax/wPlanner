@@ -139,6 +139,16 @@ function EventDetails() {
   const [optInError, setOptInError] = useState('');
   const [reviewingVolunteerId, setReviewingVolunteerId] = useState(null);
 
+  // Auto-open volunteer opt-in modal if routed from notification contribute button
+  useEffect(() => {
+    if (searchParams.get('volunteer') === 'true' && !isFullAdmin) {
+      setOptInDialogOpen(true);
+      const updatedParams = new URLSearchParams(searchParams);
+      updatedParams.delete('volunteer');
+      setSearchParams(updatedParams, { replace: true });
+    }
+  }, [searchParams, isFullAdmin, setSearchParams]);
+
   const handleOptInSubmit = async () => {
     try {
       setOptInSubmitting(true);
