@@ -177,7 +177,17 @@ async function runTests() {
 
   const ev2AfterWithdraw = await Event.findById(event2._id).lean();
   assert.strictEqual(ev2AfterWithdraw.assignments.length, 0, 'Volunteer should be removed after withdrawing');
-  console.log('✅ Test 5 Passed: Volunteer successfully withdrew opt-in.');
+  // TEST 6: Admin cannot volunteer to serve
+  console.log('Test 6: Admin attempting to volunteer to serve is blocked...');
+  const mockAdminOptIn = mockReqRes({
+    user: { userId: admin._id.toString(), churchId: churchA._id.toString(), isAdmin: true, role: 'Admin' },
+    params: { id: upcomingEvent._id.toString() },
+    body: { role: 'Guitarist' },
+  });
+  await eventController.optInToEvent(mockAdminOptIn.req, mockAdminOptIn.res);
+  const resAdminOptIn = mockAdminOptIn.getResult();
+  assert.strictEqual(resAdminOptIn.status, 403, 'Admin opt-in should return 403 Forbidden');
+  console.log('✅ Test 6 Passed: Admin properly blocked from volunteering to serve.');
 
   // Cleanup
   await Event.deleteMany({ churchId: { $in: [churchA._id, churchB._id] } });

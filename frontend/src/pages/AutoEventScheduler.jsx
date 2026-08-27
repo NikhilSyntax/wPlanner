@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import {
   Box, Typography, Card, CardContent, Button, Switch, IconButton, Chip,
@@ -105,6 +105,7 @@ function formatNextOccurrence(dateStr) {
 
 function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
   const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const isActive = schedule.isActive;
   const freqLabel = schedule.frequency === 'weekly'
     ? `Every ${DAY_NAMES[schedule.dayOfWeek]}`
@@ -120,17 +121,14 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
   return (
     <Card
       sx={{
-        background: isActive
-          ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.06) 0%, rgba(6, 182, 212, 0.04) 100%)'
-          : 'rgba(255, 255, 255, 0.02)',
-        border: `1px solid ${isActive ? 'rgba(37, 99, 235, 0.2)' : 'rgba(255, 255, 255, 0.06)'}`,
         borderRadius: 3,
         transition: 'all 0.2s ease',
         opacity: isActive ? 1 : 0.6,
+        border: isActive
+          ? `1px solid ${isDark ? 'rgba(37, 99, 235, 0.2)' : 'rgba(37, 99, 235, 0.15)'}`
+          : undefined,
         '&:hover': {
-          border: `1px solid ${isActive ? 'rgba(37, 99, 235, 0.4)' : 'rgba(255, 255, 255, 0.12)'}`,
           transform: 'translateY(-1px)',
-          boxShadow: isActive ? '0 8px 24px rgba(37, 99, 235, 0.12)' : 'none',
         },
       }}
     >
@@ -144,20 +142,21 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
                 alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 background: isActive
                   ? 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)'
-                  : 'rgba(255, 255, 255, 0.06)',
+                  : 'action.disabledBackground',
+                bgcolor: isActive ? undefined : 'action.hover',
                 boxShadow: isActive ? '0 4px 12px rgba(37, 99, 235, 0.3)' : 'none',
               }}
             >
-              <EventRepeatIcon sx={{ fontSize: 20, color: isActive ? '#fff' : '#64748b' }} />
+              <EventRepeatIcon sx={{ fontSize: 20, color: isActive ? '#fff' : 'text.disabled' }} />
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography
                 variant="subtitle1"
-                sx={{ fontWeight: 700, color: '#f8fafc', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               >
                 {schedule.name}
               </Typography>
-              <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 500, fontSize: '0.8rem' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500, fontSize: '0.8rem' }}>
                 {freqLabel} · {formatTime12(schedule.startTime)} – {formatTime12(schedule.endTime)}
               </Typography>
             </Box>
@@ -167,10 +166,7 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
               checked={isActive}
               onChange={() => onToggle(schedule._id)}
               size="small"
-              sx={{
-                '& .MuiSwitch-switchBase.Mui-checked': { color: '#3b82f6' },
-                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#3b82f6' },
-              }}
+              color="primary"
             />
           )}
         </Box>
@@ -183,8 +179,9 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
             size="small"
             sx={{
               height: 24, fontSize: '0.75rem', fontWeight: 600,
-              bgcolor: 'rgba(37, 99, 235, 0.12)', color: '#93c5fd',
-              '& .MuiChip-icon': { color: '#93c5fd' },
+              bgcolor: isDark ? 'rgba(37, 99, 235, 0.12)' : 'rgba(37, 99, 235, 0.08)',
+              color: 'primary.main',
+              '& .MuiChip-icon': { color: 'primary.main' },
             }}
           />
           {remindersLabel && (
@@ -194,8 +191,9 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
               size="small"
               sx={{
                 height: 24, fontSize: '0.75rem', fontWeight: 600,
-                bgcolor: 'rgba(245, 158, 11, 0.12)', color: '#fcd34d',
-                '& .MuiChip-icon': { color: '#fcd34d' },
+                bgcolor: isDark ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.08)',
+                color: 'warning.main',
+                '& .MuiChip-icon': { color: 'warning.main' },
               }}
             />
           )}
@@ -203,12 +201,9 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
             icon={isActive ? <CheckCircleIcon sx={{ fontSize: '14px !important' }} /> : <PauseCircleIcon sx={{ fontSize: '14px !important' }} />}
             label={isActive ? 'Active' : 'Disabled'}
             size="small"
-            sx={{
-              height: 24, fontSize: '0.75rem', fontWeight: 700,
-              bgcolor: isActive ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-              color: isActive ? '#6ee7b7' : '#fca5a5',
-              '& .MuiChip-icon': { color: isActive ? '#6ee7b7' : '#fca5a5' },
-            }}
+            color={isActive ? 'success' : 'error'}
+            variant="outlined"
+            sx={{ height: 24, fontSize: '0.75rem', fontWeight: 700 }}
           />
         </Box>
 
@@ -217,14 +212,14 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
           <Box
             sx={{
               p: 1.2, borderRadius: 2, mb: 1.5,
-              bgcolor: 'rgba(37, 99, 235, 0.06)',
-              border: '1px solid rgba(37, 99, 235, 0.1)',
+              bgcolor: isDark ? 'rgba(37, 99, 235, 0.06)' : 'rgba(37, 99, 235, 0.04)',
+              border: `1px solid ${isDark ? 'rgba(37, 99, 235, 0.1)' : 'rgba(37, 99, 235, 0.08)'}`,
             }}
           >
-            <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Next Event
             </Typography>
-            <Typography variant="body2" sx={{ color: '#e2e8f0', fontWeight: 600, mt: 0.3 }}>
+            <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 600, mt: 0.3 }}>
               {formatNextOccurrence(schedule.nextOccurrence)}
             </Typography>
           </Box>
@@ -238,9 +233,9 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
               startIcon={<EditIcon sx={{ fontSize: '16px !important' }} />}
               onClick={() => onEdit(schedule)}
               sx={{
-                fontSize: '0.8rem', fontWeight: 600, color: '#94a3b8',
+                fontSize: '0.8rem', fontWeight: 600, color: 'text.secondary',
                 textTransform: 'none', borderRadius: 2,
-                '&:hover': { color: '#e2e8f0', bgcolor: 'rgba(255, 255, 255, 0.06)' },
+                '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
               }}
             >
               Edit
@@ -249,10 +244,10 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
               size="small"
               startIcon={<DeleteIcon sx={{ fontSize: '16px !important' }} />}
               onClick={() => onDelete(schedule._id)}
+              color="error"
               sx={{
-                fontSize: '0.8rem', fontWeight: 600, color: '#ef4444',
+                fontSize: '0.8rem', fontWeight: 600,
                 textTransform: 'none', borderRadius: 2,
-                '&:hover': { bgcolor: 'rgba(239, 68, 68, 0.1)' },
               }}
             >
               Delete
@@ -269,6 +264,7 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
 export default function AutoEventScheduler() {
   const dispatch = useDispatch();
   const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { schedules, loading, error } = useSelector((s) => s.autoSchedules);
   const user = useSelector((s) => s.auth.user);
@@ -400,10 +396,10 @@ export default function AutoEventScheduler() {
             <AutoModeIcon sx={{ color: '#fff', fontSize: 24 }} />
           </Box>
           <Box>
-            <Typography variant="h5" sx={{ fontWeight: 800, color: '#f8fafc', lineHeight: 1.2 }}>
+            <Typography variant="h5" sx={{ fontWeight: 800, color: 'text.primary', lineHeight: 1.2 }}>
               Auto Event Scheduler
             </Typography>
-            <Typography variant="caption" sx={{ color: '#64748b', fontSize: '0.8rem', fontWeight: 500 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.8rem', fontWeight: 500 }}>
               Recurring services are created automatically
             </Typography>
           </Box>
@@ -418,11 +414,7 @@ export default function AutoEventScheduler() {
                 startIcon={<PlayArrowIcon />}
                 onClick={handleRunNow}
                 disabled={loading}
-                sx={{
-                  textTransform: 'none', fontWeight: 600, borderRadius: 2,
-                  borderColor: 'rgba(255, 255, 255, 0.12)', color: '#94a3b8',
-                  '&:hover': { borderColor: '#3b82f6', color: '#3b82f6' },
-                }}
+                sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2 }}
               >
                 Run Now
               </Button>
@@ -435,9 +427,6 @@ export default function AutoEventScheduler() {
               onClick={openCreate}
               sx={{
                 textTransform: 'none', fontWeight: 700, borderRadius: 2,
-                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
-                '&:hover': { background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' },
               }}
             >
               Add Schedule
@@ -457,7 +446,7 @@ export default function AutoEventScheduler() {
       {loading && schedules.length === 0 && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rounded" height={160} sx={{ borderRadius: 3, bgcolor: 'rgba(255, 255, 255, 0.04)' }} />
+            <Skeleton key={i} variant="rounded" height={160} sx={{ borderRadius: 3 }} />
           ))}
         </Box>
       )}
@@ -467,15 +456,14 @@ export default function AutoEventScheduler() {
         <Paper
           sx={{
             textAlign: 'center', py: 8, px: 3, borderRadius: 3,
-            bgcolor: 'rgba(255, 255, 255, 0.02)',
-            border: '1px dashed rgba(255, 255, 255, 0.1)',
+            border: `1px dashed ${theme.palette.divider}`,
           }}
         >
-          <ScheduleIcon sx={{ fontSize: 56, color: '#334155', mb: 2 }} />
-          <Typography variant="h6" sx={{ color: '#94a3b8', fontWeight: 700, mb: 1 }}>
+          <ScheduleIcon sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
+          <Typography variant="h6" sx={{ color: 'text.secondary', fontWeight: 700, mb: 1 }}>
             No Recurring Schedules Yet
           </Typography>
-          <Typography variant="body2" sx={{ color: '#64748b', mb: 3, maxWidth: 400, mx: 'auto' }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3, maxWidth: 400, mx: 'auto' }}>
             Create a recurring schedule and wPlanner will automatically generate events for your church services — no more manual creation every week.
           </Typography>
           {canManage && (
@@ -483,11 +471,7 @@ export default function AutoEventScheduler() {
               variant="contained"
               startIcon={<AddIcon />}
               onClick={openCreate}
-              sx={{
-                textTransform: 'none', fontWeight: 700, borderRadius: 2,
-                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
-              }}
+              sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}
             >
               Create Your First Schedule
             </Button>
@@ -522,26 +506,58 @@ export default function AutoEventScheduler() {
         PaperProps={{
           sx: {
             borderRadius: isMobile ? 0 : 3,
-            bgcolor: '#0f172a',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            bgcolor: '#ffffff',
+            color: '#0f172a',
+            backgroundImage: 'none',
+            boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+            border: '1px solid #e2e8f0',
           },
         }}
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EventRepeatIcon sx={{ color: '#3b82f6' }} />
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+        <DialogTitle
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            pb: 1.5,
+            pt: 2.5,
+            px: 3,
+            borderBottom: '1px solid #f1f5f9',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
+            <Box
+              sx={{
+                width: 36,
+                height: 36,
+                borderRadius: 2,
+                bgcolor: 'rgba(37, 99, 235, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <EventRepeatIcon sx={{ color: '#2563eb', fontSize: 20 }} />
+            </Box>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: '#0f172a', fontSize: '1.125rem' }}>
               {editingId ? 'Edit Schedule' : 'Create Auto Event'}
             </Typography>
           </Box>
-          <IconButton size="small" onClick={() => setDialogOpen(false)} sx={{ color: '#94a3b8' }}>
-            <CloseIcon />
+          <IconButton
+            size="small"
+            onClick={() => setDialogOpen(false)}
+            sx={{
+              color: '#64748b',
+              '&:hover': { color: '#0f172a', bgcolor: '#f1f5f9' },
+            }}
+          >
+            <CloseIcon fontSize="small" />
           </IconButton>
         </DialogTitle>
 
-        <DialogContent sx={{ pt: 2 }}>
+        <DialogContent sx={{ pt: 3, px: 3, pb: 1, bgcolor: '#ffffff' }}>
           {formError && (
-            <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+            <Alert severity="error" sx={{ mb: 2.5, borderRadius: 2 }}>
               {formError}
             </Alert>
           )}
@@ -554,7 +570,19 @@ export default function AutoEventScheduler() {
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="Sunday Worship"
-            sx={{ mb: 2.5 }}
+            sx={{
+              mb: 2.5,
+              '& .MuiOutlinedInput-root': {
+                bgcolor: '#ffffff',
+                color: '#0f172a',
+                borderRadius: 2,
+                '& fieldset': { borderColor: '#cbd5e1' },
+                '&:hover fieldset': { borderColor: '#94a3b8' },
+                '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+              },
+              '& .MuiInputLabel-root': { color: '#475569' },
+              '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
+            }}
           />
 
           {/* Description */}
@@ -566,18 +594,62 @@ export default function AutoEventScheduler() {
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             placeholder="Weekly worship service"
-            sx={{ mb: 2.5 }}
+            sx={{
+              mb: 2.5,
+              '& .MuiOutlinedInput-root': {
+                bgcolor: '#ffffff',
+                color: '#0f172a',
+                borderRadius: 2,
+                '& fieldset': { borderColor: '#cbd5e1' },
+                '&:hover fieldset': { borderColor: '#94a3b8' },
+                '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+              },
+              '& .MuiInputLabel-root': { color: '#475569' },
+              '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
+            }}
           />
 
-          <Divider sx={{ mb: 2.5, borderColor: 'rgba(255, 255, 255, 0.06)' }} />
+          <Divider sx={{ mb: 2.5, borderColor: '#f1f5f9' }} />
 
           {/* Frequency */}
-          <FormControl fullWidth sx={{ mb: 2.5 }}>
+          <FormControl
+            fullWidth
+            sx={{
+              mb: 2.5,
+              '& .MuiOutlinedInput-root': {
+                bgcolor: '#ffffff',
+                color: '#0f172a',
+                borderRadius: 2,
+                '& fieldset': { borderColor: '#cbd5e1' },
+                '&:hover fieldset': { borderColor: '#94a3b8' },
+                '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+              },
+              '& .MuiInputLabel-root': { color: '#475569' },
+              '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
+              '& .MuiSelect-icon': { color: '#64748b' },
+            }}
+          >
             <InputLabel>Repeat</InputLabel>
             <Select
               value={form.frequency}
               label="Repeat"
               onChange={(e) => setForm({ ...form, frequency: e.target.value })}
+              MenuProps={{
+                PaperProps: {
+                  sx: {
+                    bgcolor: '#ffffff',
+                    color: '#0f172a',
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                    border: '1px solid #e2e8f0',
+                    '& .MuiMenuItem-root': {
+                      fontSize: '0.875rem',
+                      color: '#0f172a',
+                      '&:hover': { bgcolor: '#f1f5f9' },
+                      '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
+                    },
+                  },
+                },
+              }}
             >
               <MenuItem value="weekly">Weekly</MenuItem>
               <MenuItem value="monthly">Monthly</MenuItem>
@@ -587,7 +659,18 @@ export default function AutoEventScheduler() {
           {/* Day Selection */}
           {form.frequency === 'weekly' && (
             <Box sx={{ mb: 2.5 }}>
-              <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600, mb: 1, display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.7rem' }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: '#475569',
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  mb: 1,
+                  display: 'block',
+                }}
+              >
                 Day of Week
               </Typography>
               <ToggleButtonGroup
@@ -595,17 +678,30 @@ export default function AutoEventScheduler() {
                 exclusive
                 onChange={(_, val) => { if (val !== null) setForm({ ...form, dayOfWeek: val }); }}
                 sx={{
-                  display: 'flex', flexWrap: 'wrap', gap: 0.5,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 0.8,
                   '& .MuiToggleButton-root': {
-                    borderRadius: '12px !important', border: '1px solid rgba(255,255,255,0.1)',
-                    color: '#94a3b8', fontSize: '0.8rem', fontWeight: 600,
-                    px: 1.5, py: 0.7, textTransform: 'none', flex: '1 1 auto', minWidth: 48,
+                    borderRadius: '10px !important',
+                    border: '1px solid #cbd5e1 !important',
+                    bgcolor: '#f8fafc',
+                    color: '#475569',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    px: 1.8,
+                    py: 0.8,
+                    textTransform: 'none',
+                    flex: '1 1 auto',
+                    minWidth: 48,
+                    transition: 'all 0.15s ease',
                     '&.Mui-selected': {
-                      bgcolor: 'rgba(37, 99, 235, 0.2)', color: '#60a5fa',
-                      border: '1px solid rgba(37, 99, 235, 0.5)',
-                      '&:hover': { bgcolor: 'rgba(37, 99, 235, 0.3)' },
+                      bgcolor: '#2563eb !important',
+                      color: '#ffffff !important',
+                      borderColor: '#2563eb !important',
+                      boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)',
+                      fontWeight: 700,
                     },
-                    '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.04)' },
+                    '&:hover': { bgcolor: '#f1f5f9', borderColor: '#94a3b8' },
                   },
                 }}
               >
@@ -618,9 +714,45 @@ export default function AutoEventScheduler() {
 
           {form.frequency === 'monthly' && (
             <Box sx={{ display: 'flex', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
-              <FormControl sx={{ flex: 1, minWidth: 140 }}>
+              <FormControl
+                sx={{
+                  flex: 1,
+                  minWidth: 140,
+                  '& .MuiOutlinedInput-root': {
+                    bgcolor: '#ffffff',
+                    color: '#0f172a',
+                    borderRadius: 2,
+                    '& fieldset': { borderColor: '#cbd5e1' },
+                    '&:hover fieldset': { borderColor: '#94a3b8' },
+                    '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+                  },
+                  '& .MuiInputLabel-root': { color: '#475569' },
+                  '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
+                  '& .MuiSelect-icon': { color: '#64748b' },
+                }}
+              >
                 <InputLabel>Week</InputLabel>
-                <Select value={form.weekOfMonth} label="Week" onChange={(e) => setForm({ ...form, weekOfMonth: e.target.value })}>
+                <Select
+                  value={form.weekOfMonth}
+                  label="Week"
+                  onChange={(e) => setForm({ ...form, weekOfMonth: e.target.value })}
+                  MenuProps={{
+                    PaperProps: {
+                      sx: {
+                        bgcolor: '#ffffff',
+                        color: '#0f172a',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                        border: '1px solid #e2e8f0',
+                        '& .MuiMenuItem-root': {
+                          fontSize: '0.875rem',
+                          color: '#0f172a',
+                          '&:hover': { bgcolor: '#f1f5f9' },
+                          '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
+                        },
+                      },
+                    },
+                  }}
+                >
                   <MenuItem value={1}>1st</MenuItem>
                   <MenuItem value={2}>2nd</MenuItem>
                   <MenuItem value={3}>3rd</MenuItem>
@@ -628,9 +760,45 @@ export default function AutoEventScheduler() {
                   <MenuItem value={5}>Last</MenuItem>
                 </Select>
               </FormControl>
-              <FormControl sx={{ flex: 1, minWidth: 140 }}>
+              <FormControl
+                sx={{
+                  flex: 1,
+                  minWidth: 140,
+                  '& .MuiOutlinedInput-root': {
+                    bgcolor: '#ffffff',
+                    color: '#0f172a',
+                    borderRadius: 2,
+                    '& fieldset': { borderColor: '#cbd5e1' },
+                    '&:hover fieldset': { borderColor: '#94a3b8' },
+                    '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+                  },
+                  '& .MuiInputLabel-root': { color: '#475569' },
+                  '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
+                  '& .MuiSelect-icon': { color: '#64748b' },
+                }}
+              >
                 <InputLabel>Day</InputLabel>
-                <Select value={form.dayOfWeek} label="Day" onChange={(e) => setForm({ ...form, dayOfWeek: e.target.value })}>
+                <Select
+                  value={form.dayOfWeek}
+                  label="Day"
+                  onChange={(e) => setForm({ ...form, dayOfWeek: e.target.value })}
+                  MenuProps={{
+                    PaperProps: {
+                      sx: {
+                        bgcolor: '#ffffff',
+                        color: '#0f172a',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                        border: '1px solid #e2e8f0',
+                        '& .MuiMenuItem-root': {
+                          fontSize: '0.875rem',
+                          color: '#0f172a',
+                          '&:hover': { bgcolor: '#f1f5f9' },
+                          '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
+                        },
+                      },
+                    },
+                  }}
+                >
                   {DAY_NAMES.map((day, i) => (
                     <MenuItem key={i} value={i}>{day}</MenuItem>
                   ))}
@@ -648,6 +816,18 @@ export default function AutoEventScheduler() {
               value={form.startTime}
               onChange={(e) => setForm({ ...form, startTime: e.target.value })}
               InputLabelProps={{ shrink: true }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  bgcolor: '#ffffff',
+                  color: '#0f172a',
+                  borderRadius: 2,
+                  '& fieldset': { borderColor: '#cbd5e1' },
+                  '&:hover fieldset': { borderColor: '#94a3b8' },
+                  '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+                },
+                '& .MuiInputLabel-root': { color: '#475569' },
+                '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
+              }}
             />
             <TextField
               label="End Time"
@@ -656,22 +836,106 @@ export default function AutoEventScheduler() {
               value={form.endTime}
               onChange={(e) => setForm({ ...form, endTime: e.target.value })}
               InputLabelProps={{ shrink: true }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  bgcolor: '#ffffff',
+                  color: '#0f172a',
+                  borderRadius: 2,
+                  '& fieldset': { borderColor: '#cbd5e1' },
+                  '&:hover fieldset': { borderColor: '#94a3b8' },
+                  '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+                },
+                '& .MuiInputLabel-root': { color: '#475569' },
+                '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
+              }}
             />
           </Box>
 
           {/* Event Type + Timezone */}
           <Box sx={{ display: 'flex', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
-            <FormControl sx={{ flex: 1, minWidth: 140 }}>
+            <FormControl
+              sx={{
+                flex: 1,
+                minWidth: 140,
+                '& .MuiOutlinedInput-root': {
+                  bgcolor: '#ffffff',
+                  color: '#0f172a',
+                  borderRadius: 2,
+                  '& fieldset': { borderColor: '#cbd5e1' },
+                  '&:hover fieldset': { borderColor: '#94a3b8' },
+                  '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+                },
+                '& .MuiInputLabel-root': { color: '#475569' },
+                '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
+                '& .MuiSelect-icon': { color: '#64748b' },
+              }}
+            >
               <InputLabel>Event Type</InputLabel>
-              <Select value={form.eventType} label="Event Type" onChange={(e) => setForm({ ...form, eventType: e.target.value })}>
+              <Select
+                value={form.eventType}
+                label="Event Type"
+                onChange={(e) => setForm({ ...form, eventType: e.target.value })}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      bgcolor: '#ffffff',
+                      color: '#0f172a',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                      border: '1px solid #e2e8f0',
+                      '& .MuiMenuItem-root': {
+                        fontSize: '0.875rem',
+                        color: '#0f172a',
+                        '&:hover': { bgcolor: '#f1f5f9' },
+                        '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
+                      },
+                    },
+                  },
+                }}
+              >
                 {EVENT_TYPES.map((t) => (
                   <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
                 ))}
               </Select>
             </FormControl>
-            <FormControl sx={{ flex: 1, minWidth: 140 }}>
+            <FormControl
+              sx={{
+                flex: 1,
+                minWidth: 140,
+                '& .MuiOutlinedInput-root': {
+                  bgcolor: '#ffffff',
+                  color: '#0f172a',
+                  borderRadius: 2,
+                  '& fieldset': { borderColor: '#cbd5e1' },
+                  '&:hover fieldset': { borderColor: '#94a3b8' },
+                  '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+                },
+                '& .MuiInputLabel-root': { color: '#475569' },
+                '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
+                '& .MuiSelect-icon': { color: '#64748b' },
+              }}
+            >
               <InputLabel>Timezone</InputLabel>
-              <Select value={form.timezone} label="Timezone" onChange={(e) => setForm({ ...form, timezone: e.target.value })}>
+              <Select
+                value={form.timezone}
+                label="Timezone"
+                onChange={(e) => setForm({ ...form, timezone: e.target.value })}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      bgcolor: '#ffffff',
+                      color: '#0f172a',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                      border: '1px solid #e2e8f0',
+                      '& .MuiMenuItem-root': {
+                        fontSize: '0.875rem',
+                        color: '#0f172a',
+                        '&:hover': { bgcolor: '#f1f5f9' },
+                        '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
+                      },
+                    },
+                  },
+                }}
+              >
                 {TIMEZONES.map((tz) => (
                   <MenuItem key={tz.value} value={tz.value}>{tz.label}</MenuItem>
                 ))}
@@ -679,15 +943,47 @@ export default function AutoEventScheduler() {
             </FormControl>
           </Box>
 
-          <Divider sx={{ mb: 2.5, borderColor: 'rgba(255, 255, 255, 0.06)' }} />
+          <Divider sx={{ mb: 2.5, borderColor: '#f1f5f9' }} />
 
           {/* Creation Offset */}
-          <FormControl fullWidth sx={{ mb: 2.5 }}>
+          <FormControl
+            fullWidth
+            sx={{
+              mb: 2.5,
+              '& .MuiOutlinedInput-root': {
+                bgcolor: '#ffffff',
+                color: '#0f172a',
+                borderRadius: 2,
+                '& fieldset': { borderColor: '#cbd5e1' },
+                '&:hover fieldset': { borderColor: '#94a3b8' },
+                '&.Mui-focused fieldset': { borderColor: '#2563eb' },
+              },
+              '& .MuiInputLabel-root': { color: '#475569' },
+              '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
+              '& .MuiSelect-icon': { color: '#64748b' },
+            }}
+          >
             <InputLabel>Create Event</InputLabel>
             <Select
               value={form.creationOffsetDays}
               label="Create Event"
               onChange={(e) => setForm({ ...form, creationOffsetDays: e.target.value })}
+              MenuProps={{
+                PaperProps: {
+                  sx: {
+                    bgcolor: '#ffffff',
+                    color: '#0f172a',
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                    border: '1px solid #e2e8f0',
+                    '& .MuiMenuItem-root': {
+                      fontSize: '0.875rem',
+                      color: '#0f172a',
+                      '&:hover': { bgcolor: '#f1f5f9' },
+                      '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
+                    },
+                  },
+                },
+              }}
             >
               {OFFSET_OPTIONS.map((o) => (
                 <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
@@ -697,7 +993,18 @@ export default function AutoEventScheduler() {
 
           {/* Reminders */}
           <Box sx={{ mb: 1 }}>
-            <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.7rem', mb: 1, display: 'block' }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: '#475569',
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                mb: 1,
+                display: 'block',
+              }}
+            >
               Reminders
             </Typography>
             {form.reminders.map((r, idx) => (
@@ -708,22 +1015,40 @@ export default function AutoEventScheduler() {
                     checked={r.enabled}
                     onChange={() => handleReminderToggle(idx)}
                     sx={{
-                      color: '#64748b',
-                      '&.Mui-checked': { color: '#3b82f6' },
+                      color: '#94a3b8',
+                      '&.Mui-checked': { color: '#2563eb' },
                     }}
                   />
                 }
                 label={`${r.offsetDays} day${r.offsetDays > 1 ? 's' : ''} before`}
-                sx={{ color: '#e2e8f0', '& .MuiFormControlLabel-label': { fontSize: '0.875rem' } }}
+                sx={{
+                  color: '#1e293b',
+                  '& .MuiFormControlLabel-label': { fontSize: '0.875rem', fontWeight: 500 },
+                }}
               />
             ))}
           </Box>
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+        <DialogActions
+          sx={{
+            px: 3,
+            py: 2,
+            gap: 1.5,
+            bgcolor: '#f8fafc',
+            borderTop: '1px solid #f1f5f9',
+          }}
+        >
           <Button
             onClick={() => setDialogOpen(false)}
-            sx={{ textTransform: 'none', fontWeight: 600, color: '#94a3b8', borderRadius: 2 }}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              color: '#64748b',
+              borderRadius: 2,
+              px: 2.5,
+              '&:hover': { bgcolor: '#e2e8f0', color: '#0f172a' },
+            }}
           >
             Cancel
           </Button>
@@ -732,10 +1057,17 @@ export default function AutoEventScheduler() {
             onClick={handleSubmit}
             disabled={loading}
             sx={{
-              textTransform: 'none', fontWeight: 700, borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 700,
+              borderRadius: 2,
               background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
-              px: 3,
+              color: '#ffffff',
+              boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
+              px: 3.5,
+              py: 1,
+              '&:hover': {
+                background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)',
+              },
             }}
           >
             {editingId ? 'Save Changes' : 'Create Schedule'}
@@ -748,24 +1080,46 @@ export default function AutoEventScheduler() {
         open={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
         PaperProps={{
-          sx: { borderRadius: 3, bgcolor: '#0f172a', border: '1px solid rgba(255,255,255,0.08)' },
+          sx: {
+            borderRadius: 3,
+            bgcolor: '#ffffff',
+            color: '#0f172a',
+            backgroundImage: 'none',
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+          },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 700 }}>Delete Schedule?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ color: '#94a3b8' }}>
+        <DialogTitle sx={{ fontWeight: 700, color: '#0f172a', pt: 2.5, px: 3 }}>
+          Delete Schedule?
+        </DialogTitle>
+        <DialogContent sx={{ px: 3 }}>
+          <Typography variant="body2" sx={{ color: '#475569' }}>
             This will permanently delete this recurring schedule. Events that have already been generated will not be affected.
           </Typography>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDeleteConfirm(null)} sx={{ textTransform: 'none', color: '#94a3b8' }}>
+        <DialogActions sx={{ px: 3, py: 2, bgcolor: '#f8fafc', borderTop: '1px solid #f1f5f9' }}>
+          <Button
+            onClick={() => setDeleteConfirm(null)}
+            sx={{
+              textTransform: 'none',
+              color: '#64748b',
+              fontWeight: 600,
+              '&:hover': { bgcolor: '#e2e8f0', color: '#0f172a' },
+            }}
+          >
             Cancel
           </Button>
           <Button
             variant="contained"
             color="error"
             onClick={() => handleDelete(deleteConfirm)}
-            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 700,
+              borderRadius: 2,
+              px: 2.5,
+            }}
           >
             Delete
           </Button>

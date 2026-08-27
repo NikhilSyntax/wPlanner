@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "node src/tests/ministryStats.test.js && node src/tests/volunteerOptIn.test.js && node src/tests/profileUpdate.test.js && node src/tests/notificationRespond.test.js && node src/tests/autoEventScheduler.test.js"
+    "test": "node src/tests/ministryStats.test.js && node src/tests/volunteerOptIn.test.js && node src/tests/profileUpdate.test.js && node src/tests/notificationRespond.test.js && node src/tests/autoEventScheduler.test.js && node src/tests/adminTeamRestriction.test.js"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",

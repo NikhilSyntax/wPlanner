@@ -17,7 +17,7 @@ const SETLIST_SONG_FIELDS = "title artist key timeSignature";
 async function populateEventDetails(eventId) {
   return Event.findById(eventId)
     .populate("team", "team.name members")
-    .populate("assignments.userId", "name email role")
+    .populate("assignments.userId", "name email role isAdmin")
     .populate("setlist", SETLIST_SONG_FIELDS);
 }
 
@@ -42,12 +42,19 @@ exports.getEvents = async (req, res) => {
     const events = await Event.find(filter)
       .populate("team", "team.name members")
       .populate("setlist", SETLIST_SONG_FIELDS)
-      .populate("assignments.userId", "name email role")
+      .populate("assignments.userId", "name email role isAdmin")
       .sort({ "schedule.start": 1 });
 
     const withTitles = events.map((doc) => {
       const obj = doc.toObject();
       obj.title = getEventDisplayTitle(obj);
+      if (Array.isArray(obj.assignments)) {
+        obj.assignments = obj.assignments.filter((a) => {
+          const u = a.userId || {};
+          const r = String(u.role || '').toLowerCase().trim();
+          return !u.isAdmin && r !== 'admin';
+        });
+      }
       return obj;
     });
 
@@ -75,6 +82,13 @@ exports.getEvent = async (req, res) => {
 
     const obj = event.toObject();
     obj.title = getEventDisplayTitle(obj);
+    if (Array.isArray(obj.assignments)) {
+      obj.assignments = obj.assignments.filter((a) => {
+        const u = a.userId || {};
+        const r = String(u.role || '').toLowerCase().trim();
+        return !u.isAdmin && r !== 'admin';
+      });
+    }
     res.json(obj);
   } catch (err) {
     console.error(err);
@@ -465,6 +479,13 @@ exports.addAssignment = async (req, res) => {
       });
     }
 
+    const assignRole = String(userToAssign.role || '').toLowerCase().trim();
+    if (userToAssign.isAdmin || assignRole === 'admin') {
+      return res.status(400).json({
+        message: "Admins cannot be added into a team.",
+      });
+    }
+
     const assignment = new Assignment({
       event: id,
       user: userId,
@@ -531,12 +552,16 @@ exports.setEventTeamFromRoster = async (req, res) => {
       seen.add(userId.toString());
 
       const u = await User.findById(userId)
-        .select("churchId approvalStatus role name")
+        .select("churchId approvalStatus role name isAdmin")
         .lean();
       if (!u || !u.churchId?.equals(event.churchId)) {
         continue;
       }
       if (u.approvalStatus && u.approvalStatus !== "approved") {
+        continue;
+      }
+      const uRole = String(u.role || '').toLowerCase().trim();
+      if (u.isAdmin || uRole === 'admin') {
         continue;
       }
 
@@ -786,7 +811,11 @@ exports.optInToEvent = async (req, res) => {
       return res.status(400).json({ message: "This event is already completed." });
     }
 
-    const userDoc = await User.findById(userId).select("role name email").lean();
+    const userDoc = await User.findById(userId).select("role name email isAdmin").lean();
+    const userRole = String(userDoc?.role || req.user?.role || '').toLowerCase().trim();
+    if (userDoc?.isAdmin || req.user?.isAdmin || userRole === 'admin') {
+      return res.status(403).json({ message: "Admins cannot volunteer to serve." });
+    }
     const assignedRole = (role && String(role).trim()) || userDoc?.role || "Volunteer";
 
     // Check if user is already assigned or opted in

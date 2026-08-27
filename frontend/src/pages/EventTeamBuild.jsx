@@ -72,7 +72,13 @@ function EventTeamBuild() {
         if (assignments && Array.isArray(assignments)) {
           setSelected(
             assignments
-              .filter((a) => a.status !== 'opt_in_pending')
+              .filter((a) => {
+                if (a.status === 'opt_in_pending') return false;
+                const userObj = a.userId || a.user || a.member || {};
+                const r = String(userObj.role || a.role || '').toLowerCase().trim();
+                if (userObj.isAdmin || r === 'admin') return false;
+                return true;
+              })
               .map((a) => {
                 const user = a.userId || a.user || a.member || {};
                 const idVal =
@@ -122,9 +128,12 @@ function EventTeamBuild() {
   const [selectedIsScrollable, setSelectedIsScrollable] = useState(false);
 
   const rosterAvailable = useMemo(() => {
-    const approved = churchMembers.filter(
-      (m) => !m.approvalStatus || m.approvalStatus === 'approved'
-    );
+    const approved = churchMembers.filter((m) => {
+      if (m.approvalStatus && m.approvalStatus !== 'approved') return false;
+      const r = String(m.role || '').toLowerCase().trim();
+      if (m.isAdmin || r === 'admin') return false;
+      return true;
+    });
     const selectedIds = new Set(selected.map((s) => s._id));
     return approved.filter((m) => {
       const mid = m._id?.toString?.() || String(m._id);

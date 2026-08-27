@@ -269,7 +269,14 @@ function EventDetails() {
       setSongs(bankSongs);
       setEvent(eventRes.data);
       if (eventRes.data.assignments) {
-        setTeamMembers(eventRes.data.assignments);
+        setTeamMembers(
+          eventRes.data.assignments.filter((a) => {
+            const userObj = a.userId || a.user || a.member || {};
+            const r = String(userObj.role || a.role || '').toLowerCase().trim();
+            if (userObj.isAdmin || r === 'admin') return false;
+            return true;
+          })
+        );
       }
       setSetlist(
         mergeSetlistWithBank(eventRes.data.setlist || [], bankSongs)
@@ -405,19 +412,41 @@ function EventDetails() {
   const canEdit = !isLocked;
 
   const currentUserId = user?.id || user?._id;
-  const activeTeamMembers = teamMembers.filter((m) => m.status !== 'opt_in_pending');
-  const optedInVolunteers = teamMembers.filter((m) => m.status === 'opt_in_pending');
-  const isUserInActiveRoster = activeTeamMembers.some((m) => {
-    const uId = m.userId?._id ? String(m.userId._id) : String(m.userId || m._id || '');
-    return uId && currentUserId && uId === String(currentUserId);
-  });
-  const userOptInAssignment = optedInVolunteers.find((m) => {
-    const uId = m.userId?._id ? String(m.userId._id) : String(m.userId || m._id || '');
-    return uId && currentUserId && uId === String(currentUserId);
-  });
-  const canOptIn = !isUserInActiveRoster && eventInfo.status !== 'completed' && eventInfo.status !== 'cancelled' && !isLocked;
-
   const userRoleStr = String(user?.role || '').toLowerCase().trim();
+  const isAdminUser = Boolean(
+    user?.isAdmin ||
+    userRoleStr === 'admin' ||
+    user?.role === 'Admin' ||
+    user?.roles?.some((r) => String(r).toLowerCase().trim() === 'admin')
+  );
+
+  const activeTeamMembers = teamMembers.filter((m) => {
+    if (m.status === 'opt_in_pending') return false;
+    const userObj = m.userId || m.user || m.member || {};
+    const r = String(userObj.role || m.role || '').toLowerCase().trim();
+    if (userObj.isAdmin || r === 'admin') return false;
+    return true;
+  });
+
+  const optedInVolunteers = teamMembers.filter((m) => {
+    if (m.status !== 'opt_in_pending') return false;
+    const userObj = m.userId || m.user || m.member || {};
+    const r = String(userObj.role || m.role || '').toLowerCase().trim();
+    if (userObj.isAdmin || r === 'admin') return false;
+    return true;
+  });
+
+  const isUserInActiveRoster = !isAdminUser && activeTeamMembers.some((m) => {
+    const uId = m.userId?._id ? String(m.userId._id) : String(m.userId || m._id || '');
+    return uId && currentUserId && uId === String(currentUserId);
+  });
+  const userOptInAssignment = !isAdminUser
+    ? optedInVolunteers.find((m) => {
+        const uId = m.userId?._id ? String(m.userId._id) : String(m.userId || m._id || '');
+        return uId && currentUserId && uId === String(currentUserId);
+      })
+    : null;
+  const canOptIn = !isAdminUser && !isUserInActiveRoster && eventInfo.status !== 'completed' && eventInfo.status !== 'cancelled' && !isLocked;
   const isWorshipLeader =
     userRoleStr === 'worship leader' ||
     userRoleStr === 'worship_leader' ||

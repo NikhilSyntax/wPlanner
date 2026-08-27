@@ -128,19 +128,28 @@ function Dashboard() {
   const nextUpcomingEvent = upcomingEvents[0];
   const recentEvents = events.slice(0, 3);
 
-  // Determine if the currently logged in user is part of the next upcoming event team / roster
+  // Determine if the currently logged in user is part of the next upcoming event team / roster (admins cannot be team members)
+  const isAdmin = Boolean(
+    user?.isAdmin ||
+    user?.role === 'Admin' ||
+    user?.role === 'admin' ||
+    user?.roles?.some((r) => String(r).toLowerCase().trim() === 'admin')
+  );
   const currentUserId = user?.id || user?._id;
-  const userAssignment = nextUpcomingEvent?.assignments?.find((a) => {
-    const aId = a.userId?._id ? String(a.userId._id) : String(a.userId || '');
-    return aId && currentUserId && aId === String(currentUserId);
-  });
+  const userAssignment = !isAdmin
+    ? nextUpcomingEvent?.assignments?.find((a) => {
+        const aId = a.userId?._id ? String(a.userId._id) : String(a.userId || '');
+        return aId && currentUserId && aId === String(currentUserId);
+      })
+    : null;
   const isUserInTeamMembers =
+    !isAdmin &&
     Array.isArray(nextUpcomingEvent?.team?.members) &&
     nextUpcomingEvent.team.members.some((m) => {
       const mId = m.userId?._id ? String(m.userId._id) : String(m.userId || '');
       return mId && currentUserId && mId === String(currentUserId);
     });
-  const isUserInTeam = Boolean(userAssignment || isUserInTeamMembers);
+  const isUserInTeam = !isAdmin && Boolean(userAssignment || isUserInTeamMembers);
 
   // Time to next event calculation
   let timeUntilNext = 'No upcoming events';
@@ -247,7 +256,6 @@ function Dashboard() {
         <Grid item xs={12} lg={8}>
           <Card
             sx={{
-              height: '100%',
               position: 'relative',
               overflow: 'hidden',
               borderRadius: 3,
@@ -266,11 +274,9 @@ function Dashboard() {
           >
             <Box
               sx={{
-                p: { xs: 1.75, sm: 2.25 },
+                p: { xs: 2, sm: 2.5 },
                 display: 'flex',
                 flexDirection: 'column',
-                height: '100%',
-                justifyContent: 'space-between',
               }}
             >
               <Box>
@@ -280,7 +286,7 @@ function Dashboard() {
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    mb: 1,
+                    mb: 1.25,
                     gap: 1,
                     flexWrap: 'wrap',
                   }}
@@ -389,19 +395,24 @@ function Dashboard() {
                     )}
 
                     {/* Compact 3-Column Stats Grid */}
-                    <Grid container spacing={1.25} sx={{ mb: 1.5 }}>
-                      <Grid item xs={12} sm={4}>
+                    <Grid container spacing={1.5} sx={{ my: 0.5, alignItems: 'stretch' }}>
+                      <Grid item xs={12} sm={4} sx={{ display: 'flex' }}>
                         <Paper
                           variant="outlined"
                           sx={{
-                            p: 1,
-                            px: 1.25,
+                            p: 1.25,
+                            px: 1.5,
                             borderRadius: 2,
+                            width: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            minHeight: 76,
                             borderColor: isUserInTeam ? 'rgba(16, 185, 129, 0.25)' : 'divider',
                             bgcolor: isUserInTeam ? 'rgba(255,255,255,0.7)' : 'background.paper',
                           }}
                         >
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.25 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.5 }}>
                             <ScheduleIcon sx={{ fontSize: 14, color: isUserInTeam ? '#059669' : 'text.secondary' }} />
                             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', fontWeight: 600 }}>
                               Date & Time
@@ -420,21 +431,29 @@ function Dashboard() {
                               })}
                             </Box>
                           </Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.72rem', mt: 0.2 }}>
+                            {timeUntilNext}
+                          </Typography>
                         </Paper>
                       </Grid>
 
-                      <Grid item xs={12} sm={4}>
+                      <Grid item xs={12} sm={4} sx={{ display: 'flex' }}>
                         <Paper
                           variant="outlined"
                           sx={{
-                            p: 1,
-                            px: 1.25,
+                            p: 1.25,
+                            px: 1.5,
                             borderRadius: 2,
+                            width: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            minHeight: 76,
                             borderColor: isUserInTeam ? 'rgba(16, 185, 129, 0.25)' : 'divider',
                             bgcolor: isUserInTeam ? 'rgba(255,255,255,0.7)' : 'background.paper',
                           }}
                         >
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.25 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.5 }}>
                             <GroupIcon sx={{ fontSize: 14, color: isUserInTeam ? '#059669' : 'text.secondary' }} />
                             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', fontWeight: 600 }}>
                               Assigned Team
@@ -451,30 +470,35 @@ function Dashboard() {
                               color: isUserInTeam ? '#059669' : 'text.secondary',
                               fontWeight: isUserInTeam ? 700 : 500,
                               fontSize: '0.72rem',
-                              mt: 0.1,
+                              mt: 0.2,
                             }}
                           >
                             {userAssignment?.role
                               ? `Your Role: ${userAssignment.role}`
                               : isUserInTeam
                               ? `Assigned in Roster`
-                              : `${nextUpcomingEvent.assignments?.length || 0} members assigned`}
+                              : `${(nextUpcomingEvent.assignments || []).filter((a) => !a.userId?.isAdmin && a.userId?.role !== 'Admin').length} members assigned`}
                           </Typography>
                         </Paper>
                       </Grid>
 
-                      <Grid item xs={12} sm={4}>
+                      <Grid item xs={12} sm={4} sx={{ display: 'flex' }}>
                         <Paper
                           variant="outlined"
                           sx={{
-                            p: 1,
-                            px: 1.25,
+                            p: 1.25,
+                            px: 1.5,
                             borderRadius: 2,
+                            width: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            minHeight: 76,
                             borderColor: isUserInTeam ? 'rgba(16, 185, 129, 0.25)' : 'divider',
                             bgcolor: isUserInTeam ? 'rgba(255,255,255,0.7)' : 'background.paper',
                           }}
                         >
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.25 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.5 }}>
                             <MusicNoteIcon sx={{ fontSize: 14, color: isUserInTeam ? '#059669' : 'text.secondary' }} />
                             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', fontWeight: 600 }}>
                               Setlist
@@ -483,7 +507,7 @@ function Dashboard() {
                           <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.8125rem', lineHeight: 1.2 }}>
                             {nextUpcomingEvent.setlist?.length || 0} Songs Selected
                           </Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.72rem', mt: 0.1 }}>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.72rem', mt: 0.2 }}>
                             Ready for rehearsal
                           </Typography>
                         </Paper>
@@ -694,7 +718,7 @@ function Dashboard() {
                       </Paper>
                     )}
 
-                    {!userAssignment && (
+                    {!isAdmin && !userAssignment && (
                       <Paper
                         variant="outlined"
                         sx={{
@@ -756,10 +780,12 @@ function Dashboard() {
                 <Box
                   sx={{
                     display: 'flex',
-                    gap: 1,
-                    pt: 1.25,
+                    gap: 1.5,
+                    pt: 2,
+                    mt: 2,
                     borderTop: '1px solid',
                     borderColor: isUserInTeam ? 'rgba(16, 185, 129, 0.2)' : 'divider',
+                    flexWrap: 'wrap',
                   }}
                 >
                   <Button
@@ -773,8 +799,8 @@ function Dashboard() {
                       textTransform: 'none',
                       fontWeight: 600,
                       fontSize: '0.8125rem',
-                      py: 0.6,
-                      px: 1.75,
+                      py: 0.65,
+                      px: 2,
                       whiteSpace: 'nowrap',
                     }}
                   >
@@ -790,8 +816,8 @@ function Dashboard() {
                       textTransform: 'none',
                       fontWeight: 600,
                       fontSize: '0.8125rem',
-                      py: 0.6,
-                      px: 1.75,
+                      py: 0.65,
+                      px: 2,
                       whiteSpace: 'nowrap',
                     }}
                   >

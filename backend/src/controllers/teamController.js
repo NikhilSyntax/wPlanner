@@ -83,13 +83,17 @@ exports.addMember = async (req, res) => {
       return res.status(403).json({ message: 'Cross-church access denied' });
     }
 
-    const user = await User.findById(userId).select('churchId approvalStatus').lean();
+    const user = await User.findById(userId).select('churchId approvalStatus isAdmin role').lean();
     if (!user) return res.status(404).json({ message: 'User not found' });
     if (!user.churchId?.equals(req.user.churchId)) {
       return res.status(403).json({ message: 'User is not in your church' });
     }
     if (user.approvalStatus !== 'approved') {
       return res.status(400).json({ message: 'User is not approved yet' });
+    }
+    const roleStr = String(user.role || '').toLowerCase().trim();
+    if (user.isAdmin || roleStr === 'admin') {
+      return res.status(400).json({ message: 'Admins cannot be added into a team.' });
     }
 
     const alreadyMember = team.members.some(

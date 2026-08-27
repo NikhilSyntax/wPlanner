@@ -39,7 +39,10 @@ function TeamDetails() {
     try {
       const res = await api.get('/church/members');
       setChurchMembers(
-        res.data.filter((member) => INSTRUMENT_ROLES.includes(member.role))
+        res.data.filter((member) => {
+          const r = String(member.role || '').toLowerCase().trim();
+          return INSTRUMENT_ROLES.includes(member.role) && !member.isAdmin && r !== 'admin';
+        })
       );
     } catch (err) {
       console.error(err);
