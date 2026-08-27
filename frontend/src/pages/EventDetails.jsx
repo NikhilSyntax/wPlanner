@@ -51,6 +51,8 @@ import {
   Check as CheckIcon,
   Close as CloseIcon,
   Cancel as CancelIcon,
+  VolunteerActivism as VolunteerActivismIcon,
+  HowToReg as HowToRegIcon,
 } from '@mui/icons-material';
 import api, { apiUrl } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -127,6 +129,78 @@ function EventDetails() {
   const [descDraft, setDescDraft] = useState(event?.description || '');
   const [saveMessage, setSaveMessage] = useState('');
   const [memberUpdatingId, setMemberUpdatingId] = useState(null);
+
+  // ----- Volunteer Opt-In ("Available to Serve") State -----
+  const [optInDialogOpen, setOptInDialogOpen] = useState(false);
+  const [optInRole, setOptInRole] = useState(user?.role || 'Volunteer');
+  const [optInNotes, setOptInNotes] = useState('');
+  const [optInSubmitting, setOptInSubmitting] = useState(false);
+  const [optInMessage, setOptInMessage] = useState('');
+  const [optInError, setOptInError] = useState('');
+  const [reviewingVolunteerId, setReviewingVolunteerId] = useState(null);
+
+  const handleOptInSubmit = async () => {
+    try {
+      setOptInSubmitting(true);
+      setOptInError('');
+      const res = await api.post(`/events/${id}/opt-in`, {
+        role: optInRole,
+        notes: optInNotes,
+      });
+      setEvent(res.data.event || res.data);
+      if (res.data.event?.assignments) {
+        setTeamMembers(res.data.event.assignments);
+      }
+      setOptInDialogOpen(false);
+      setOptInMessage('Thank you for volunteering! Church leaders have been notified.');
+      setTimeout(() => setOptInMessage(''), 5000);
+    } catch (err) {
+      setOptInError(err?.response?.data?.message || 'Failed to volunteer for this service');
+    } finally {
+      setOptInSubmitting(false);
+    }
+  };
+
+  const handleWithdrawOptIn = async () => {
+    try {
+      setOptInSubmitting(true);
+      const res = await api.delete(`/events/${id}/opt-in`);
+      setEvent(res.data.event || res.data);
+      if (res.data.event?.assignments) {
+        setTeamMembers(res.data.event.assignments);
+      }
+      setOptInMessage('Volunteer offer withdrawn.');
+      setTimeout(() => setOptInMessage(''), 4000);
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Failed to withdraw');
+    } finally {
+      setOptInSubmitting(false);
+    }
+  };
+
+  const handleReviewVolunteer = async (targetUserId, action, customRole) => {
+    try {
+      setReviewingVolunteerId(targetUserId);
+      const res = await api.post(`/events/${id}/opt-in/${targetUserId}/review`, {
+        action,
+        role: customRole,
+      });
+      setEvent(res.data.event || res.data);
+      if (res.data.event?.assignments) {
+        setTeamMembers(res.data.event.assignments);
+      }
+      setOptInMessage(
+        action === 'confirm'
+          ? 'Volunteer successfully confirmed into the active team roster!'
+          : 'Volunteer sign-up dismissed.'
+      );
+      setTimeout(() => setOptInMessage(''), 4000);
+    } catch (err) {
+      alert(err?.response?.data?.message || 'Failed to review volunteer');
+    } finally {
+      setReviewingVolunteerId(null);
+    }
+  };
 
   const handleMemberStatusUpdate = async (member, targetStatus) => {
     try {
@@ -320,6 +394,37 @@ function EventDetails() {
   const teamInfo = event.team;
   const isLocked = isEventLocked(event, user);
   const canEdit = !isLocked;
+
+  const currentUserId = user?.id || user?._id;
+  const activeTeamMembers = teamMembers.filter((m) => m.status !== 'opt_in_pending');
+  const optedInVolunteers = teamMembers.filter((m) => m.status === 'opt_in_pending');
+  const isUserInActiveRoster = activeTeamMembers.some((m) => {
+    const uId = m.userId?._id ? String(m.userId._id) : String(m.userId || m._id || '');
+    return uId && currentUserId && uId === String(currentUserId);
+  });
+  const userOptInAssignment = optedInVolunteers.find((m) => {
+    const uId = m.userId?._id ? String(m.userId._id) : String(m.userId || m._id || '');
+    return uId && currentUserId && uId === String(currentUserId);
+  });
+  const canOptIn = !isUserInActiveRoster && eventInfo.status !== 'completed' && eventInfo.status !== 'cancelled' && !isLocked;
+
+  const userRoleStr = String(user?.role || '').toLowerCase().trim();
+  const isWorshipLeader =
+    userRoleStr === 'worship leader' ||
+    userRoleStr === 'worship_leader' ||
+    userRoleStr === 'worshipleader' ||
+    user?.roles?.some((r) =>
+      ['worship leader', 'worship_leader', 'worshipleader'].includes(String(r).toLowerCase().trim())
+    );
+
+  const canReviewVolunteers = Boolean(
+    user?.isAdmin ||
+    user?.isSubAdmin ||
+    userRoleStr === 'admin' ||
+    userRoleStr === 'sub_admin' ||
+    userRoleStr === 'subadmin' ||
+    isWorshipLeader
+  );
 
   const startDate = new Date(scheduleInfo.start);
   const endDate = new Date(scheduleInfo.end);
@@ -634,107 +739,26 @@ function EventDetails() {
         </Box>
 
         {/* Right Side: Action Buttons */}
-        {canEdit && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1.25,
-              flexWrap: 'wrap',
-              pt: { xs: 1.5, md: 0 },
-              borderTop: { xs: '1px solid', md: 'none' },
-              borderColor: { xs: 'divider', md: 'transparent' },
-              justifyContent: { xs: 'flex-start', sm: 'flex-start', md: 'flex-end' },
-            }}
-          >
-            {isFullAdmin && (
-              <>
-                {eventInfo.status === 'draft' && (
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    size="small"
-                    startIcon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
-                    onClick={handleConfirmEvent}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      fontSize: '0.8125rem',
-                      height: 34,
-                      px: 2,
-                      boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
-                    }}
-                  >
-                    Confirm Event
-                  </Button>
-                )}
-
-                {eventInfo.status === 'published' && (
-                  <>
-                    <Button
-                      variant="outlined"
-                      color="warning"
-                      size="small"
-                      onClick={handleUnconfirmEvent}
-                      sx={{
-                        borderRadius: 2,
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '0.8125rem',
-                        height: 34,
-                        px: 1.75,
-                      }}
-                    >
-                      Unconfirm Event
-                    </Button>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      size="small"
-                      startIcon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
-                      onClick={handleMarkCompleted}
-                      sx={{
-                        borderRadius: 2,
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '0.8125rem',
-                        height: 34,
-                        px: 2,
-                        boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
-                      }}
-                    >
-                      Mark Completed
-                    </Button>
-                  </>
-                )}
-
-                {eventInfo.status === 'completed' && (
-                  <Button
-                    variant="outlined"
-                    color="warning"
-                    size="small"
-                    onClick={handleUndoCompleted}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      fontSize: '0.8125rem',
-                      height: 34,
-                      px: 2,
-                    }}
-                  >
-                    Undo Completed
-                  </Button>
-                )}
-              </>
-            )}
-
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.25,
+            flexWrap: 'wrap',
+            pt: { xs: 1.5, md: 0 },
+            borderTop: { xs: '1px solid', md: 'none' },
+            borderColor: { xs: 'divider', md: 'transparent' },
+            justifyContent: { xs: 'flex-start', sm: 'flex-start', md: 'flex-end' },
+          }}
+        >
+          {/* Volunteer Self-Opt-In Buttons */}
+          {canOptIn && !userOptInAssignment && (
             <Button
-              variant="outlined"
-              color="error"
+              variant="contained"
+              color="secondary"
               size="small"
-              onClick={() => setDeleteDialogOpen(true)}
+              startIcon={<VolunteerActivismIcon sx={{ fontSize: 16 }} />}
+              onClick={() => setOptInDialogOpen(true)}
               sx={{
                 borderRadius: 2,
                 textTransform: 'none',
@@ -742,12 +766,146 @@ function EventDetails() {
                 fontSize: '0.8125rem',
                 height: 34,
                 px: 2,
+                boxShadow: '0 2px 8px rgba(147, 51, 234, 0.25)',
               }}
             >
-              Delete
+              Volunteer to Serve
             </Button>
-          </Box>
-        )}
+          )}
+
+          {userOptInAssignment && (
+            <>
+              <Chip
+                icon={<HowToRegIcon sx={{ fontSize: '14px !important' }} />}
+                label={`Opted In (${userOptInAssignment.role || 'Volunteer'})`}
+                color="secondary"
+                variant="outlined"
+                sx={{ fontWeight: 600, fontSize: '0.78rem', height: 32 }}
+              />
+              <Button
+                variant="outlined"
+                color="error"
+                size="small"
+                onClick={handleWithdrawOptIn}
+                disabled={optInSubmitting}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.8125rem',
+                  height: 34,
+                  px: 1.5,
+                }}
+              >
+                Withdraw Offer
+              </Button>
+            </>
+          )}
+
+          {canEdit && (
+            <>
+              {isFullAdmin && (
+                <>
+                  {eventInfo.status === 'draft' && (
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      size="small"
+                      startIcon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
+                      onClick={handleConfirmEvent}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.8125rem',
+                        height: 34,
+                        px: 2,
+                        boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
+                      }}
+                    >
+                      Confirm Event
+                    </Button>
+                  )}
+
+                  {eventInfo.status === 'published' && (
+                    <>
+                      <Button
+                        variant="outlined"
+                        color="warning"
+                        size="small"
+                        onClick={handleUnconfirmEvent}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          fontSize: '0.8125rem',
+                          height: 34,
+                          px: 1.75,
+                        }}
+                      >
+                        Unconfirm Event
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        startIcon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
+                        onClick={handleMarkCompleted}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          fontSize: '0.8125rem',
+                          height: 34,
+                          px: 2,
+                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
+                        }}
+                      >
+                        Mark Completed
+                      </Button>
+                    </>
+                  )}
+
+                  {eventInfo.status === 'completed' && (
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      size="small"
+                      onClick={handleUndoCompleted}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.8125rem',
+                        height: 34,
+                        px: 2,
+                      }}
+                    >
+                      Undo Completed
+                    </Button>
+                  )}
+                </>
+              )}
+
+              <Button
+                variant="outlined"
+                color="error"
+                size="small"
+                onClick={() => setDeleteDialogOpen(true)}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.8125rem',
+                  height: 34,
+                  px: 2,
+                }}
+              >
+                Delete
+              </Button>
+            </>
+          )}
+        </Box>
       </Paper>
 
       {isLocked && (
@@ -1255,6 +1413,259 @@ function EventDetails() {
             </CardContent>
           </Card>
 
+          {optInMessage && (
+            <Alert severity="success" sx={{ mb: 2.5 }} onClose={() => setOptInMessage('')}>
+              {optInMessage}
+            </Alert>
+          )}
+
+          {/* Volunteer's Personal Opt-In Status Card */}
+          {userOptInAssignment && (
+            <Paper
+              variant="outlined"
+              sx={{
+                p: 2,
+                mb: 2.5,
+                borderRadius: 2.5,
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(147, 51, 234, 0.12)'
+                    : 'rgba(147, 51, 234, 0.05)',
+                borderColor: 'secondary.main',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 1.5,
+              }}
+            >
+              <Box display="flex" alignItems="center" gap={1.5}>
+                <Avatar sx={{ bgcolor: 'secondary.main', width: 40, height: 40 }}>
+                  <VolunteerActivismIcon sx={{ fontSize: 22 }} />
+                </Avatar>
+                <Box>
+                  <Typography variant="subtitle2" fontWeight={700}>
+                    You offered to serve as {userOptInAssignment.role || 'Volunteer'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Status: Pending leader / organizer confirmation.
+                    {userOptInAssignment.notes && ` (Note: "${userOptInAssignment.notes}")`}
+                  </Typography>
+                </Box>
+              </Box>
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                onClick={handleWithdrawOptIn}
+                disabled={optInSubmitting}
+                sx={{ textTransform: 'none', borderRadius: 1.5, fontWeight: 600 }}
+              >
+                Withdraw Offer
+              </Button>
+            </Paper>
+          )}
+
+          {/* Available Volunteers (Opted-In) Review Section for Admins, Sub-Admins, and Worship Leaders only */}
+          {canReviewVolunteers && !isLocked && optedInVolunteers.length > 0 && (
+            <Card
+              sx={{
+                borderRadius: 3,
+                mb: 3,
+                border: '1px solid rgba(245, 158, 11, 0.4)',
+                bgcolor: (theme) =>
+                  theme.palette.mode === 'dark'
+                    ? 'rgba(245, 158, 11, 0.05)'
+                    : 'rgba(245, 158, 11, 0.02)',
+              }}
+            >
+              <CardContent sx={{ p: 3 }}>
+                <Box
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  mb={2}
+                  flexWrap="wrap"
+                  gap={1}
+                >
+                  <Box display="flex" alignItems="center" gap={1.5}>
+                    <VolunteerActivismIcon sx={{ color: '#d97706' }} />
+                    <Typography
+                      variant="h6"
+                      sx={{ fontWeight: 700, color: '#d97706', fontSize: '1.05rem' }}
+                    >
+                      Available Volunteers ({optedInVolunteers.length})
+                    </Typography>
+                    <Chip
+                      label="Opted-In Members"
+                      size="small"
+                      sx={{
+                        bgcolor: 'rgba(245, 158, 11, 0.15)',
+                        color: '#d97706',
+                        fontWeight: 700,
+                        fontSize: '0.72rem',
+                      }}
+                    />
+                  </Box>
+                </Box>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 2, fontSize: '0.85rem' }}
+                >
+                  The following church members have offered to serve in this event. Confirm them into the active team roster or dismiss.
+                </Typography>
+
+                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+                  <Table size="small">
+                    <TableHead
+                      sx={{
+                        bgcolor: (theme) =>
+                          theme.palette.mode === 'dark'
+                            ? 'rgba(255,255,255,0.05)'
+                            : '#fffbeb',
+                      }}
+                    >
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', py: 1.25 }}>
+                          Volunteer
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', py: 1.25 }}>
+                          Offered Role
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', py: 1.25 }}>
+                          Notes
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            fontWeight: 700,
+                            fontSize: '0.8125rem',
+                            py: 1.25,
+                            textAlign: 'right',
+                          }}
+                        >
+                          Actions
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {optedInVolunteers.map((vol, idx) => {
+                        const vUserId = vol.userId?._id
+                          ? String(vol.userId._id)
+                          : String(vol.userId || vol._id || '');
+                        const isReviewing = reviewingVolunteerId === vUserId;
+                        return (
+                          <TableRow key={idx} hover>
+                            <TableCell sx={{ py: 1.25 }}>
+                              <Box display="flex" alignItems="center" gap={1.25}>
+                                <Avatar
+                                  sx={{
+                                    width: 32,
+                                    height: 32,
+                                    fontSize: '0.8rem',
+                                    fontWeight: 700,
+                                    bgcolor: '#d97706',
+                                  }}
+                                >
+                                  {(vol.userId?.name || vol.name || 'V')
+                                    .charAt(0)
+                                    .toUpperCase()}
+                                </Avatar>
+                                <Box>
+                                  <Typography variant="body2" fontWeight={600}>
+                                    {vol.userId?.name || vol.name || 'Volunteer'}
+                                  </Typography>
+                                  {vol.userId?.email && (
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                      display="block"
+                                      sx={{ fontSize: '0.72rem' }}
+                                    >
+                                      {vol.userId.email}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              </Box>
+                            </TableCell>
+                            <TableCell sx={{ py: 1.25 }}>
+                              <Chip
+                                label={vol.role || 'Volunteer'}
+                                size="small"
+                                color="secondary"
+                                variant="outlined"
+                                sx={{ fontWeight: 700, fontSize: '0.75rem', height: 24 }}
+                              />
+                            </TableCell>
+                            <TableCell sx={{ py: 1.25 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                {vol.notes || '—'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell sx={{ py: 1.25, textAlign: 'right' }}>
+                              <Box
+                                display="inline-flex"
+                                alignItems="center"
+                                gap={1}
+                                justifyContent="flex-end"
+                              >
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  color="success"
+                                  startIcon={
+                                    isReviewing ? (
+                                      <CircularProgress size={12} color="inherit" />
+                                    ) : (
+                                      <CheckIcon sx={{ fontSize: 13 }} />
+                                    )
+                                  }
+                                  onClick={() =>
+                                    handleReviewVolunteer(vUserId, 'confirm', vol.role)
+                                  }
+                                  disabled={isReviewing}
+                                  sx={{
+                                    textTransform: 'none',
+                                    fontWeight: 700,
+                                    fontSize: '0.75rem',
+                                    py: 0.4,
+                                    px: 1.2,
+                                    borderRadius: 1.5,
+                                  }}
+                                >
+                                  Confirm to Team
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="error"
+                                  onClick={() =>
+                                    handleReviewVolunteer(vUserId, 'decline')
+                                  }
+                                  disabled={isReviewing}
+                                  sx={{
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                    fontSize: '0.75rem',
+                                    py: 0.4,
+                                    px: 1,
+                                    borderRadius: 1.5,
+                                  }}
+                                >
+                                  Dismiss
+                                </Button>
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Team Members */}
           <Card sx={{ borderRadius: 3 }}>
             <CardContent sx={{ p: 3 }}>
@@ -1262,7 +1673,7 @@ function EventDetails() {
                 <Box display="flex" alignItems="center" gap={2}>
                   <GroupIcon color="primary" />
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Team Members ({teamMembers.length})
+                    Team Members ({activeTeamMembers.length})
                   </Typography>
                 </Box>
                 {canEdit && (
@@ -1278,7 +1689,7 @@ function EventDetails() {
                 )}
               </Box>
 
-              {teamMembers.length > 0 ? (
+              {activeTeamMembers.length > 0 ? (
                 <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                   <Table size="small">
                     <TableHead sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : '#f8fafc' }}>
@@ -1290,7 +1701,7 @@ function EventDetails() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {teamMembers.map((member, idx) => {
+                      {activeTeamMembers.map((member, idx) => {
                         const rawStatus = member.status ? String(member.status).toLowerCase() : 'pending';
                         const isApproved = rawStatus === 'accepted' || rawStatus === 'confirmed' || rawStatus === 'approved';
                         const isDeclined = rawStatus === 'declined' || rawStatus === 'rejected' || rawStatus === 'not_available';
@@ -1545,6 +1956,35 @@ function EventDetails() {
                     Undo Completed
                   </Button>
                 )}
+                {canOptIn && !userOptInAssignment && (
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    startIcon={<VolunteerActivismIcon />}
+                    onClick={() => setOptInDialogOpen(true)}
+                    fullWidth
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      boxShadow: '0 2px 8px rgba(147, 51, 234, 0.25)',
+                    }}
+                  >
+                    Volunteer to Serve
+                  </Button>
+                )}
+                {userOptInAssignment && (
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={handleWithdrawOptIn}
+                    disabled={optInSubmitting}
+                    fullWidth
+                    sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+                  >
+                    Withdraw Volunteer Offer
+                  </Button>
+                )}
                 <Button
                   variant="outlined"
                   startIcon={<GroupIcon />}
@@ -1622,6 +2062,83 @@ function EventDetails() {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Volunteer Opt-In Dialog */}
+      <Dialog
+        open={optInDialogOpen}
+        onClose={() => !optInSubmitting && setOptInDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3 } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+          <Avatar sx={{ bgcolor: 'secondary.main', width: 36, height: 36 }}>
+            <VolunteerActivismIcon sx={{ fontSize: 20 }} />
+          </Avatar>
+          <Box>
+            <Typography variant="h6" fontWeight={700}>
+              Volunteer to Serve
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Offer to participate in this service
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {optInError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {optInError}
+            </Alert>
+          )}
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
+            Let church leadership know you are available and willing to serve in{' '}
+            <strong>{getEventDisplayTitle(event)}</strong>.
+          </Typography>
+          <Box display="flex" flexDirection="column" gap={2}>
+            <TextField
+              label="Preferred Role / Position"
+              value={optInRole}
+              onChange={(e) => setOptInRole(e.target.value)}
+              placeholder="e.g. Lead Vocals, Acoustic Guitar, Audio Engineer, Usher"
+              fullWidth
+              required
+              size="small"
+              helperText="Specify the role you'd like to serve in"
+            />
+            <TextField
+              label="Optional Notes / Availability"
+              value={optInNotes}
+              onChange={(e) => setOptInNotes(e.target.value)}
+              placeholder="e.g. Available for rehearsal from 8:30 AM"
+              fullWidth
+              multiline
+              rows={2}
+              size="small"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setOptInDialogOpen(false)} disabled={optInSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleOptInSubmit}
+            disabled={optInSubmitting || !optInRole.trim()}
+            startIcon={
+              optInSubmitting ? (
+                <CircularProgress size={14} color="inherit" />
+              ) : (
+                <VolunteerActivismIcon />
+              )
+            }
+            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700 }}
+          >
+            {optInSubmitting ? 'Submitting...' : 'Offer to Serve'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog

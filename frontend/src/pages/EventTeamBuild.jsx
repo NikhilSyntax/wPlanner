@@ -71,16 +71,18 @@ function EventTeamBuild() {
           evRes.data?.assignments;
         if (assignments && Array.isArray(assignments)) {
           setSelected(
-            assignments.map((a) => {
-              const user = a.userId || a.user || a.member || {};
-              const idVal =
-                user?._id?.toString?.() || String(user) || String(a.userId);
-              return {
-                _id: idVal,
-                name: user?.name || user?.email || a.name || 'Unknown',
-                role: a.role || 'Member',
-              };
-            })
+            assignments
+              .filter((a) => a.status !== 'opt_in_pending')
+              .map((a) => {
+                const user = a.userId || a.user || a.member || {};
+                const idVal =
+                  user?._id?.toString?.() || String(user) || String(a.userId);
+                return {
+                  _id: idVal,
+                  name: user?.name || user?.email || a.name || 'Unknown',
+                  role: a.role || 'Member',
+                };
+              })
           );
         }
       } catch (err) {

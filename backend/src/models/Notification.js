@@ -12,6 +12,7 @@ const notificationSchema = new mongoose.Schema({
       'system',
       'event_draft',
       'event_confirmed',
+      'volunteer_opt_in',
     ],
     required: true,
   },

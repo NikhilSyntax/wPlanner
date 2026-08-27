@@ -765,3 +765,220 @@ exports.triggerEventReminder = async (req, res) => {
     res.status(500).json({ message: "Failed to dispatch reminder" });
   }
 };
+
+// Volunteer self-opt-in for an event ("Available to serve")
+exports.optInToEvent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role, notes } = req.body;
+    const userId = req.user.userId;
+
+    const event = await Event.findOne({
+      _id: id,
+      churchId: req.user.churchId,
+    });
+    if (!event) return res.status(404).json({ message: "Event not found" });
+
+    if (event.event?.status === 'cancelled') {
+      return res.status(400).json({ message: "Cannot volunteer for a cancelled event." });
+    }
+    if (event.event?.status === 'completed') {
+      return res.status(400).json({ message: "This event is already completed." });
+    }
+
+    const userDoc = await User.findById(userId).select("role name email").lean();
+    const assignedRole = (role && String(role).trim()) || userDoc?.role || "Volunteer";
+
+    // Check if user is already assigned or opted in
+    let existingIndex = event.assignments.findIndex((a) => {
+      const aUid = a.userId?._id ? a.userId._id.toString() : a.userId?.toString();
+      return aUid === userId.toString();
+    });
+
+    if (existingIndex !== -1) {
+      const existingStatus = event.assignments[existingIndex].status;
+      if (existingStatus === 'accepted') {
+        return res.status(400).json({ message: "You are already confirmed in the roster for this event." });
+      }
+      // If pending, assigned, or opt_in_pending, update preference
+      event.assignments[existingIndex].role = assignedRole;
+      event.assignments[existingIndex].status = 'opt_in_pending';
+      if (notes) event.assignments[existingIndex].notes = notes;
+    } else {
+      event.assignments.push({
+        userId,
+        role: assignedRole,
+        status: 'opt_in_pending',
+        notes: notes || undefined,
+      });
+    }
+
+    event.updatedAt = new Date();
+    await event.save();
+
+    // Sync Assignment collection
+    await Assignment.findOneAndUpdate(
+      { event: event._id, user: userId },
+      {
+        status: 'opt_in_pending',
+        role: assignedRole,
+        notes: notes || undefined,
+        updatedAt: Date.now(),
+        $setOnInsert: { assignedBy: userId },
+      },
+      { upsert: true, new: true }
+    );
+
+    // Notify event creator / church admins asynchronously
+    (async () => {
+      try {
+        const admins = await User.find({
+          churchId: req.user.churchId,
+          _id: { $ne: userId },
+          $or: [{ isAdmin: true }, { isSubAdmin: true }, { role: { $in: ['Admin', 'Sub-Admin', 'Worship Leader'] } }],
+        }).select('_id').lean();
+
+        const eventTitle = getEventDisplayTitle(event);
+        for (const admin of admins) {
+          sendNotification({
+            recipientId: admin._id,
+            senderId: userId,
+            type: 'volunteer_opt_in',
+            title: 'Volunteer Available to Serve 🙋',
+            message: `${userDoc?.name || 'A volunteer'} offered to serve as ${assignedRole} for "${eventTitle}".`,
+            link: `/events/${event._id}`,
+            eventId: event._id,
+          }).catch((err) => console.warn('[optIn] Notification error:', err.message));
+        }
+      } catch (notifyErr) {
+        console.error('[optIn] Admin notification error:', notifyErr);
+      }
+    })();
+
+    const populated = await populateEventDetails(event._id);
+    res.json({
+      success: true,
+      message: "You have offered to serve! The leader has been notified.",
+      event: populated,
+    });
+  } catch (err) {
+    console.error("[EventController] Error in optInToEvent:", err);
+    res.status(500).json({ message: "Failed to opt in" });
+  }
+};
+
+// Volunteer withdraws their self-opt-in request
+exports.withdrawOptIn = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.userId;
+
+    const event = await Event.findOne({
+      _id: id,
+      churchId: req.user.churchId,
+    });
+    if (!event) return res.status(404).json({ message: "Event not found" });
+
+    // Remove from event.assignments if status is 'opt_in_pending'
+    event.assignments = event.assignments.filter((a) => {
+      const aUid = a.userId?._id ? a.userId._id.toString() : a.userId?.toString();
+      if (aUid === userId.toString()) {
+        return a.status !== 'opt_in_pending';
+      }
+      return true;
+    });
+
+    event.updatedAt = new Date();
+    await event.save();
+
+    await Assignment.deleteMany({ event: event._id, user: userId, status: 'opt_in_pending' });
+
+    const populated = await populateEventDetails(event._id);
+    res.json({
+      success: true,
+      message: "Opt-in withdrawn.",
+      event: populated,
+    });
+  } catch (err) {
+    console.error("[EventController] Error in withdrawOptIn:", err);
+    res.status(500).json({ message: "Failed to withdraw opt-in" });
+  }
+};
+
+// Leader / Admin confirms or declines an opted-in volunteer into active team roster
+exports.reviewOptInVolunteer = async (req, res) => {
+  try {
+    const { id, userId: targetUserId } = req.params;
+    const { action, role } = req.body; // action: 'confirm' (or 'accept') vs 'decline' (or 'dismiss')
+
+    const isPrivileged = req.user.isAdmin || req.user.isSubAdmin || ['worship leader', 'team_leader', 'pastor', 'admin'].includes(String(req.user.role).toLowerCase());
+    if (!isPrivileged) {
+      return res.status(403).json({ message: "Only team leaders and administrators can review volunteers." });
+    }
+
+    const event = await Event.findOne({
+      _id: id,
+      churchId: req.user.churchId,
+    });
+    if (!event) return res.status(404).json({ message: "Event not found" });
+
+    const memberIndex = event.assignments.findIndex((a) => {
+      const aUid = a.userId?._id ? a.userId._id.toString() : a.userId?.toString();
+      return aUid === targetUserId.toString();
+    });
+
+    if (memberIndex === -1) {
+      return res.status(404).json({ message: "Volunteer not found in event sign-ups." });
+    }
+
+    const isConfirm = action === 'confirm' || action === 'accept' || action === 'accepted';
+
+    if (isConfirm) {
+      const assignedRole = role || event.assignments[memberIndex].role || "Volunteer";
+      event.assignments[memberIndex].status = 'accepted';
+      event.assignments[memberIndex].role = assignedRole;
+
+      await Assignment.findOneAndUpdate(
+        { event: event._id, user: targetUserId },
+        {
+          status: 'accepted',
+          role: assignedRole,
+          assignedBy: req.user.userId,
+          updatedAt: Date.now(),
+        },
+        { upsert: true, new: true }
+      );
+
+      // Notify the volunteer
+      const eventTitle = getEventDisplayTitle(event);
+      sendNotification({
+        recipientId: targetUserId,
+        senderId: req.user.userId,
+        type: 'assignment',
+        title: 'Volunteer Request Confirmed! 🎉',
+        message: `You have been confirmed as ${assignedRole} for "${eventTitle}".`,
+        link: `/events/${event._id}`,
+        eventId: event._id,
+        actionStatus: 'accepted',
+        assignmentRole: assignedRole,
+      }).catch((err) => console.warn('[reviewOptIn] Notification error:', err.message));
+    } else {
+      // Declined / dismissed -> remove from assignments or mark declined
+      event.assignments.splice(memberIndex, 1);
+      await Assignment.deleteMany({ event: event._id, user: targetUserId });
+    }
+
+    event.updatedAt = new Date();
+    await event.save();
+
+    const populated = await populateEventDetails(event._id);
+    res.json({
+      success: true,
+      message: isConfirm ? "Volunteer confirmed into roster!" : "Volunteer sign-up dismissed.",
+      event: populated,
+    });
+  } catch (err) {
+    console.error("[EventController] Error in reviewOptInVolunteer:", err);
+    res.status(500).json({ message: "Failed to review volunteer" });
+  }
+};

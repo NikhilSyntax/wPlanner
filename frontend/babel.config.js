@@ -3,4 +3,15 @@ module.exports = {
     '@babel/preset-env',
     ['@babel/preset-react', { runtime: 'automatic' }],
   ],
+  plugins: [
+    function () {
+      return {
+        visitor: {
+          MetaProperty(path) {
+            path.replaceWithSourceString('({ env: process.env || {} })');
+          },
+        },
+      };
+    },
+  ],
 };

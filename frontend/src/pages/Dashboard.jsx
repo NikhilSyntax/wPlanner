@@ -31,6 +31,7 @@ import {
   Close as CloseIcon,
   Cancel as CancelIcon,
   AssignmentInd as AssignmentIndIcon,
+  VolunteerActivism as VolunteerActivismIcon,
 } from '@mui/icons-material';
 import { fetchEvents } from '../store/slices/eventSlice';
 import { addNotification } from '../store/slices/uiSlice';
@@ -590,6 +591,33 @@ function Dashboard() {
                               </Button>
                             </Tooltip>
                           </>
+                        ) : userAssignment?.status === 'opt_in_pending' ? (
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              width: '100%',
+                              gap: 1,
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <VolunteerActivismIcon color="secondary" sx={{ fontSize: 20 }} />
+                              <Typography variant="body2" fontWeight={600} color="text.primary">
+                                You offered to serve as <strong>{userAssignment?.role || 'Volunteer'}</strong>. (Awaiting leader confirmation)
+                              </Typography>
+                            </Box>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="secondary"
+                              onClick={() => navigate(`/events/${nextUpcomingEvent._id}`)}
+                              sx={{ textTransform: 'none', borderRadius: 1.5, fontSize: '0.75rem', fontWeight: 600 }}
+                            >
+                              View Event
+                            </Button>
+                          </Box>
                         ) : (
                           <>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -653,6 +681,49 @@ function Dashboard() {
                             </Box>
                           </>
                         )}
+                      </Paper>
+                    )}
+
+                    {!userAssignment && (
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          mt: 2,
+                          p: 1.5,
+                          borderRadius: 2,
+                          bgcolor: (theme) =>
+                            theme.palette.mode === 'dark'
+                              ? 'rgba(147, 51, 234, 0.08)'
+                              : '#faf5ff',
+                          borderColor: 'secondary.main',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 1.5,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <VolunteerActivismIcon color="secondary" sx={{ fontSize: 20 }} />
+                          <Typography variant="body2" color="text.primary">
+                            Not scheduled for this service? You can offer to serve!
+                          </Typography>
+                        </Box>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="secondary"
+                          startIcon={<VolunteerActivismIcon sx={{ fontSize: 15 }} />}
+                          onClick={() => navigate(`/events/${nextUpcomingEvent._id}`)}
+                          sx={{
+                            textTransform: 'none',
+                            fontWeight: 700,
+                            borderRadius: 1.5,
+                            fontSize: '0.78rem',
+                          }}
+                        >
+                          Volunteer to Serve
+                        </Button>
                       </Paper>
                     )}
                   </>

@@ -45,7 +45,7 @@ const eventSchema = new mongoose.Schema({
     role: String,
     status: {
       type: String,
-      enum: ['assigned', 'accepted', 'declined', 'pending'],
+      enum: ['assigned', 'accepted', 'declined', 'pending', 'opt_in_pending'],
       default: 'assigned'
     },
     notes: String
@@ -69,5 +69,7 @@ eventSchema.index({ 'schedule.start': 1 });
 eventSchema.index({ team: 1 });
 eventSchema.index({ 'event.status': 1 });
 eventSchema.index({ churchId: 1 });
+eventSchema.index({ churchId: 1, 'event.status': 1, 'schedule.end': 1 });
+eventSchema.index({ 'assignments.userId': 1, 'assignments.status': 1 });
 
 module.exports = mongoose.model('Event', eventSchema);

@@ -6,7 +6,7 @@ const assignmentSchema = new mongoose.Schema({
   role: { type: String, required: true },
   status: {
     type: String,
-    enum: ['assigned', 'accepted', 'declined', 'pending'],
+    enum: ['assigned', 'accepted', 'declined', 'pending', 'opt_in_pending'],
     default: 'assigned'
   },
   notes: String,

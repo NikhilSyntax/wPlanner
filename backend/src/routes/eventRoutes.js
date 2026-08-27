@@ -96,4 +96,25 @@ router.post(
   eventController.respondToAssignment
 );
 
+// Volunteer self-opt-in ("Available to serve")
+router.post(
+  '/:id/opt-in',
+  requireSameChurch(Event),
+  eventController.optInToEvent
+);
+
+// Volunteer withdraws opt-in
+router.delete(
+  '/:id/opt-in',
+  requireSameChurch(Event),
+  eventController.withdrawOptIn
+);
+
+// Admin / Leader reviews opted-in volunteer (confirm / decline)
+router.post(
+  '/:id/opt-in/:userId/review',
+  requireSameChurch(Event),
+  eventController.reviewOptInVolunteer
+);
+
 module.exports = router;

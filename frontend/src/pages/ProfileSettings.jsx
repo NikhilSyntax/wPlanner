@@ -32,6 +32,7 @@ import {
   unsubscribeUserFromPush,
   sendTestPushNotification,
 } from '../services/pushNotificationService';
+import MinistryActivity from '../components/profile/MinistryActivity';
 
 function ProfileSettings() {
   const dispatch = useDispatch();
@@ -423,6 +424,11 @@ function ProfileSettings() {
             )}
           </CardContent>
         </Card>
+
+        {/* Ministry Activity & Serving Statistics */}
+        {user?.approvalStatus !== 'pending' && user?.approvalStatus !== 'rejected' && (
+          <MinistryActivity />
+        )}
 
         {/* Mobile Phone & Web Push Notifications Card */}
         <Card sx={{ borderRadius: 3 }}>
