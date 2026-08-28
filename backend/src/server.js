@@ -36,7 +36,6 @@ app.use(sanitizeInput);
 
 // Rate limiting
 app.use("/api/", apiLimiter);
-app.use("/api/auth", authLimiter);
 
 // Middleware
 app.use(cors(config.cors));

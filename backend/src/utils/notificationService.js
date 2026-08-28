@@ -89,3 +89,20 @@ exports.sendNotification = async ({
   }
 };
 
+/**
+ * Broadcast real-time assignment response / contribute status to the user's active client tabs
+ */
+exports.notifyAssignmentStatusUpdated = (userId, eventId, status) => {
+  try {
+    const io = getIO();
+    if (io && userId) {
+      io.to(`user_${userId}`).emit('notification:assignment_updated', {
+        eventId: eventId ? eventId.toString() : null,
+        status,
+      });
+    }
+  } catch (err) {
+    console.warn('[NotificationService] Socket notifyAssignmentStatusUpdated warning:', err.message);
+  }
+};
+

@@ -2,12 +2,13 @@ const express = require("express");
 const router = express.Router();
 const authController = require("../controllers/authController");
 const authMiddleware = require("../middleware/authMiddleware");
+const { authLimiter } = require("../middleware/rateLimiter");
 
 // Register
-router.post("/register", authController.register);
+router.post("/register", authLimiter, authController.register);
 
 // Login
-router.post("/login", authController.login);
+router.post("/login", authLimiter, authController.login);
 
 // Current user
 router.get("/me", authMiddleware.verifyToken, authController.me);

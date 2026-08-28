@@ -4,9 +4,9 @@ const Assignment = require('../models/Assignment');
 const Team = require('../models/Team');
 const Song = require('../models/Song');
 const { getVapidPublicKey, subscribeUser, unsubscribeUser, sendPushToUser } = require('../utils/pushService');
-const { sendNotification } = require('../utils/notificationService');
+const { sendNotification, notifyAssignmentStatusUpdated } = require('../utils/notificationService');
 
-// Get notifications for current user
+// Get notifications for current user with real-time assignment status synchronization
 exports.getNotifications = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -16,11 +16,72 @@ exports.getNotifications = async (req, res) => {
     if (type) filter.type = type;
 
     const skip = (page - 1) * limit;
-    const notifications = await Notification.find(filter)
+    const rawNotifications = await Notification.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
-      .select('type title message link read createdAt actionStatus eventId assignmentRole');
+      .select('type title message link read createdAt actionStatus eventId assignmentRole')
+      .lean();
+
+    // Extract all eventIds from notifications (either from eventId or extracted from link)
+    const eventIdMap = new Map();
+    rawNotifications.forEach((n) => {
+      let eId = n.eventId ? n.eventId.toString() : null;
+      if (!eId && n.link) {
+        const m = n.link.match(/[a-fA-F0-9]{24}/);
+        if (m) eId = m[0];
+      }
+      if (eId) {
+        eventIdMap.set(eId, true);
+      }
+    });
+
+    // Query events to check actual up-to-date assignment/volunteer status for this user
+    const userAssignmentsByEvent = {};
+    if (eventIdMap.size > 0) {
+      const eventIds = Array.from(eventIdMap.keys());
+      const events = await Event.find({ _id: { $in: eventIds } })
+        .select('assignments')
+        .lean();
+
+      events.forEach((ev) => {
+        const assign = ev.assignments?.find((a) => {
+          const uId = a.userId?._id ? a.userId._id.toString() : a.userId?.toString();
+          return uId === userId.toString();
+        });
+        if (assign) {
+          userAssignmentsByEvent[ev._id.toString()] = assign.status;
+        }
+      });
+    }
+
+    // Synchronize actionStatus in the response to always match actual database assignment status
+    const notifications = rawNotifications.map((n) => {
+      let eId = n.eventId ? n.eventId.toString() : null;
+      if (!eId && n.link) {
+        const m = n.link.match(/[a-fA-F0-9]{24}/);
+        if (m) eId = m[0];
+      }
+
+      if (eId && userAssignmentsByEvent[eId] !== undefined) {
+        const currentAssignmentStatus = userAssignmentsByEvent[eId];
+        let syncedActionStatus = n.actionStatus;
+        if (currentAssignmentStatus === 'accepted' || currentAssignmentStatus === 'confirmed') {
+          syncedActionStatus = 'accepted';
+        } else if (currentAssignmentStatus === 'declined') {
+          syncedActionStatus = 'declined';
+        } else if (currentAssignmentStatus === 'opt_in_pending') {
+          syncedActionStatus = 'contributed';
+        } else if (currentAssignmentStatus === 'assigned' || currentAssignmentStatus === 'pending') {
+          syncedActionStatus = 'pending';
+        }
+        return {
+          ...n,
+          actionStatus: syncedActionStatus,
+        };
+      }
+      return n;
+    });
 
     const total = await Notification.countDocuments(filter);
     const unreadCount = await Notification.countDocuments({ recipient: userId, read: false });
@@ -270,6 +331,10 @@ exports.respondToNotification = async (req, res) => {
           .populate('setlist', 'title artist key timeSignature')
           .lean();
       }
+    }
+
+    if (eventId) {
+      notifyAssignmentStatusUpdated(req.user.userId, eventId, normalizedStatus);
     }
 
     res.json({

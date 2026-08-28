@@ -221,10 +221,19 @@ function EventDetails() {
         setError("You can only respond to your own assignment.");
         return;
       }
-      setMemberUpdatingId(memberUserId);
       await api.post(`/events/${id}/assignments/respond`, {
         status: targetStatus,
       });
+
+      // Synchronize NotificationBell and Dashboard in real-time
+      window.dispatchEvent(
+        new CustomEvent('wplanner:assignment_updated', {
+          detail: {
+            eventId: id,
+            status: targetStatus,
+          },
+        })
+      );
       setTeamMembers((prev) =>
         prev.map((m) => {
           const uId = m.userId?._id || m.userId || m._id;

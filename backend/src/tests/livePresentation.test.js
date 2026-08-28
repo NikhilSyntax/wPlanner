@@ -9,7 +9,7 @@ const User = require('../models/User');
 const Church = require('../models/Church');
 const { processLiveCommand, invalidateSessionCache } = require('../controllers/liveController');
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/wplanner_test_live';
+const MONGO_URI = 'mongodb://localhost:27017/wplanner_test_live';
 
 async function runLiveTests() {
   console.log('--- Starting wPlanner Version 5 Live Presentation Tests ---');

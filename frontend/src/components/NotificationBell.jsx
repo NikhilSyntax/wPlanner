@@ -217,17 +217,50 @@ function NotificationBell() {
         setUnreadCount((count) => count + 1);
       });
 
+      socket.on('notification:assignment_updated', ({ eventId, status }) => {
+        if (eventId) {
+          setNotifications((prev) =>
+            prev.map((n) => {
+              const notifEventId = n.eventId || (n.link ? n.link.match(/[a-fA-F0-9]{24}/)?.[0] : null);
+              if (notifEventId && String(notifEventId) === String(eventId)) {
+                return { ...n, actionStatus: status, read: true };
+              }
+              return n;
+            })
+          );
+        }
+      });
+
       socketRef.current = socket;
     }
 
+    const handleLocalAssignmentUpdated = (e) => {
+      const { eventId, status } = e.detail || {};
+      if (eventId) {
+        setNotifications((prev) =>
+          prev.map((n) => {
+            const notifEventId = n.eventId || (n.link ? n.link.match(/[a-fA-F0-9]{24}/)?.[0] : null);
+            if (notifEventId && String(notifEventId) === String(eventId)) {
+              return { ...n, actionStatus: status, read: true };
+            }
+            return n;
+          })
+        );
+      }
+    };
+
+    window.addEventListener('wplanner:assignment_updated', handleLocalAssignmentUpdated);
+
     return () => {
       clearInterval(interval);
+      window.removeEventListener('wplanner:assignment_updated', handleLocalAssignmentUpdated);
       if (socketRef.current) socketRef.current.disconnect();
     };
   }, []);
 
   const handleClick = (event) => {
     setAnchorEl(event.currentTarget);
+    fetchNotifications();
     refreshPushStatus();
     setTestPushSuccess('');
     setPushError('');
@@ -420,15 +453,23 @@ function NotificationBell() {
                 notif.eventId ||
                 (notif.link ? notif.link.match(/[a-fA-F0-9]{24}/)?.[0] : null);
 
-              // Direct individual assignment
-              const isAssignment =
+              const hasResponded =
+                notif.actionStatus === 'accepted' ||
+                notif.actionStatus === 'declined' ||
+                notif.actionStatus === 'contributed' ||
+                notif.actionStatus === 'opt_in_pending';
+
+              // Direct individual assignment needing response
+              const isPendingAssignment =
                 !isAdmin &&
-                notif.type === 'assignment';
+                !hasResponded &&
+                (notif.type === 'assignment' || notif.actionStatus === 'pending');
 
               // Unassigned church member receiving service notification / event reminder
               const canContribute =
                 !isAdmin &&
-                !isAssignment &&
+                !hasResponded &&
+                !isPendingAssignment &&
                 Boolean(eventId);
 
               return (
@@ -493,8 +534,8 @@ function NotificationBell() {
                           {notif.message}
                         </Typography>
 
-                        {/* Assignment Accept (Tick) / Reject (Cross) Action Controls */}
-                        {isAssignment && (
+                        {/* Interactive Status Badges & Action Controls */}
+                        {(hasResponded || isPendingAssignment || canContribute) && (
                           <Box
                             component="span"
                             sx={{
@@ -542,7 +583,23 @@ function NotificationBell() {
                                   }}
                                 />
                               </Box>
-                            ) : (
+                            ) : notif.actionStatus === 'contributed' || notif.actionStatus === 'opt_in_pending' ? (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Chip
+                                  icon={<VolunteerActivismIcon sx={{ fontSize: '13px !important', color: '#9333ea !important' }} />}
+                                  label="Volunteered 🤝"
+                                  size="small"
+                                  sx={{
+                                    height: 22,
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    bgcolor: 'rgba(147, 51, 234, 0.12)',
+                                    color: '#9333ea',
+                                    border: '1px solid rgba(147, 51, 234, 0.3)',
+                                  }}
+                                />
+                              </Box>
+                            ) : isPendingAssignment ? (
                               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%', gap: 1 }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ mr: 'auto', fontWeight: 600, fontSize: '0.7rem' }}>
                                   Respond:
@@ -597,45 +654,8 @@ function NotificationBell() {
                                   </Button>
                                 </Tooltip>
                               </Box>
-                            )}
-                          </Box>
-                        )}
-
-                        {/* Contribute / Volunteer Action Control for Unassigned Church Members */}
-                        {canContribute && (
-                          <Box
-                            component="span"
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              mt: 1,
-                              pt: 0.75,
-                              borderTop: '1px dashed',
-                              borderColor: 'divider',
-                              gap: 0.8,
-                              flexWrap: 'wrap',
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {notif.actionStatus === 'contributed' ? (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Chip
-                                  icon={<VolunteerActivismIcon sx={{ fontSize: '13px !important', color: '#9333ea !important' }} />}
-                                  label="Volunteered 🤝"
-                                  size="small"
-                                  sx={{
-                                    height: 22,
-                                    fontSize: '0.7rem',
-                                    fontWeight: 700,
-                                    bgcolor: 'rgba(147, 51, 234, 0.12)',
-                                    color: '#9333ea',
-                                    border: '1px solid rgba(147, 51, 234, 0.3)',
-                                  }}
-                                />
-                              </Box>
-                            ) : (
-                              <>
+                            ) : canContribute ? (
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 0.8 }}>
                                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, fontSize: '0.7rem' }}>
                                   Want to serve?
                                 </Typography>
@@ -664,8 +684,8 @@ function NotificationBell() {
                                     Contribute / Volunteer
                                   </Button>
                                 </Tooltip>
-                              </>
-                            )}
+                              </Box>
+                            ) : null}
                           </Box>
                         )}
 

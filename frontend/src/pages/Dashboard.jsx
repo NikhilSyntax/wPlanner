@@ -61,6 +61,17 @@ function Dashboard() {
       await api.post(`/events/${eventId}/assignments/respond`, {
         status: targetStatus,
       });
+
+      // Synchronize NotificationBell in real-time
+      window.dispatchEvent(
+        new CustomEvent('wplanner:assignment_updated', {
+          detail: {
+            eventId,
+            status: targetStatus,
+          },
+        })
+      );
+
       await dispatch(fetchEvents());
       dispatch(
         addNotification({

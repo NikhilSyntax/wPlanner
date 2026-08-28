@@ -120,12 +120,18 @@ exports.register = async (req, res) => {
 // Email/password login
 exports.login = async (req, res) => {
   const { email, password } = req.body;
-  const normalizedEmail = email?.trim().toLowerCase();
+  const identifier = email?.trim().toLowerCase();
   try {
-    if (!normalizedEmail) {
-      return res.status(400).json({ message: "Email is required" });
+    if (!identifier) {
+      return res.status(400).json({ message: "Email or username is required" });
     }
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({
+      $or: [
+        { email: identifier },
+        { email: `${identifier}@wplanner.app` },
+        { name: new RegExp(`^${identifier}$`, "i") },
+      ],
+    });
     if (!user) return res.status(400).json({ message: "Invalid credentials" });
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(400).json({ message: "Invalid credentials" });

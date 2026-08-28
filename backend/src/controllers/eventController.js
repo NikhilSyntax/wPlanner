@@ -9,7 +9,7 @@ const {
   ensureEventHasTitle,
   ensureEventPayloadHasTitle,
 } = require("../utils/eventTitle");
-const { sendNotification } = require("../utils/notificationService");
+const { sendNotification, notifyAssignmentStatusUpdated } = require("../utils/notificationService");
 const { send24HourRemindersForEvent } = require("../utils/reminderScheduler");
 
 const SETLIST_SONG_FIELDS = "title artist key timeSignature";
@@ -760,11 +760,12 @@ exports.respondToAssignment = async (req, res) => {
     await Notification.updateMany(
       {
         recipient: userId,
-        type: "assignment",
-        $or: [{ eventId: event._id }, { link: `/events/${event._id}` }],
+        $or: [{ eventId: event._id }, { link: new RegExp(event._id.toString()) }],
       },
       { $set: { actionStatus: normalizedStatus, read: true } }
     );
+
+    notifyAssignmentStatusUpdated(userId, event._id, normalizedStatus);
 
     const populated = await populateEventDetails(event._id);
     res.json({
@@ -861,6 +862,17 @@ exports.optInToEvent = async (req, res) => {
       },
       { upsert: true, new: true }
     );
+
+    // Sync any related notifications for this user and event to 'contributed'
+    await Notification.updateMany(
+      {
+        recipient: userId,
+        $or: [{ eventId: event._id }, { link: new RegExp(event._id.toString()) }],
+      },
+      { $set: { actionStatus: 'contributed', read: true } }
+    );
+
+    notifyAssignmentStatusUpdated(userId, event._id, 'contributed');
 
     // Notify event creator / church admins asynchronously
     (async () => {

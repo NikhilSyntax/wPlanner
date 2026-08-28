@@ -22,7 +22,7 @@ const notificationSchema = new mongoose.Schema({
   eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event' },
   actionStatus: {
     type: String,
-    enum: ['pending', 'accepted', 'declined', null],
+    enum: ['pending', 'accepted', 'declined', 'contributed', 'opt_in_pending', null],
     default: null,
   },
   assignmentRole: String,
