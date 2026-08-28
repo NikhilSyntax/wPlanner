@@ -10,9 +10,12 @@ const { generateUniqueChurchCode } = require("../utils/churchUtils");
 async function generateTokens(user) {
   const accessToken = authConfig.createJWT(user);
   const refreshToken = authConfig.createRefreshToken(user);
-  // Store refresh token in user document for revocation (using a simple array)
+  // Store refresh token in user document for revocation (keep recent 10 to avoid unbounded growth)
   user.refreshTokens = user.refreshTokens || [];
   user.refreshTokens.push(refreshToken);
+  if (user.refreshTokens.length > 10) {
+    user.refreshTokens = user.refreshTokens.slice(-10);
+  }
   await user.save();
   return { accessToken, refreshToken };
 }
@@ -177,7 +180,7 @@ exports.refresh = async (req, res) => {
     }
     // Remove old token (rotate)
     user.refreshTokens = user.refreshTokens.filter((t) => t !== refreshToken);
-    const newTokens = generateTokens(user);
+    const newTokens = await generateTokens(user);
     res.json(newTokens);
   } catch (err) {
     console.error(err);

@@ -7,7 +7,7 @@ const Event = require('../models/Event');
 const Song = require('../models/Song');
 const User = require('../models/User');
 const Church = require('../models/Church');
-const { processLiveCommand } = require('../controllers/liveController');
+const { processLiveCommand, invalidateSessionCache } = require('../controllers/liveController');
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/wplanner_test_live';
 
@@ -183,6 +183,113 @@ Consider all the worlds Thy hands have made`,
     const fetchedDisplay = await LiveDisplay.findOne({ token: 'tok_screen_12345' });
     assert.strictEqual(fetchedDisplay.name, 'Sanctuary Main Projector');
     console.log('✅ Test 4 Passed: Display pairing token verified.');
+
+    // ------------------------------------------------------------------
+    // Test 5: Hide & Delete Slide Logic (Skip Hidden Slides on NEXT/PREV)
+    // ------------------------------------------------------------------
+    console.log('Test 5: Hiding, Deleting, and Skipping Slides during Live Presentation...');
+
+    // Reset to Song 1 Verse 1 Chunk 0
+    await processLiveCommand(event._id, { type: 'SET_SONG', payload: { songId: song1._id } });
+
+    // Hide Chunk 1 of Verse 1 (lines 3 & 4)
+    const hiddenState = await processLiveCommand(event._id, {
+      type: 'HIDE_SLIDE',
+      payload: { songId: song1._id, sectionId: 'sec_1_verse_1', chunkIndex: 1 },
+    });
+    assert.strictEqual(
+      hiddenState.hiddenSlides[`${song1._id}_sec_1_verse_1_1`],
+      true,
+      'Slide should be marked as hidden in live session'
+    );
+
+    // Command: NEXT -> since chunk 1 is hidden, it should directly skip to Chorus chunk 0!
+    const skipState = await processLiveCommand(event._id, { type: 'NEXT' });
+    assert.strictEqual(
+      skipState.currentSectionName,
+      'Chorus',
+      'Should have skipped hidden Chunk 1 and directly advanced to Chorus'
+    );
+
+    // Unhide all slides in Song 1
+    const unhiddenState = await processLiveCommand(event._id, {
+      type: 'UNHIDE_ALL_SLIDES',
+      payload: { songId: song1._id },
+    });
+    assert.strictEqual(
+      Object.keys(unhiddenState.hiddenSlides).length,
+      0,
+      'All hidden slides should be restored'
+    );
+
+    console.log('✅ Test 5 Passed: Hide slide, auto-skipping, and restore slide verified.');
+
+    // ------------------------------------------------------------------
+    // Test 6: Regional Language Lyrics & Live Switching
+    // ------------------------------------------------------------------
+    console.log('Test 6: Regional Language Lyrics and Live Language Switching...');
+
+    song1.regionalLyrics = [
+      {
+        language: 'Spanish',
+        name: 'Spanish',
+        content: {
+          lyrics: `[Verse 1]\nSublime gracia del Señor\nQue a un infeliz salvó\n\n[Chorus]\nAleluya al Rey de reyes`,
+          chords: `[Verse 1]\n[G]Sublime gracia [C]del Señor\n[G]Que a un infeliz salvó\n\n[Chorus]\n[G]Aleluya al [C]Rey de reyes`,
+        },
+      },
+    ];
+    await song1.save();
+    invalidateSessionCache(event._id);
+
+    // Reset to Verse 1 Chunk 0
+    await processLiveCommand(event._id, { type: 'SET_SONG', payload: { songId: song1._id } });
+
+    // Switch to Spanish language
+    const spanishState = await processLiveCommand(event._id, {
+      type: 'SET_LANGUAGE',
+      payload: { language: 'Spanish' },
+    });
+    assert.strictEqual(spanishState.activeLanguage, 'Spanish', 'Should be switched to Spanish');
+    assert.ok(
+      spanishState.currentChunk[0]?.text?.includes('Sublime gracia'),
+      'Should display Spanish lyrics on the active 2-line slide'
+    );
+
+    // Switch back to original English
+    const originalState = await processLiveCommand(event._id, {
+      type: 'SET_LANGUAGE',
+      payload: { language: 'original' },
+    });
+    assert.strictEqual(originalState.activeLanguage, 'original', 'Should be switched back to original');
+    assert.ok(
+      originalState.currentChunk[0]?.text?.includes('Amazing grace'),
+      'Should display original English lyrics'
+    );
+
+    console.log('✅ Test 6 Passed: Regional language lyrics and live TV switching verified.');
+
+    // ------------------------------------------------------------------
+    // Test 7: Split View Live Presentation (English on Left, Regional on Right)
+    // ------------------------------------------------------------------
+    console.log('Test 7: Split View Live Presentation (English on Left, Regional on Right)...');
+
+    const splitState = await processLiveCommand(event._id, {
+      type: 'SET_SPLIT_VIEW',
+      payload: { isSplitView: true, splitLanguage: 'Spanish' },
+    });
+    assert.strictEqual(splitState.isSplitView, true, 'isSplitView should be true');
+    assert.strictEqual(splitState.splitLanguage, 'Spanish', 'splitLanguage should be Spanish');
+    assert.ok(
+      splitState.leftChunk[0]?.text?.includes('Amazing grace'),
+      'Left column must contain English lyrics'
+    );
+    assert.ok(
+      splitState.rightChunk[0]?.text?.includes('Sublime gracia'),
+      'Right column must contain Regional/Spanish lyrics'
+    );
+
+    console.log('✅ Test 7 Passed: Split View (English on left, Regional on right) verified.');
 
     console.log('\nAll Version 5 Live Presentation Tests Passed Successfully! 🎉');
   } catch (err) {

@@ -13,11 +13,11 @@ module.exports = {
       approvalStatus: user.approvalStatus || 'approved',
       iss: 'wPlanner'
     };
-    return jwt.sign(payload, config.secrets.jwtSecret, { expiresIn: '15m' });
+    return jwt.sign(payload, config.secrets.jwtSecret, { expiresIn: '30d' });
   },
 
   createRefreshToken: (user) => {
-    return jwt.sign({ userId: user._id }, config.secrets.refreshSecret, { expiresIn: '7d' });
+    return jwt.sign({ userId: user._id }, config.secrets.refreshSecret, { expiresIn: '90d' });
   },
 
   verifyJWT: (token) => {

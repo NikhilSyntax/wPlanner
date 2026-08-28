@@ -38,6 +38,9 @@ export const login = createAsyncThunk(
       if (data.accessToken) {
         localStorage.setItem('accessToken', data.accessToken);
       }
+      if (data.refreshToken) {
+        localStorage.setItem('refreshToken', data.refreshToken);
+      }
       return data;
     } catch (error) {
       return rejectWithValue(
@@ -54,6 +57,9 @@ export const register = createAsyncThunk(
       const data = await authService.register(userData);
       if (data.accessToken) {
         localStorage.setItem('accessToken', data.accessToken);
+      }
+      if (data.refreshToken) {
+        localStorage.setItem('refreshToken', data.refreshToken);
       }
       return data;
     } catch (error) {
@@ -80,7 +86,8 @@ export const getCurrentUser = createAsyncThunk(
 );
 
 const hasStoredToken = () =>
-  typeof window !== 'undefined' && !!localStorage.getItem('accessToken');
+  typeof window !== 'undefined' &&
+  (!!localStorage.getItem('accessToken') || !!localStorage.getItem('refreshToken'));
 
 const authSlice = createSlice({
   name: 'auth',
@@ -98,6 +105,7 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       state.userLoaded = true;
       localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
     },
     clearError: (state) => {
       state.error = null;
@@ -153,6 +161,7 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         state.userLoaded = true;
         localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
       });
   },
 });

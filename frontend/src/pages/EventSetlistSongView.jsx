@@ -428,6 +428,9 @@ function EventSetlistSongView() {
       {/* Unified Chord Sheet Viewer with Hide/Show Chords initialized from URL query */}
       <ChordSheetViewer
         key={`${songId}-${view}-${song?.updatedAt || ''}`}
+        songId={songId}
+        song={song}
+        onSaveSong={(updated) => setSong(updated)}
         rawContent={songContent}
         originalKey={song?.key || 'C'}
         title={song?.title}

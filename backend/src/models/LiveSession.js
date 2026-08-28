@@ -64,6 +64,24 @@ const liveSessionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    // Hidden / deleted slides during live presentation: { [slideKey]: true }
+    hiddenSlides: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    // Active presentation language: 'original' or language name (e.g. 'Spanish', 'Tamil', etc.) or 'split'
+    activeLanguage: {
+      type: String,
+      default: 'original',
+    },
+    isSplitView: {
+      type: Boolean,
+      default: false,
+    },
+    splitLanguage: {
+      type: String,
+      default: '',
+    },
     connectedDisplays: {
       type: Number,
       default: 0,

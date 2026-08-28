@@ -74,6 +74,16 @@ const songSchema = new mongoose.Schema({
     chords: { type: String },
     tabs: { type: String },
   },
+  regionalLyrics: [
+    {
+      language: { type: String, required: true },
+      name: String,
+      content: {
+        lyrics: { type: String, default: '' },
+        chords: { type: String, default: '' },
+      },
+    },
+  ],
   metadata: {
     version: { type: Number, default: 1 },
     createdAt: { type: Date, default: Date.now },

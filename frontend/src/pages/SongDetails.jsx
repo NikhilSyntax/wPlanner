@@ -231,6 +231,9 @@ function SongDetails() {
       {/* Main Unified Chord Sheet & Lyrics Viewer */}
       <Box sx={{ mb: 2 }}>
         <ChordSheetViewer
+          songId={id}
+          song={song}
+          onSaveSong={(updated) => setSong(updated)}
           rawContent={songContent}
           originalKey={song.key || 'C'}
           title={song.title}

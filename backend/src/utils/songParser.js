@@ -14,6 +14,68 @@ const CHORD_TOKEN_REGEX = new RegExp(`^${CHORD_REGEX_STR}$`);
 const SECTION_REGEX =
   /^\s*(\[|\()?(Intro|Verse(?:\s*\d+)?|Chorus(?:\s*\d+)?|Pre-Chorus(?:\s*\d+)?|Bridge(?:\s*\d+)?|Outro|Ending|Tag|Interlude|Hook|Solo|Instrumental)(\]|\)|\:)?\s*$/i;
 
+function isCombiningCodePoint(code) {
+  if (code >= 0x0300 && code <= 0x036f) return true;
+  if (code >= 0x1dc0 && code <= 0x1dff) return true;
+  if (code >= 0x20d0 && code <= 0x20ff) return true;
+  if (code >= 0xfe20 && code <= 0xfe2f) return true;
+
+  if (
+    (code >= 0x0900 && code <= 0x0903) || (code >= 0x093a && code <= 0x094f) || (code >= 0x0951 && code <= 0x0957) ||
+    (code >= 0x0981 && code <= 0x0983) || (code >= 0x09bc && code <= 0x09cd) || code === 0x09d7 ||
+    (code >= 0x0a01 && code <= 0x0a03) || (code >= 0x0a3c && code <= 0x0a4d) ||
+    (code >= 0x0a81 && code <= 0x0a83) || (code >= 0x0abc && code <= 0x0acd) ||
+    (code >= 0x0b01 && code <= 0x0b03) || (code >= 0x0b3c && code <= 0x0b4d) || (code >= 0x0b56 && code <= 0x0b57) ||
+    (code >= 0x0b82 && code <= 0x0bcd) || code === 0x0bd7 ||
+    (code >= 0x0c00 && code <= 0x0c03) || (code >= 0x0c3e && code <= 0x0c4d) || (code >= 0x0c55 && code <= 0x0c56) || (code >= 0x0c62 && code <= 0x0c63) ||
+    (code >= 0x0c81 && code <= 0x0c83) || (code >= 0x0cbc && code <= 0x0ccd) || (code >= 0x0cd5 && code <= 0x0cd6) ||
+    (code >= 0x0d00 && code <= 0x0d03) || (code >= 0x0d3b && code <= 0x0d4d) || (code >= 0x0d57 && code <= 0x0d63)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function getGraphemeClusterStartIndices(text) {
+  if (!text) return [0];
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    try {
+      const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+      const segments = Array.from(segmenter.segment(text));
+      return segments.map((s) => s.index);
+    } catch {
+      // fallback
+    }
+  }
+
+  const indices = [0];
+  for (let i = 1; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (!isCombiningCodePoint(code)) {
+      indices.push(i);
+    }
+  }
+  return indices;
+}
+
+function snapToGraphemeCluster(pos, text) {
+  if (pos <= 0) return 0;
+  if (!text || pos >= text.length) return text ? text.length : pos;
+
+  const graphemeIndices = getGraphemeClusterStartIndices(text);
+  if (graphemeIndices.includes(pos)) return pos;
+
+  let best = 0;
+  for (const idx of graphemeIndices) {
+    if (idx <= pos) {
+      best = idx;
+    } else {
+      break;
+    }
+  }
+  return best;
+}
+
 function getSemitoneShift(fromKey, toKey) {
   if (!fromKey || !toKey) return 0;
   const fromIdx = NOTE_MAP[fromKey];
@@ -81,16 +143,18 @@ function isChordLine(line) {
 /**
  * Extract chords and their character column positions from a chord line
  */
-function extractChordsFromLine(chordLine, semitones = 0) {
+function extractChordsFromLine(chordLine, semitones = 0, targetLyricText = '') {
   const chords = [];
   const tokenRegex = /\S+/g;
   let match;
   while ((match = tokenRegex.exec(chordLine)) !== null) {
     const rawToken = match[0];
     if (CHORD_TOKEN_REGEX.test(rawToken)) {
+      const rawPos = match.index;
+      const snappedPos = targetLyricText ? snapToGraphemeCluster(rawPos, targetLyricText) : rawPos;
       chords.push({
         chord: transposeChord(rawToken, semitones),
-        position: match.index,
+        position: snappedPos,
       });
     }
   }
@@ -114,7 +178,7 @@ function parseInlineChordPro(line, semitones = 0) {
     if (CHORD_TOKEN_REGEX.test(rawChord)) {
       chords.push({
         chord: transposeChord(rawChord, semitones),
-        position: text.length,
+        position: snapToGraphemeCluster(text.length, text),
       });
     }
     lastIndex = match.index + match[0].length;
@@ -182,18 +246,20 @@ function parseSongToLiveSections(rawContent = '', originalKey = 'C', targetKey =
 
     // Check if this line is a standalone chord line
     if (isChordLine(line)) {
-      const chords = extractChordsFromLine(line, semitones);
       const nextLine = rawLines[i + 1];
 
       // If next line exists and is a lyric line (not section and not chord line)
       if (nextLine && nextLine.trim() && !SECTION_REGEX.test(nextLine.trim()) && !isChordLine(nextLine)) {
+        const lyricText = nextLine.trimEnd();
+        const chords = extractChordsFromLine(line, semitones, lyricText);
         currentSection.lines.push({
-          text: nextLine.trimEnd(),
+          text: lyricText,
           chords,
         });
         i++; // advance past the lyric line
       } else {
         // Standalone chord line (e.g. Intro/Outro/Instrumental)
+        const chords = extractChordsFromLine(line, semitones, '');
         currentSection.lines.push({
           text: '',
           chords,
@@ -243,6 +309,7 @@ module.exports = {
   parseSongToLiveSections,
   transposeChord,
   getSemitoneShift,
+  snapToGraphemeCluster,
   SHARPS,
   FLATS,
   NOTE_MAP,

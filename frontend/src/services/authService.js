@@ -13,9 +13,32 @@ export const authService = {
     return response.data;
   },
 
-  logout: () => {
-    localStorage.removeItem('accessToken');
-    window.location.href = '/login';
+  logout: async () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    try {
+      if (refreshToken) {
+        await api.post(`${AUTH_BASE}/logout`, { refreshToken });
+      }
+    } catch {
+      // Ignored
+    } finally {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      window.location.href = '/login';
+    }
+  },
+
+  refreshToken: async () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) throw new Error('No refresh token available');
+    const response = await api.post(`${AUTH_BASE}/refresh`, { refreshToken });
+    if (response.data?.accessToken) {
+      localStorage.setItem('accessToken', response.data.accessToken);
+    }
+    if (response.data?.refreshToken) {
+      localStorage.setItem('refreshToken', response.data.refreshToken);
+    }
+    return response.data;
   },
 
   getCurrentUser: async () => {

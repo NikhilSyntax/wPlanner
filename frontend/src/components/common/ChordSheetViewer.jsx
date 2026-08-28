@@ -14,6 +14,15 @@ import {
   Select,
   ToggleButtonGroup,
   ToggleButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Snackbar,
+  Alert,
+  InputLabel,
+  Grid,
 } from '@mui/material';
 import {
   Speed as SpeedIcon,
@@ -36,7 +45,14 @@ import {
   FullscreenExit as FullscreenExitIcon,
   Lyrics as LyricsIcon,
   QueueMusic as QueueMusicIcon,
+  Add as AddIcon,
+  Translate as TranslateIcon,
+  DeleteOutline as DeleteOutlineIcon,
+  Close as CloseIcon,
+  Save as SaveIcon,
+  VerticalSplit as SplitViewIcon,
 } from '@mui/icons-material';
+import api from '../../services/api';
 import './ChordSheetViewer.css';
 
 // Musical notes mapping for transposition
@@ -56,6 +72,27 @@ const CHORD_TOKEN_REGEX = new RegExp(`^${CHORD_REGEX_STR}$`);
 // Section title matching
 const SECTION_REGEX =
   /^\s*(\[|\()?(Intro|Verse(?:\s*\d+)?|Chorus(?:\s*\d+)?|Pre-Chorus(?:\s*\d+)?|Bridge(?:\s*\d+)?|Outro|Ending|Tag|Interlude|Hook|Solo|Instrumental)(\]|\)|\:)?\s*$/i;
+
+const LANGUAGE_PRESETS = [
+  'Telugu',
+  'Spanish',
+  'Tamil',
+  'Hindi',
+  'Korean',
+  'Tagalog',
+  'Portuguese',
+  'French',
+  'German',
+  'Chinese',
+  'Malayalam',
+  'Kannada',
+  'Marathi',
+  'Bengali',
+  'Japanese',
+  'Indonesian',
+  'Russian',
+  'Custom',
+];
 
 /**
  * Transpose a single chord string by N semitones
@@ -125,10 +162,104 @@ const isChordLine = (line) => {
       chordCount++;
     }
   }
-  return chordCount / tokens.length >= 0.65;
+  return chordCount / tokens.length >= 0.5;
+};
+
+/**
+ * Parse raw text into line tokens and section headers
+ */
+const parseContentLines = (content = '', transpose = 0) => {
+  if (!content) return { parsedLines: [], sections: [] };
+
+  const lines = content.split(/\r?\n/);
+  const resultLines = [];
+  const extractedSections = [];
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      resultLines.push({ type: 'empty', raw: line, index });
+      return;
+    }
+
+    const sectionMatch = trimmed.match(SECTION_REGEX);
+    if (sectionMatch) {
+      const cleanName = sectionMatch[2] || trimmed;
+      const sectionId = `sec-${index}`;
+      extractedSections.push({ name: cleanName, id: sectionId, lineIndex: index });
+
+      let category = 'default';
+      const lower = cleanName.toLowerCase();
+      if (lower.includes('chorus')) category = 'chorus';
+      else if (lower.includes('bridge')) category = 'bridge';
+      else if (lower.includes('verse')) category = 'verse';
+      else if (lower.includes('intro') || lower.includes('outro') || lower.includes('tag')) category = 'intro';
+
+      resultLines.push({
+        type: 'section',
+        raw: line,
+        cleanName,
+        category,
+        id: sectionId,
+        index,
+      });
+      return;
+    }
+
+    if (isChordLine(line)) {
+      const tokens = [];
+      const regex = /([^\s]+|\s+)/g;
+      let match;
+      let lastIdx = 0;
+
+      while ((match = regex.exec(line)) !== null) {
+        const item = match[0];
+        if (/^\s+$/.test(item)) {
+          tokens.push({ type: 'space', text: item });
+        } else if (CHORD_TOKEN_REGEX.test(item)) {
+          const transposed = transposeChord(item, transpose);
+          tokens.push({
+            type: 'chord',
+            original: item,
+            text: transposed,
+          });
+        } else {
+          tokens.push({ type: 'text', text: item });
+        }
+        lastIdx = regex.lastIndex;
+      }
+
+      if (lastIdx < line.length) {
+        tokens.push({
+          type: 'space',
+          text: line.substring(lastIdx),
+        });
+      }
+
+      resultLines.push({
+        type: 'chord-line',
+        tokens,
+        raw: line,
+        index,
+      });
+      return;
+    }
+
+    resultLines.push({
+      type: 'lyric-line',
+      raw: line,
+      index,
+    });
+  });
+
+  return { parsedLines: resultLines, sections: extractedSections };
 };
 
 function ChordSheetViewer({
+  songId,
+  song,
+  onSaveSong,
   rawContent = '',
   originalKey = 'C',
   title = '',
@@ -139,30 +270,71 @@ function ChordSheetViewer({
   initialShowChords = true,
   onEdit,
 }) {
-  // Show / Hide Chords Toggle State
   const [showChords, setShowChords] = useState(initialShowChords);
 
   useEffect(() => {
     setShowChords(initialShowChords);
   }, [initialShowChords]);
 
-  // Transpose state
   const [transpose, setTranspose] = useState(initialTranspose);
-
-  // Styling state
-  const [themeMode, setThemeMode] = useState('light'); // 'light', 'dark', 'sepia'
-  const [highlightStyle, setHighlightStyle] = useState('pill'); // 'pill', 'glow', 'bold', 'off'
-  const [fontSize, setFontSize] = useState(15); // in pixels
+  const [themeMode, setThemeMode] = useState('light');
+  const [highlightStyle, setHighlightStyle] = useState('pill');
+  const [fontSize, setFontSize] = useState(15);
   const [twoColumns, setTwoColumns] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Auto-scroll state
   const [isScrolling, setIsScrolling] = useState(false);
-  const [scrollSpeed, setScrollSpeed] = useState(1); // 0.5 to 3
+  const [scrollSpeed, setScrollSpeed] = useState(1);
   const scrollIntervalRef = useRef(null);
   const viewerContainerRef = useRef(null);
 
   const [copied, setCopied] = useState(false);
+
+  // Regional Language State
+  const [selectedLanguage, setSelectedLanguage] = useState('original');
+  const [selectedSplitLanguage, setSelectedSplitLanguage] = useState('');
+  const [addLangDialogOpen, setAddLangDialogOpen] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState('Telugu');
+  const [customLangName, setCustomLangName] = useState('');
+  const [langLyrics, setLangLyrics] = useState('');
+  const [savingLang, setSavingLang] = useState(false);
+  const [langError, setLangError] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
+
+  const regionalList = useMemo(() => {
+    return Array.isArray(song?.regionalLyrics) ? song.regionalLyrics : [];
+  }, [song?.regionalLyrics]);
+
+  // Set default split language if available
+  useEffect(() => {
+    if (regionalList.length > 0 && !selectedSplitLanguage) {
+      setSelectedSplitLanguage(regionalList[0].language);
+    }
+  }, [regionalList, selectedSplitLanguage]);
+
+  // Compute active raw content based on selected language
+  const activeRawContent = useMemo(() => {
+    if (selectedLanguage === 'original' || selectedLanguage === 'split') {
+      return rawContent;
+    }
+    const found = regionalList.find(
+      (r) => r.language?.toLowerCase() === selectedLanguage.toLowerCase()
+    );
+    if (found && (found.content?.chords || found.content?.lyrics)) {
+      return found.content.chords || found.content.lyrics || '';
+    }
+    return rawContent;
+  }, [selectedLanguage, regionalList, rawContent]);
+
+  // Regional raw content for Split View (Right Column)
+  const regionalRawContent = useMemo(() => {
+    const targetLang = selectedSplitLanguage || regionalList[0]?.language;
+    if (!targetLang) return '';
+    const found = regionalList.find(
+      (r) => r.language?.toLowerCase() === targetLang.toLowerCase()
+    );
+    return found?.content?.chords || found?.content?.lyrics || '';
+  }, [selectedSplitLanguage, regionalList]);
 
   // Handle autoscroll
   useEffect(() => {
@@ -201,7 +373,6 @@ function ChordSheetViewer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
-  // Transpose step handler
   const handleTransposeStep = (delta) => {
     setTranspose((prev) => {
       const next = prev + delta;
@@ -210,7 +381,6 @@ function ChordSheetViewer({
     });
   };
 
-  // Direct target key selector
   const handleTargetKeySelect = (targetKey) => {
     if (!targetKey || !originalKey) return;
     const originIdx = NOTE_MAP[originalKey];
@@ -225,105 +395,20 @@ function ChordSheetViewer({
 
   const currentDisplayKey = transposeKeyName(originalKey, transpose);
 
-  // Parse lines and extract sections
+  // Parse lines for primary view
   const { parsedLines, sections } = useMemo(() => {
-    if (!rawContent) return { parsedLines: [], sections: [] };
+    return parseContentLines(activeRawContent, transpose);
+  }, [activeRawContent, transpose]);
 
-    const lines = rawContent.split(/\r?\n/);
-    const resultLines = [];
-    const extractedSections = [];
-
-    lines.forEach((line, index) => {
-      const trimmed = line.trim();
-
-      // Empty line
-      if (!trimmed) {
-        resultLines.push({ type: 'empty', raw: line, index });
-        return;
-      }
-
-      // Section header
-      const sectionMatch = trimmed.match(SECTION_REGEX);
-      if (sectionMatch) {
-        const cleanName = sectionMatch[2] || trimmed;
-        const sectionId = `sec-${index}`;
-        extractedSections.push({ name: cleanName, id: sectionId, lineIndex: index });
-
-        // Identify category for accent
-        const lower = cleanName.toLowerCase();
-        let category = 'default';
-        if (lower.includes('chorus')) category = 'chorus';
-        else if (lower.includes('bridge')) category = 'bridge';
-        else if (lower.includes('verse')) category = 'verse';
-        else if (lower.includes('intro') || lower.includes('outro') || lower.includes('tag')) category = 'intro';
-
-        resultLines.push({
-          type: 'section',
-          raw: trimmed,
-          cleanName,
-          category,
-          id: sectionId,
-          index,
-        });
-        return;
-      }
-
-      // Chord line
-      if (isChordLine(line)) {
-        const tokens = [];
-        let lastIdx = 0;
-        const tokenRegex = /\S+/g;
-        let match;
-
-        while ((match = tokenRegex.exec(line)) !== null) {
-          if (match.index > lastIdx) {
-            tokens.push({
-              type: 'space',
-              text: line.substring(lastIdx, match.index),
-            });
-          }
-
-          const rawToken = match[0];
-          const isChord = CHORD_TOKEN_REGEX.test(rawToken);
-          const transposed = isChord ? transposeChord(rawToken, transpose) : rawToken;
-
-          tokens.push({
-            type: isChord ? 'chord' : 'text',
-            text: transposed,
-            original: rawToken,
-          });
-
-          lastIdx = match.index + rawToken.length;
-        }
-
-        if (lastIdx < line.length) {
-          tokens.push({
-            type: 'space',
-            text: line.substring(lastIdx),
-          });
-        }
-
-        resultLines.push({
-          type: 'chord-line',
-          tokens,
-          raw: line,
-          index,
-        });
-        return;
-      }
-
-      // Regular lyric line
-      resultLines.push({
-        type: 'lyric-line',
-        raw: line,
-        index,
-      });
-    });
-
-    return { parsedLines: resultLines, sections: extractedSections };
+  // Parse lines for Split View Left (English) & Right (Regional)
+  const leftSplitData = useMemo(() => {
+    return parseContentLines(rawContent, transpose);
   }, [rawContent, transpose]);
 
-  // Jump to section smoothly
+  const rightSplitData = useMemo(() => {
+    return parseContentLines(regionalRawContent, transpose);
+  }, [regionalRawContent, transpose]);
+
   const scrollToSection = (sectionId) => {
     const el = document.getElementById(sectionId);
     if (el) {
@@ -336,7 +421,6 @@ function ChordSheetViewer({
     }
   };
 
-  // Generate transposed text for copying / printing (respects showChords setting)
   const getTransposedRawText = () => {
     return parsedLines
       .filter((line) => {
@@ -365,86 +449,229 @@ function ChordSheetViewer({
     window.print();
   };
 
+  const handleOpenAddLangModal = (existingLang = null) => {
+    if (existingLang) {
+      const found = regionalList.find(
+        (r) => r.language?.toLowerCase() === existingLang.toLowerCase()
+      );
+      setSelectedPreset(
+        LANGUAGE_PRESETS.includes(existingLang) ? existingLang : 'Custom'
+      );
+      setCustomLangName(!LANGUAGE_PRESETS.includes(existingLang) ? existingLang : '');
+      setLangLyrics(found?.content?.lyrics || found?.content?.chords || '');
+    } else {
+      setSelectedPreset('Telugu');
+      setCustomLangName('');
+      setLangLyrics('');
+    }
+    setLangError('');
+    setAddLangDialogOpen(true);
+  };
+
+  const handleSaveRegionalLanguage = async () => {
+    const langName =
+      selectedPreset === 'Custom' ? customLangName.trim() : selectedPreset;
+    if (!langName) {
+      setLangError('Please specify the language name.');
+      return;
+    }
+    if (!langLyrics.trim()) {
+      setLangError('Please enter the regional language lyrics or chords.');
+      return;
+    }
+
+    try {
+      setSavingLang(true);
+      setLangError('');
+
+      const existing = [...regionalList];
+      const idx = existing.findIndex(
+        (r) => r.language?.toLowerCase() === langName.toLowerCase()
+      );
+
+      const entry = {
+        language: langName,
+        name: langName,
+        content: {
+          lyrics: langLyrics,
+          chords: langLyrics,
+        },
+      };
+
+      if (idx >= 0) {
+        existing[idx] = entry;
+      } else {
+        existing.push(entry);
+      }
+
+      if (songId) {
+        const res = await api.put(`/songs/${songId}`, {
+          regionalLyrics: existing,
+        });
+        if (onSaveSong) {
+          onSaveSong(res.data);
+        }
+      }
+
+      setSelectedLanguage(langName);
+      setSelectedSplitLanguage(langName);
+      setToastMessage(`Regional language "${langName}" saved successfully!`);
+      setAddLangDialogOpen(false);
+    } catch (err) {
+      console.error('Error saving regional language:', err);
+      setLangError(
+        err?.response?.data?.message || 'Failed to save regional lyrics.'
+      );
+    } finally {
+      setSavingLang(false);
+    }
+  };
+
+  const handleDeleteRegionalLanguage = async (langToDelete) => {
+    if (!window.confirm(`Are you sure you want to remove "${langToDelete}" lyrics?`)) {
+      return;
+    }
+    try {
+      const updated = regionalList.filter(
+        (r) => r.language?.toLowerCase() !== langToDelete.toLowerCase()
+      );
+      if (songId) {
+        const res = await api.put(`/songs/${songId}`, {
+          regionalLyrics: updated,
+        });
+        if (onSaveSong) {
+          onSaveSong(res.data);
+        }
+      }
+      if (selectedLanguage.toLowerCase() === langToDelete.toLowerCase()) {
+        setSelectedLanguage('original');
+      }
+      setToastMessage(`Removed "${langToDelete}" lyrics.`);
+    } catch (err) {
+      console.error('Failed to delete regional language:', err);
+    }
+  };
+
+  const handleInsertSectionTag = (tag) => {
+    setLangLyrics((prev) => {
+      const current = prev || '';
+      const prefix = current.length > 0 && !current.endsWith('\n') ? '\n\n' : '';
+      return `${current}${prefix}${tag}\n`;
+    });
+  };
+
+  const renderSheetLines = (lines) => {
+    return lines.map((line, idx) => {
+      if (!showChords && line.type === 'chord-line') return null;
+      if (line.type === 'empty') return <div key={idx} className="cs-line cs-line-empty" />;
+      if (line.type === 'section') {
+        return (
+          <div key={idx} id={line.id} className={`cs-section-header cs-section-${line.category}`}>
+            <MusicNoteIcon sx={{ fontSize: '0.9em' }} />
+            {line.cleanName}
+          </div>
+        );
+      }
+      if (line.type === 'chord-line') {
+        return (
+          <div key={idx} className="cs-line cs-line-chord">
+            {line.tokens.map((token, tIdx) => {
+              if (token.type === 'space') return <span key={tIdx}>{token.text}</span>;
+              if (token.type === 'chord') {
+                return (
+                  <span
+                    key={tIdx}
+                    className={`chord-badge-${highlightStyle}`}
+                    title={`Original: ${token.original} | Transposed: ${token.text}`}
+                  >
+                    {token.text}
+                  </span>
+                );
+              }
+              return <span key={tIdx}>{token.text}</span>;
+            })}
+          </div>
+        );
+      }
+      return (
+        <div key={idx} className="cs-line cs-line-lyric">
+          {line.raw}
+        </div>
+      );
+    });
+  };
+
+  const isSplitMode = selectedLanguage === 'split';
+
   return (
     <Box
       ref={viewerContainerRef}
-      className={`chord-sheet-container chord-sheet-theme-${themeMode} ${
-        isFullscreen ? 'chord-sheet-fullscreen' : ''
+      className={`chord-sheet-container theme-${themeMode} ${
+        isFullscreen ? 'fullscreen-mode' : ''
       }`}
-      sx={{ width: '100%' }}
     >
-      {/* ================= Fullscreen Top Floating Navigation ================= */}
+      <Snackbar
+        open={Boolean(toastMessage)}
+        autoHideDuration={3000}
+        onClose={() => setToastMessage('')}
+        message={toastMessage}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
+
+      {/* ================= Fullscreen Floating Toolbar ================= */}
       {isFullscreen && (
-        <Paper
-          elevation={4}
-          sx={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 20,
-            p: 1.25,
-            px: 2,
-            mb: 2,
-            borderRadius: 2,
-            bgcolor: 'background.paper',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 1.5,
-            flexWrap: 'wrap',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="subtitle1" fontWeight={700} noWrap>
-              {title || 'Music Stand View'}
+        <Paper elevation={4} className="cs-fullscreen-bar">
+          <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
+            <Typography variant="subtitle2" fontWeight={800} noWrap sx={{ maxWidth: 220 }}>
+              {title || 'Chord Sheet'}{' '}
+              {isSplitMode
+                ? `(Split: English + ${selectedSplitLanguage})`
+                : selectedLanguage !== 'original'
+                ? `(${selectedLanguage})`
+                : ''}
             </Typography>
+            <Chip
+              size="small"
+              label={`Key: ${currentDisplayKey || 'C'}`}
+              color="primary"
+              sx={{ fontWeight: 700, height: 22 }}
+            />
             {showChords && (
-              <Chip
-                size="small"
-                label={`Key: ${currentDisplayKey || originalKey}`}
-                color="primary"
-                sx={{ fontWeight: 700, height: 22 }}
-              />
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => handleTransposeStep(-1)}
+                  sx={{ minWidth: 26, height: 24, p: 0, fontWeight: 700 }}
+                >
+                  -
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => handleTransposeStep(1)}
+                  sx={{ minWidth: 26, height: 24, p: 0, fontWeight: 700 }}
+                >
+                  +
+                </Button>
+              </Stack>
             )}
           </Box>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {/* Font adjust */}
+          <Box display="flex" alignItems="center" gap={1}>
             <IconButton
               size="small"
-              onClick={() => setFontSize((s) => Math.max(12, s - 1))}
-              disabled={fontSize <= 12}
+              onClick={() => setShowChords(!showChords)}
+              sx={{ color: showChords ? '#38bdf8' : 'inherit' }}
+              title={showChords ? 'Hide Chords (Lyrics Only)' : 'Show Chords'}
             >
-              <Typography variant="caption" fontWeight={800}>
-                A-
-              </Typography>
-            </IconButton>
-            <Typography variant="caption" fontWeight={700}>
-              {fontSize}px
-            </Typography>
-            <IconButton
-              size="small"
-              onClick={() => setFontSize((s) => Math.min(26, s + 1))}
-              disabled={fontSize >= 26}
-            >
-              <Typography variant="caption" fontWeight={800}>
-                A+
-              </Typography>
-            </IconButton>
-
-            {/* Auto scroll */}
-            <IconButton
-              size="small"
-              onClick={() => setIsScrolling(!isScrolling)}
-              color={isScrolling ? 'primary' : 'default'}
-              sx={{ bgcolor: isScrolling ? 'rgba(37, 99, 235, 0.1)' : 'transparent' }}
-            >
-              {isScrolling ? <PauseIcon fontSize="small" /> : <PlayIcon fontSize="small" />}
+              {showChords ? <QueueMusicIcon fontSize="small" /> : <LyricsIcon fontSize="small" />}
             </IconButton>
 
             <Button
+              size="small"
               variant="contained"
               color="primary"
-              size="small"
               startIcon={<FullscreenExitIcon />}
               onClick={() => setIsFullscreen(false)}
               sx={{ textTransform: 'none', borderRadius: 1.5, fontWeight: 700 }}
@@ -478,34 +705,110 @@ function ChordSheetViewer({
               mb: 1.5,
             }}
           >
-            {/* Mode Switcher Pill */}
-            <ToggleButtonGroup
-              size="small"
-              value={showChords ? 'chords' : 'lyrics'}
-              exclusive
-              onChange={(e, val) => {
-                if (val) setShowChords(val === 'chords');
-              }}
-              sx={{
-                height: 34,
-                '& .MuiToggleButton-root': {
-                  px: { xs: 1.2, sm: 1.6 },
-                  textTransform: 'none',
-                  fontWeight: 700,
-                  fontSize: '0.78rem',
-                  gap: 0.5,
-                },
-              }}
-            >
-              <ToggleButton value="chords">
-                <QueueMusicIcon sx={{ fontSize: 16 }} />
-                Chords & Lyrics
-              </ToggleButton>
-              <ToggleButton value="lyrics">
-                <LyricsIcon sx={{ fontSize: 16 }} />
-                Lyrics Only
-              </ToggleButton>
-            </ToggleButtonGroup>
+            {/* Left: Mode Switcher & Language Tabs */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+              {/* Mode Switcher Pill */}
+              <ToggleButtonGroup
+                size="small"
+                value={showChords ? 'chords' : 'lyrics'}
+                exclusive
+                onChange={(e, val) => {
+                  if (val) setShowChords(val === 'chords');
+                }}
+                sx={{
+                  height: 32,
+                  '& .MuiToggleButton-root': {
+                    px: { xs: 1.2, sm: 1.5 },
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.78rem',
+                    gap: 0.5,
+                  },
+                }}
+              >
+                <ToggleButton value="chords">
+                  <QueueMusicIcon sx={{ fontSize: 16 }} />
+                  Chords & Lyrics
+                </ToggleButton>
+                <ToggleButton value="lyrics">
+                  <LyricsIcon sx={{ fontSize: 16 }} />
+                  Lyrics Only
+                </ToggleButton>
+              </ToggleButtonGroup>
+
+              <Divider orientation="vertical" flexItem sx={{ height: 22, my: 'auto' }} />
+
+              {/* Regional Language Tabs */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, flexWrap: 'wrap' }}>
+                <Chip
+                  label="Original"
+                  size="small"
+                  clickable
+                  color={selectedLanguage === 'original' ? 'primary' : 'default'}
+                  variant={selectedLanguage === 'original' ? 'filled' : 'outlined'}
+                  onClick={() => setSelectedLanguage('original')}
+                  sx={{ fontWeight: 700, fontSize: '0.72rem', height: 26 }}
+                />
+
+                {regionalList.map((r) => {
+                  const isSelected =
+                    selectedLanguage.toLowerCase() === r.language?.toLowerCase();
+                  return (
+                    <Chip
+                      key={r.language}
+                      label={r.language}
+                      size="small"
+                      clickable
+                      color={isSelected ? 'primary' : 'default'}
+                      variant={isSelected ? 'filled' : 'outlined'}
+                      onClick={() => setSelectedLanguage(r.language)}
+                      onDelete={
+                        songId
+                          ? () => handleDeleteRegionalLanguage(r.language)
+                          : undefined
+                      }
+                      deleteIcon={
+                        <DeleteOutlineIcon style={{ fontSize: 14 }} />
+                      }
+                      sx={{ fontWeight: 700, fontSize: '0.72rem', height: 26 }}
+                    />
+                  );
+                })}
+
+                {/* Split View Button (English on left, Regional on right) */}
+                {regionalList.length > 0 && (
+                  <Chip
+                    icon={<SplitViewIcon style={{ fontSize: 14 }} />}
+                    label="Split View"
+                    size="small"
+                    clickable
+                    color={isSplitMode ? 'primary' : 'default'}
+                    variant={isSplitMode ? 'filled' : 'outlined'}
+                    onClick={() => setSelectedLanguage('split')}
+                    sx={{ fontWeight: 800, fontSize: '0.72rem', height: 26 }}
+                  />
+                )}
+
+                {/* + Add Language Button */}
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                  onClick={() => handleOpenAddLangModal()}
+                  sx={{
+                    textTransform: 'none',
+                    borderRadius: 1.75,
+                    fontWeight: 700,
+                    fontSize: '0.72rem',
+                    height: 26,
+                    px: 1,
+                  }}
+                >
+                  + Add Language
+                </Button>
+              </Box>
+            </Box>
 
             {/* Transpose Controls (when chords enabled) */}
             {showChords && (
@@ -606,7 +909,6 @@ function ChordSheetViewer({
           >
             {/* Left: Theme Switcher & Font Controls */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              {/* Theme Mode Selector */}
               <ToggleButtonGroup
                 size="small"
                 value={themeMode}
@@ -650,11 +952,7 @@ function ChordSheetViewer({
                     A-
                   </Typography>
                 </IconButton>
-                <Typography
-                  variant="caption"
-                  fontWeight={700}
-                  sx={{ fontSize: '0.75rem', minWidth: 26, textAlign: 'center' }}
-                >
+                <Typography variant="caption" fontWeight={700} sx={{ fontSize: '0.75rem', px: 0.5 }}>
                   {fontSize}px
                 </Typography>
                 <IconButton
@@ -669,134 +967,140 @@ function ChordSheetViewer({
                 </IconButton>
               </Box>
 
-              {/* Highlight Style selector (only when chords on) */}
+              {/* Chord Badge Highlight Styling */}
               {showChords && (
-                <ToggleButtonGroup
-                  size="small"
-                  value={highlightStyle}
-                  exclusive
-                  onChange={(e, val) => val && setHighlightStyle(val)}
-                  sx={{ height: 30, display: { xs: 'none', sm: 'inline-flex' } }}
-                >
-                  <ToggleButton
-                    value="pill"
-                    sx={{ px: 1, fontSize: '0.72rem', textTransform: 'none', fontWeight: 600 }}
+                <FormControl size="small" sx={{ minWidth: 90 }}>
+                  <Select
+                    value={highlightStyle}
+                    onChange={(e) => setHighlightStyle(e.target.value)}
+                    sx={{
+                      height: 30,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: 1.5,
+                    }}
                   >
-                    Pill
-                  </ToggleButton>
-                  <ToggleButton
-                    value="glow"
-                    sx={{ px: 1, fontSize: '0.72rem', textTransform: 'none', fontWeight: 600 }}
-                  >
-                    Glow
-                  </ToggleButton>
-                  <ToggleButton
-                    value="bold"
-                    sx={{ px: 1, fontSize: '0.72rem', textTransform: 'none', fontWeight: 600 }}
-                  >
-                    Bold
-                  </ToggleButton>
-                </ToggleButtonGroup>
+                    <MenuItem value="pill">Pill Chords</MenuItem>
+                    <MenuItem value="glow">Cyan Glow</MenuItem>
+                    <MenuItem value="bold">Bold Text</MenuItem>
+                    <MenuItem value="off">Plain</MenuItem>
+                  </Select>
+                </FormControl>
               )}
-            </Box>
 
-            {/* Right: Quick Tools (Auto-Scroll, Fullscreen Music Stand, Copy, Print) */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              {/* Auto Scroll Quick Toggle */}
-              <Tooltip title={isScrolling ? 'Pause Auto Scroll' : 'Start Auto Scroll'}>
-                <IconButton
-                  size="small"
-                  onClick={() => setIsScrolling(!isScrolling)}
-                  color={isScrolling ? 'primary' : 'default'}
-                  sx={{
-                    bgcolor: isScrolling ? 'rgba(37, 99, 235, 0.12)' : 'transparent',
-                    width: 30,
-                    height: 30,
-                  }}
-                >
-                  {isScrolling ? <PauseIcon sx={{ fontSize: 17 }} /> : <PlayIcon sx={{ fontSize: 17 }} />}
-                </IconButton>
-              </Tooltip>
+              {/* Split Language Switcher when in Split Mode */}
+              {isSplitMode && regionalList.length > 1 && (
+                <FormControl size="small" sx={{ minWidth: 100 }}>
+                  <Select
+                    value={selectedSplitLanguage}
+                    onChange={(e) => setSelectedSplitLanguage(e.target.value)}
+                    sx={{ height: 30, fontSize: '0.75rem', fontWeight: 700, borderRadius: 1.5 }}
+                  >
+                    {regionalList.map((r) => (
+                      <MenuItem key={r.language} value={r.language} sx={{ fontSize: '0.78rem' }}>
+                        Right: {r.language}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
 
-              {/* Stage Fullscreen Music Stand */}
-              <Tooltip title={isFullscreen ? 'Exit Stage Stand Mode' : 'Music Stand Fullscreen'}>
-                <IconButton
-                  size="small"
-                  onClick={() => setIsFullscreen(!isFullscreen)}
-                  color={isFullscreen ? 'primary' : 'default'}
-                  sx={{ width: 30, height: 30 }}
-                >
-                  {isFullscreen ? (
-                    <FullscreenExitIcon sx={{ fontSize: 18 }} />
-                  ) : (
-                    <FullscreenIcon sx={{ fontSize: 18 }} />
-                  )}
-                </IconButton>
-              </Tooltip>
-
-              {/* 2-Columns Toggle (tablet/desktop) */}
-              <Tooltip title={twoColumns ? 'Switch to 1 Column' : 'Switch to 2 Columns'}>
+              {/* Two Column Layout Toggle (Only in single language view) */}
+              {!isSplitMode && (
                 <IconButton
                   size="small"
                   onClick={() => setTwoColumns(!twoColumns)}
                   color={twoColumns ? 'primary' : 'default'}
-                  sx={{ display: { xs: 'none', md: 'inline-flex' }, width: 30, height: 30 }}
+                  sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, height: 30, width: 30 }}
+                  title={twoColumns ? 'Switch to 1 Column' : 'Switch to 2 Columns'}
                 >
-                  {twoColumns ? (
-                    <TwoColIcon sx={{ fontSize: 17 }} />
-                  ) : (
-                    <SingleColIcon sx={{ fontSize: 17 }} />
-                  )}
+                  {twoColumns ? <TwoColIcon sx={{ fontSize: 16 }} /> : <SingleColIcon sx={{ fontSize: 16 }} />}
                 </IconButton>
-              </Tooltip>
+              )}
+            </Box>
 
-              {/* Copy */}
-              <Tooltip title={copied ? 'Copied!' : 'Copy Sheet'}>
+            {/* Right: Copy, Print, Fullscreen, and Edit Buttons */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <Tooltip title={copied ? 'Copied to Clipboard!' : 'Copy Formatted Text'}>
                 <IconButton
                   size="small"
                   onClick={handleCopy}
-                  color={copied ? 'success' : 'default'}
-                  sx={{ width: 30, height: 30 }}
+                  sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, height: 30, width: 30 }}
                 >
-                  {copied ? <CheckIcon sx={{ fontSize: 16 }} /> : <ContentCopyIcon sx={{ fontSize: 16 }} />}
+                  {copied ? <CheckIcon sx={{ fontSize: 15, color: 'success.main' }} /> : <ContentCopyIcon sx={{ fontSize: 15 }} />}
                 </IconButton>
               </Tooltip>
 
-              {/* Print */}
-              <Tooltip title="Print Sheet">
+              <Tooltip title="Print / Save PDF">
                 <IconButton
                   size="small"
                   onClick={handlePrint}
-                  sx={{ display: { xs: 'none', sm: 'inline-flex' }, width: 30, height: 30 }}
+                  sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, height: 30, width: 30 }}
                 >
-                  <PrintIcon sx={{ fontSize: 16 }} />
+                  <PrintIcon sx={{ fontSize: 15 }} />
                 </IconButton>
               </Tooltip>
+
+              <Tooltip title="Fullscreen Stage Mode">
+                <IconButton
+                  size="small"
+                  onClick={() => setIsFullscreen(true)}
+                  sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, height: 30, width: 30 }}
+                >
+                  <FullscreenIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+
+              {onEdit && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<EditIcon sx={{ fontSize: 14 }} />}
+                  onClick={onEdit}
+                  sx={{
+                    height: 30,
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    borderRadius: 1.5,
+                    px: 1.25,
+                  }}
+                >
+                  Edit Sheet
+                </Button>
+              )}
             </Box>
           </Box>
 
-          {/* Section Quick Jump Bar */}
-          {sections.length > 0 && (
-            <Box sx={{ mt: 1.25, pt: 1.25, borderTop: '1px dashed', borderColor: 'divider' }}>
-              <Box className="cs-quick-nav">
+          {/* Tier 3: Interactive Section Jump Chips */}
+          {sections.length > 0 && !isSplitMode && (
+            <Box sx={{ pt: 1.25, borderTop: '1px solid', borderColor: 'divider', mt: 1.25 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.75,
+                  overflowX: 'auto',
+                  pb: 0.25,
+                }}
+              >
                 <Typography
                   variant="caption"
                   fontWeight={800}
                   color="text.secondary"
-                  sx={{ mr: 0.5, py: 0.3, fontSize: '0.68rem', flexShrink: 0 }}
+                  sx={{ fontSize: '0.68rem', textTransform: 'uppercase', flexShrink: 0 }}
                 >
-                  JUMP TO:
+                  Sections:
                 </Typography>
                 {sections.map((sec) => (
                   <Chip
                     key={sec.id}
                     label={sec.name}
                     size="small"
-                    onClick={() => scrollToSection(sec.id)}
                     clickable
-                    variant="outlined"
+                    onClick={() => scrollToSection(sec.id)}
                     sx={{
-                      fontWeight: 700,
                       fontSize: '0.72rem',
                       height: 24,
                       cursor: 'pointer',
@@ -812,68 +1116,74 @@ function ChordSheetViewer({
         </Paper>
       )}
 
-      {/* ================= Rendered Sheet (Chords + Lyrics or Lyrics-Only) ================= */}
-      {parsedLines.length > 0 ? (
+      {/* ================= Rendered Sheet (Single Language or Split View) ================= */}
+      {isSplitMode ? (
+        // ================= SPLIT VIEW (English on Left, Regional Language on Right) =================
+        <Paper
+          variant="outlined"
+          sx={{
+            p: { xs: 1.5, sm: 2.5 },
+            borderRadius: 2.5,
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Grid container spacing={3}>
+            {/* Left Column: English (Original) */}
+            <Grid item xs={12} md={6}>
+              <Box sx={{ pb: 1, mb: 1.5, borderBottom: '2px solid', borderColor: 'primary.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="subtitle2" fontWeight={800} color="primary.main">
+                  ENGLISH (ORIGINAL)
+                </Typography>
+              </Box>
+              <Box
+                className={`chord-sheet-body ${
+                  showChords ? 'cs-mode-chords' : 'cs-mode-lyrics-only'
+                }`}
+                style={{ fontSize: `${fontSize}px` }}
+              >
+                {leftSplitData.parsedLines.length > 0 ? (
+                  renderSheetLines(leftSplitData.parsedLines)
+                ) : (
+                  <Typography variant="caption" color="text.secondary">
+                    No English lyrics available.
+                  </Typography>
+                )}
+              </Box>
+            </Grid>
+
+            {/* Right Column: Regional Language (e.g. Telugu) */}
+            <Grid item xs={12} md={6} sx={{ borderLeft: { md: '1px solid' }, borderColor: { md: 'divider' } }}>
+              <Box sx={{ pb: 1, mb: 1.5, borderBottom: '2px solid', borderColor: '#38bdf8', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="subtitle2" fontWeight={800} sx={{ color: '#0284c7' }}>
+                  {(selectedSplitLanguage || 'Regional Language').toUpperCase()}
+                </Typography>
+              </Box>
+              <Box
+                className={`chord-sheet-body ${
+                  showChords ? 'cs-mode-chords' : 'cs-mode-lyrics-only'
+                }`}
+                style={{ fontSize: `${fontSize}px` }}
+              >
+                {rightSplitData.parsedLines.length > 0 ? (
+                  renderSheetLines(rightSplitData.parsedLines)
+                ) : (
+                  <Typography variant="caption" color="text.secondary">
+                    No regional lyrics added yet. Click "+ Add Language" above.
+                  </Typography>
+                )}
+              </Box>
+            </Grid>
+          </Grid>
+        </Paper>
+      ) : parsedLines.length > 0 ? (
+        // ================= STANDARD VIEW =================
         <Box
           className={`chord-sheet-body ${
             showChords ? 'cs-mode-chords' : 'cs-mode-lyrics-only'
           } ${twoColumns ? 'chord-sheet-columns-2' : ''}`}
           style={{ fontSize: `${fontSize}px` }}
         >
-          {parsedLines.map((line, idx) => {
-            // When chords are hidden, skip chord lines entirely
-            if (!showChords && line.type === 'chord-line') {
-              return null;
-            }
-
-            if (line.type === 'empty') {
-              return <div key={idx} className="cs-line cs-line-empty" />;
-            }
-
-            if (line.type === 'section') {
-              return (
-                <div
-                  key={idx}
-                  id={line.id}
-                  className={`cs-section-header cs-section-${line.category}`}
-                >
-                  <MusicNoteIcon sx={{ fontSize: '0.9em' }} />
-                  {line.cleanName}
-                </div>
-              );
-            }
-
-            if (line.type === 'chord-line') {
-              return (
-                <div key={idx} className="cs-line cs-line-chord">
-                  {line.tokens.map((token, tIdx) => {
-                    if (token.type === 'space') {
-                      return <span key={tIdx}>{token.text}</span>;
-                    }
-                    if (token.type === 'chord') {
-                      return (
-                        <span
-                          key={tIdx}
-                          className={`chord-badge-${highlightStyle}`}
-                          title={`Original: ${token.original} | Transposed: ${token.text}`}
-                        >
-                          {token.text}
-                        </span>
-                      );
-                    }
-                    return <span key={tIdx}>{token.text}</span>;
-                  })}
-                </div>
-              );
-            }
-
-            // Lyric line (when chords hidden, lines stack naturally with natural line spacing)
-            return (
-              <div key={idx} className="cs-line cs-line-lyric">
-                {line.raw}
-              </div>
-            );
-          })}
+          {renderSheetLines(parsedLines)}
         </Box>
       ) : (
         <Box textAlign="center" py={6}>
@@ -882,6 +1192,120 @@ function ChordSheetViewer({
           </Typography>
         </Box>
       )}
+
+      {/* ================= Add / Edit Language Dialog ================= */}
+      <Dialog
+        open={addLangDialogOpen}
+        onClose={() => !savingLang && setAddLangDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3, p: 1 } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <TranslateIcon color="primary" />
+            <Typography variant="h6" fontWeight={700}>
+              Add Language Lyrics
+            </Typography>
+          </Box>
+          <IconButton size="small" onClick={() => setAddLangDialogOpen(false)}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent dividers>
+          {langError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {langError}
+            </Alert>
+          )}
+
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="preset-lang-label">Select Language</InputLabel>
+              <Select
+                labelId="preset-lang-label"
+                value={selectedPreset}
+                label="Select Language"
+                onChange={(e) => setSelectedPreset(e.target.value)}
+              >
+                {LANGUAGE_PRESETS.map((lang) => (
+                  <MenuItem key={lang} value={lang}>
+                    {lang}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {selectedPreset === 'Custom' && (
+              <TextField
+                size="small"
+                label="Custom Language Name"
+                placeholder="e.g. Swahili, Greek, etc."
+                value={customLangName}
+                onChange={(e) => setCustomLangName(e.target.value)}
+                fullWidth
+                required
+              />
+            )}
+
+            {/* Quick Section Tag Inserters */}
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                Quick Insert Section Tags:
+              </Typography>
+              <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                {['[Verse 1]', '[Chorus]', '[Verse 2]', '[Bridge]', '[Outro]'].map((tag) => (
+                  <Chip
+                    key={tag}
+                    label={tag}
+                    size="small"
+                    onClick={() => handleInsertSectionTag(tag)}
+                    sx={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.72rem' }}
+                  />
+                ))}
+              </Stack>
+            </Box>
+
+            <TextField
+              label="Language Lyrics & Chords"
+              placeholder={`[Verse 1]\nEnter lyrics in the selected language...\n\n[Chorus]\nEnter chorus in the selected language...`}
+              multiline
+              rows={12}
+              value={langLyrics}
+              onChange={(e) => setLangLyrics(e.target.value)}
+              fullWidth
+              variant="outlined"
+              inputProps={{
+                style: {
+                  fontFamily: '"Fira Code", monospace, sans-serif',
+                  fontSize: '0.85rem',
+                },
+              }}
+            />
+          </Stack>
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button
+            onClick={() => setAddLangDialogOpen(false)}
+            disabled={savingLang}
+            sx={{ textTransform: 'none', fontWeight: 600 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<SaveIcon />}
+            onClick={handleSaveRegionalLanguage}
+            disabled={savingLang}
+            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}
+          >
+            {savingLang ? 'Saving...' : 'Save Language Lyrics'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* ================= Floating Auto-Scroll Control ================= */}
       <Box className="cs-autoscroll-bar">

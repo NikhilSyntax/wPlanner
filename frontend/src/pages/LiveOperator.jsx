@@ -19,6 +19,8 @@ import {
   useTheme,
   Grid,
   TextField,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -38,6 +40,10 @@ import {
   Edit as EditIcon,
   Close as CloseIcon,
   Save as SaveIcon,
+  DeleteOutline as DeleteIcon,
+  RestartAlt as RestoreIcon,
+  Translate as TranslateIcon,
+  VerticalSplit as SplitViewIcon,
 } from '@mui/icons-material';
 import { io } from 'socket.io-client';
 import api from '../services/api';
@@ -74,6 +80,85 @@ function inlineChordProToLine(str = '') {
   return { text, chords };
 }
 
+function isSlideHidden(hiddenSlides, songId, sectionId, chunkIndex) {
+  if (!hiddenSlides) return false;
+  const key = `${songId}_${sectionId}_${chunkIndex}`;
+  return Boolean(hiddenSlides[key]);
+}
+
+function getSongSectionsForLanguage(song, language = 'original') {
+  if (!song) return [];
+  if (language && language !== 'original' && song.regionalSections) {
+    const langKey = language.toLowerCase();
+    if (song.regionalSections[langKey] && song.regionalSections[langKey].length > 0) {
+      return song.regionalSections[langKey];
+    }
+  }
+  return song.sections || [];
+}
+
+function findNextValidSlide(songs, hiddenSlides, currentSongIdx, currentSecIdx, currentChunkIdx, language = 'original') {
+  if (!Array.isArray(songs) || songs.length === 0) return null;
+  const sStart = Math.max(0, currentSongIdx);
+
+  for (let s = sStart; s < songs.length; s++) {
+    const song = songs[s];
+    const sections = getSongSectionsForLanguage(song, language);
+    const secStart = s === sStart ? Math.max(0, currentSecIdx) : 0;
+
+    for (let sec = secStart; sec < sections.length; sec++) {
+      const section = sections[sec];
+      const chunks = section.chunks || [];
+      const chunkStart = (s === sStart && sec === secStart) ? currentChunkIdx + 1 : 0;
+
+      for (let c = chunkStart; c < chunks.length; c++) {
+        if (!isSlideHidden(hiddenSlides, song._id, section.sectionId, c)) {
+          return {
+            song,
+            section,
+            songIndex: s,
+            sectionIndex: sec,
+            chunkIndex: c,
+            lines: chunks[c]?.lines || [],
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function findPrevValidSlide(songs, hiddenSlides, currentSongIdx, currentSecIdx, currentChunkIdx, language = 'original') {
+  if (!Array.isArray(songs) || songs.length === 0) return null;
+  const sStart = Math.min(Math.max(0, currentSongIdx), songs.length - 1);
+
+  for (let s = sStart; s >= 0; s--) {
+    const song = songs[s];
+    const sections = getSongSectionsForLanguage(song, language);
+    const secStart = s === sStart ? Math.min(Math.max(0, currentSecIdx), sections.length - 1) : sections.length - 1;
+
+    for (let sec = secStart; sec >= 0; sec--) {
+      const section = sections[sec];
+      const chunks = section.chunks || [];
+      const chunkStart = (s === sStart && sec === secStart) ? currentChunkIdx - 1 : chunks.length - 1;
+
+      for (let c = chunkStart; c >= 0; c--) {
+        if (!isSlideHidden(hiddenSlides, song._id, section.sectionId, c)) {
+          return {
+            song,
+            section,
+            songIndex: s,
+            sectionIndex: sec,
+            chunkIndex: c,
+            lines: chunks[c]?.lines || [],
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function computeOptimisticLiveState(state, type, payload = {}) {
   if (!state) return state;
 
@@ -85,7 +170,29 @@ function computeOptimisticLiveState(state, type, payload = {}) {
   let currentSectionName = state.currentSectionName;
   let currentChunkIndex = state.currentChunkIndex || 0;
   let displayMode = state.displayMode || 'LYRICS_CHORDS';
+  let activeLanguage = state.activeLanguage || 'original';
+  let availableLanguages = state.availableLanguages || ['original'];
   let customChunkOverrides = { ...(state.customChunkOverrides || {}) };
+  let hiddenSlides = { ...(state.hiddenSlides || {}) };
+
+  let isSplitView = Boolean(
+    state.isSplitView ||
+      activeLanguage === 'split' ||
+      (typeof activeLanguage === 'string' && activeLanguage.startsWith('split'))
+  );
+
+  let splitLanguage = state.splitLanguage || '';
+  if (!splitLanguage && typeof activeLanguage === 'string' && activeLanguage.includes(':')) {
+    splitLanguage = activeLanguage.split(':')[1];
+  }
+  if (!splitLanguage) {
+    splitLanguage = availableLanguages.find((l) => l !== 'original') || 'Regional';
+  }
+
+  let leftChunk = [];
+  let rightChunk = [];
+  let nextLeftChunk = [];
+  let nextRightChunk = [];
 
   let currentSong = songs.find((s) => s._id?.toString() === currentSongId?.toString()) || songs[0];
 
@@ -99,6 +206,7 @@ function computeOptimisticLiveState(state, type, payload = {}) {
       currentSectionId = targetSong.sections?.[0]?.sectionId || '';
       currentSectionName = targetSong.sections?.[0]?.name || '';
       currentChunkIndex = 0;
+
       if (displayMode === 'BLACK' || displayMode === 'CLEAR') {
         displayMode = 'LYRICS_CHORDS';
       }
@@ -115,65 +223,106 @@ function computeOptimisticLiveState(state, type, payload = {}) {
         }
       }
     }
-  } else if (type === 'NEXT') {
-    if (currentSong && currentSong.sections?.length > 0) {
-      const secIdx = currentSong.sections.findIndex((s) => s.sectionId === currentSectionId);
-      const curSec = currentSong.sections[secIdx >= 0 ? secIdx : 0];
-      const chunks = curSec.chunks || [];
-
-      if (currentChunkIndex + 1 < chunks.length) {
-        currentChunkIndex += 1;
-      } else if (secIdx + 1 < currentSong.sections.length) {
-        const nextSec = currentSong.sections[secIdx + 1];
-        currentSectionId = nextSec.sectionId;
-        currentSectionName = nextSec.name;
-        currentChunkIndex = 0;
-      } else {
-        const songIdx = songs.findIndex((s) => s._id?.toString() === currentSong._id?.toString());
-        if (songIdx + 1 < songs.length) {
-          const nextSong = songs[songIdx + 1];
-          currentSong = nextSong;
-          currentSongId = nextSong._id;
-          currentSongTitle = nextSong.title;
-          currentSongKey = nextSong.key;
-          currentSectionId = nextSong.sections?.[0]?.sectionId || '';
-          currentSectionName = nextSong.sections?.[0]?.name || '';
-          currentChunkIndex = 0;
+  } else if (type === 'SET_SPLIT_VIEW' || type === 'TOGGLE_SPLIT_VIEW') {
+    isSplitView = payload?.isSplitView !== undefined ? payload.isSplitView : !isSplitView;
+    if (payload?.splitLanguage) {
+      splitLanguage = payload.splitLanguage;
+    }
+    if (isSplitView) {
+      activeLanguage = `split:${splitLanguage || 'Regional'}`;
+    } else {
+      activeLanguage = 'original';
+    }
+  } else if (type === 'SET_LANGUAGE') {
+    if (payload?.language) {
+      activeLanguage = payload.language;
+      if (payload.language.startsWith('split')) {
+        isSplitView = true;
+        if (payload.language.includes(':')) {
+          splitLanguage = payload.language.split(':')[1];
+        } else if (payload.splitLanguage) {
+          splitLanguage = payload.splitLanguage;
         }
+      } else {
+        isSplitView = false;
       }
+    }
+  } else if (type === 'NEXT') {
+    const curSongIdx = songs.findIndex((s) => s._id?.toString() === currentSongId?.toString());
+    const curSecIdx = currentSong?.sections?.findIndex((s) => s.sectionId === currentSectionId) ?? 0;
+    const nextValid = findNextValidSlide(songs, hiddenSlides, curSongIdx, curSecIdx, currentChunkIndex, activeLanguage);
+
+    if (nextValid) {
+      currentSong = nextValid.song;
+      currentSongId = nextValid.song._id;
+      currentSongTitle = nextValid.song.title;
+      currentSongKey = nextValid.song.key;
+      currentSectionId = nextValid.section.sectionId;
+      currentSectionName = nextValid.section.name;
+      currentChunkIndex = nextValid.chunkIndex;
       if (displayMode === 'BLACK' || displayMode === 'CLEAR') {
         displayMode = 'LYRICS_CHORDS';
       }
     }
   } else if (type === 'PREV') {
-    if (currentSong && currentSong.sections?.length > 0) {
-      const secIdx = currentSong.sections.findIndex((s) => s.sectionId === currentSectionId);
-      if (currentChunkIndex > 0) {
-        currentChunkIndex -= 1;
-      } else if (secIdx > 0) {
-        const prevSec = currentSong.sections[secIdx - 1];
-        currentSectionId = prevSec.sectionId;
-        currentSectionName = prevSec.name;
-        currentChunkIndex = Math.max((prevSec.chunks?.length || 1) - 1, 0);
-      } else {
-        const songIdx = songs.findIndex((s) => s._id?.toString() === currentSong._id?.toString());
-        if (songIdx > 0) {
-          const prevSong = songs[songIdx - 1];
-          currentSong = prevSong;
-          currentSongId = prevSong._id;
-          currentSongTitle = prevSong.title;
-          currentSongKey = prevSong.key;
-          const lastSec = prevSong.sections?.[(prevSong.sections?.length || 1) - 1];
-          if (lastSec) {
-            currentSectionId = lastSec.sectionId;
-            currentSectionName = lastSec.name;
-            currentChunkIndex = Math.max((lastSec.chunks?.length || 1) - 1, 0);
-          }
-        }
-      }
+    const curSongIdx = songs.findIndex((s) => s._id?.toString() === currentSongId?.toString());
+    const curSecIdx = currentSong?.sections?.findIndex((s) => s.sectionId === currentSectionId) ?? 0;
+    const prevValid = findPrevValidSlide(songs, hiddenSlides, curSongIdx, curSecIdx, currentChunkIndex, activeLanguage);
+
+    if (prevValid) {
+      currentSong = prevValid.song;
+      currentSongId = prevValid.song._id;
+      currentSongTitle = prevValid.song.title;
+      currentSongKey = prevValid.song.key;
+      currentSectionId = prevValid.section.sectionId;
+      currentSectionName = prevValid.section.name;
+      currentChunkIndex = prevValid.chunkIndex;
       if (displayMode === 'BLACK' || displayMode === 'CLEAR') {
         displayMode = 'LYRICS_CHORDS';
       }
+    }
+  } else if (type === 'TOGGLE_HIDE_SLIDE' || type === 'HIDE_SLIDE' || type === 'DELETE_SLIDE') {
+    const { songId, sectionId, chunkIndex } = payload || {};
+    const targetSongId = songId || currentSongId;
+    const targetSectionId = sectionId || currentSectionId;
+    const targetChunkIdx = chunkIndex !== undefined ? chunkIndex : currentChunkIndex;
+    const slideKey = `${targetSongId}_${targetSectionId}_${targetChunkIdx}`;
+
+    if (type === 'HIDE_SLIDE' || type === 'DELETE_SLIDE') {
+      hiddenSlides[slideKey] = true;
+    } else {
+      if (hiddenSlides[slideKey]) {
+        delete hiddenSlides[slideKey];
+      } else {
+        hiddenSlides[slideKey] = true;
+      }
+    }
+  } else if (type === 'TOGGLE_HIDE_SECTION' || type === 'HIDE_SECTION' || type === 'UNHIDE_SECTION') {
+    const { songId, sectionId, hide } = payload || {};
+    const targetSong = songs.find((s) => s._id?.toString() === (songId || currentSongId)?.toString());
+    const targetSec = targetSong?.sections?.find((sec) => sec.sectionId === (sectionId || currentSectionId));
+    if (targetSec && Array.isArray(targetSec.chunks)) {
+      const shouldHide =
+        hide !== undefined
+          ? hide
+          : !targetSec.chunks.every((_, cIdx) => isSlideHidden(hiddenSlides, targetSong._id, targetSec.sectionId, cIdx));
+      targetSec.chunks.forEach((_, cIdx) => {
+        const k = `${targetSong._id}_${targetSec.sectionId}_${cIdx}`;
+        if (shouldHide) {
+          hiddenSlides[k] = true;
+        } else {
+          delete hiddenSlides[k];
+        }
+      });
+    }
+  } else if (type === 'UNHIDE_ALL_SLIDES') {
+    if (payload?.songId) {
+      const prefix = `${payload.songId}_`;
+      Object.keys(hiddenSlides).forEach((k) => {
+        if (k.startsWith(prefix)) delete hiddenSlides[k];
+      });
+    } else {
+      hiddenSlides = {};
     }
   } else if (type === 'SET_DISPLAY_MODE') {
     if (['LYRICS_CHORDS', 'LYRICS', 'CHORDS', 'BLACK', 'CLEAR'].includes(payload.mode)) {
@@ -200,46 +349,56 @@ function computeOptimisticLiveState(state, type, payload = {}) {
   let currentSectionIndex = 0;
 
   if (currentSong && currentSong.sections?.length > 0) {
-    const secIdx = currentSong.sections.findIndex((sec) => sec.sectionId === currentSectionId);
+    const defaultSections = currentSong.sections || [];
+    const activeSections = getSongSectionsForLanguage(currentSong, activeLanguage);
+
+    const secIdx = defaultSections.findIndex((sec) => sec.sectionId === currentSectionId);
     currentSectionIndex = secIdx >= 0 ? secIdx : 0;
-    const curSec = currentSong.sections[currentSectionIndex];
+    const curSec = defaultSections[currentSectionIndex] || { sectionId: '', name: 'Section', chunks: [] };
     currentSectionId = curSec.sectionId;
     currentSectionName = curSec.name;
 
-    const chunks = curSec.chunks || [];
-    const chunkIdx = Math.min(Math.max(currentChunkIndex || 0, 0), Math.max(chunks.length - 1, 0));
+    const langSec = activeSections[currentSectionIndex] || curSec;
+    const chunks = langSec.chunks || [];
+    let chunkIdx = Math.min(Math.max(currentChunkIndex || 0, 0), Math.max(chunks.length - 1, 0));
     currentChunkIndex = chunkIdx;
     const rawChunk = chunks[chunkIdx] || { lines: [] };
 
     const overrideKey = `${currentSongId}_${currentSectionId}_${chunkIdx}`;
     currentChunk = customChunkOverrides[overrideKey] || rawChunk.lines || [];
 
-    if (chunkIdx + 1 < chunks.length) {
+    // Build Split View Chunks
+    const origSec = defaultSections[currentSectionIndex] || { chunks: [] };
+    const origChunk = (origSec.chunks || [])[chunkIdx] || { lines: [] };
+    leftChunk = origChunk.lines || [];
+
+    const regSections = getSongSectionsForLanguage(currentSong, splitLanguage);
+    const regSec = regSections[currentSectionIndex] || origSec;
+    const regChunk = (regSec.chunks || [])[chunkIdx] || origChunk;
+    rightChunk = regChunk.lines || [];
+
+    const curSongIdx = songs.findIndex((s) => s._id?.toString() === currentSongId?.toString());
+    const nextValid = findNextValidSlide(songs, hiddenSlides, curSongIdx, currentSectionIndex, chunkIdx, activeLanguage);
+
+    if (nextValid) {
       nextChunk = {
-        sectionName: curSec.name,
-        lines: chunks[chunkIdx + 1].lines,
+        songTitle: nextValid.song._id?.toString() !== currentSongId?.toString() ? nextValid.song.title : undefined,
+        sectionName: nextValid.section.name,
+        lines: nextValid.lines,
       };
-    } else if (currentSectionIndex + 1 < currentSong.sections.length) {
-      const nextSec = currentSong.sections[currentSectionIndex + 1];
-      nextChunk = {
-        sectionName: nextSec.name,
-        lines: nextSec.chunks?.[0]?.lines || [],
-      };
+
+      const nextOrigSecs = nextValid.song.sections || [];
+      const nextOrigSec = nextOrigSecs[nextValid.sectionIndex] || { chunks: [] };
+      nextLeftChunk = (nextOrigSec.chunks || [])[nextValid.chunkIndex]?.lines || [];
+
+      const nextRegSecs = getSongSectionsForLanguage(nextValid.song, splitLanguage);
+      const nextRegSec = nextRegSecs[nextValid.sectionIndex] || nextOrigSec;
+      nextRightChunk = (nextRegSec.chunks || [])[nextValid.chunkIndex]?.lines || [];
     } else {
-      const currentSongIdx = songs.findIndex((s) => s._id?.toString() === currentSong._id?.toString());
-      if (currentSongIdx + 1 < songs.length) {
-        const nextSong = songs[currentSongIdx + 1];
-        nextChunk = {
-          songTitle: nextSong.title,
-          sectionName: nextSong.sections?.[0]?.name || 'Intro',
-          lines: nextSong.sections?.[0]?.chunks?.[0]?.lines || [],
-        };
-      } else {
-        nextChunk = {
-          sectionName: 'End of Service',
-          lines: [],
-        };
-      }
+      nextChunk = {
+        sectionName: 'End of Service',
+        lines: [],
+      };
     }
   }
 
@@ -253,9 +412,18 @@ function computeOptimisticLiveState(state, type, payload = {}) {
     currentSectionIndex,
     currentChunkIndex,
     displayMode,
+    activeLanguage,
+    availableLanguages,
+    isSplitView,
+    splitLanguage,
     customChunkOverrides,
+    hiddenSlides,
     currentChunk,
+    leftChunk,
+    rightChunk,
     nextChunk,
+    nextLeftChunk,
+    nextRightChunk,
   };
 }
 
@@ -276,6 +444,7 @@ export default function LiveOperator() {
   const [isEditingSlide, setIsEditingSlide] = useState(false);
   const [editLine1, setEditLine1] = useState('');
   const [editLine2, setEditLine2] = useState('');
+  const [languageMenuAnchor, setLanguageMenuAnchor] = useState(null);
 
   const socketRef = useRef(null);
   const broadcastRef = useRef(null);
@@ -448,6 +617,13 @@ export default function LiveOperator() {
   const isClear = displayMode === 'CLEAR';
   const showChords = displayMode === 'LYRICS_CHORDS' || displayMode === 'CHORDS';
 
+  const hiddenSlides = liveState?.hiddenSlides || {};
+  const currentSlideKey = `${currentSong?._id}_${liveState?.currentSectionId}_${liveState?.currentChunkIndex}`;
+  const isCurrentSlideHidden = Boolean(hiddenSlides[currentSlideKey]);
+  const hiddenCountInCurrentSong = Object.keys(hiddenSlides).filter(
+    (k) => currentSong?._id && k.startsWith(`${currentSong._id}_`)
+  ).length;
+
   const currentLines = Array.isArray(liveState?.currentChunk) ? liveState.currentChunk : [];
   const nextLines = Array.isArray(liveState?.nextChunk?.lines) ? liveState.nextChunk.lines : [];
 
@@ -516,8 +692,8 @@ export default function LiveOperator() {
           </Box>
         </Box>
 
-        {/* Center: Connected TV Display Counter */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {/* Center: Connected TV Display Counter & Language Switcher */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <Chip
             icon={<TvIcon style={{ fontSize: 16 }} />}
             label={`${viewerCount} ${viewerCount === 1 ? 'Display' : 'Displays'} Connected`}
@@ -539,6 +715,73 @@ export default function LiveOperator() {
               '&:hover': { bgcolor: 'primary.dark' },
             }}
           />
+
+          {/* Live Language Selector for TV */}
+          <Tooltip title="Switch Live Presentation Language / Split View on TV">
+            <Chip
+              icon={liveState?.isSplitView ? <SplitViewIcon style={{ fontSize: 15 }} /> : <TranslateIcon style={{ fontSize: 15 }} />}
+              label={
+                liveState?.isSplitView
+                  ? `Split: English + ${liveState.splitLanguage || 'Regional'}`
+                  : liveState?.activeLanguage && liveState.activeLanguage !== 'original'
+                  ? `Lang: ${liveState.activeLanguage}`
+                  : 'Lang: Original'
+              }
+              size="small"
+              variant={liveState?.isSplitView ? 'filled' : 'outlined'}
+              color={liveState?.isSplitView ? 'info' : liveState?.activeLanguage && liveState.activeLanguage !== 'original' ? 'warning' : 'default'}
+              onClick={(e) => setLanguageMenuAnchor(e.currentTarget)}
+              sx={{ fontWeight: 800, cursor: 'pointer' }}
+            />
+          </Tooltip>
+          <Menu
+            anchorEl={languageMenuAnchor}
+            open={Boolean(languageMenuAnchor)}
+            onClose={() => setLanguageMenuAnchor(null)}
+          >
+            <MenuItem
+              selected={!liveState?.isSplitView && (!liveState?.activeLanguage || liveState.activeLanguage === 'original')}
+              onClick={() => {
+                sendCommand('SET_LANGUAGE', { language: 'original' });
+                setLanguageMenuAnchor(null);
+              }}
+            >
+              Original (English Only)
+            </MenuItem>
+            {(liveState?.availableLanguages || [])
+              .filter((l) => l !== 'original')
+              .map((lang) => (
+                <MenuItem
+                  key={lang}
+                  selected={!liveState?.isSplitView && liveState?.activeLanguage?.toLowerCase() === lang.toLowerCase()}
+                  onClick={() => {
+                    sendCommand('SET_LANGUAGE', { language: lang });
+                    setLanguageMenuAnchor(null);
+                  }}
+                >
+                  {lang} (Full Screen)
+                </MenuItem>
+              ))}
+
+            <Divider sx={{ my: 0.5 }} />
+
+            {/* Split View Options */}
+            {(liveState?.availableLanguages || [])
+              .filter((l) => l !== 'original')
+              .map((lang) => (
+                <MenuItem
+                  key={`split_${lang}`}
+                  selected={Boolean(liveState?.isSplitView) && liveState?.splitLanguage?.toLowerCase() === lang.toLowerCase()}
+                  onClick={() => {
+                    sendCommand('SET_SPLIT_VIEW', { isSplitView: true, splitLanguage: lang });
+                    setLanguageMenuAnchor(null);
+                  }}
+                >
+                  <SplitViewIcon sx={{ fontSize: 16, mr: 1, color: '#38bdf8' }} />
+                  Split View (English + {lang})
+                </MenuItem>
+              ))}
+          </Menu>
         </Box>
 
         {/* Right Actions */}
@@ -617,11 +860,23 @@ export default function LiveOperator() {
                         <Typography variant="subtitle2" fontWeight={isSelected ? 800 : 600} noWrap sx={{ fontSize: '0.82rem' }}>
                           {idx + 1}. {song.title}
                         </Typography>
-                        <Chip
-                          size="small"
-                          label={`Key ${song.targetKey || song.key || 'C'}`}
-                          sx={{ height: 18, fontSize: '0.65rem', fontWeight: 700 }}
-                        />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          {Object.keys(hiddenSlides).filter((k) => k.startsWith(`${song._id}_`)).length > 0 && (
+                            <Tooltip title={`${Object.keys(hiddenSlides).filter((k) => k.startsWith(`${song._id}_`)).length} slides hidden`}>
+                              <Chip
+                                size="small"
+                                label={`${Object.keys(hiddenSlides).filter((k) => k.startsWith(`${song._id}_`)).length} hidden`}
+                                color="warning"
+                                sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700, px: 0.2 }}
+                              />
+                            </Tooltip>
+                          )}
+                          <Chip
+                            size="small"
+                            label={`Key ${song.targetKey || song.key || 'C'}`}
+                            sx={{ height: 18, fontSize: '0.65rem', fontWeight: 700 }}
+                          />
+                        </Box>
                       </Box>
                       {song.artist && (
                         <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ fontSize: '0.7rem' }}>
@@ -654,19 +909,35 @@ export default function LiveOperator() {
                 <Typography variant="caption" fontWeight={800} sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                   Song Sections
                 </Typography>
-                <Chip
-                  size="small"
-                  label={currentSong?.title || 'No Song'}
-                  color="primary"
-                  variant="outlined"
-                  sx={{ fontWeight: 700, maxWidth: 140, height: 20, fontSize: '0.68rem' }}
-                />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  {hiddenCountInCurrentSong > 0 && (
+                    <Tooltip title="Restore/Unhide all hidden slides in this song">
+                      <Chip
+                        size="small"
+                        icon={<RestoreIcon style={{ fontSize: 12 }} />}
+                        label={`${hiddenCountInCurrentSong} hidden`}
+                        onClick={() => sendCommand('UNHIDE_ALL_SLIDES', { songId: currentSong?._id })}
+                        color="warning"
+                        variant="outlined"
+                        sx={{ height: 20, fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer' }}
+                      />
+                    </Tooltip>
+                  )}
+                  <Chip
+                    size="small"
+                    label={currentSong?.title || 'No Song'}
+                    color="primary"
+                    variant="outlined"
+                    sx={{ fontWeight: 700, maxWidth: 120, height: 20, fontSize: '0.68rem' }}
+                  />
+                </Box>
               </Box>
 
               <Stack spacing={0.75} sx={{ overflowY: 'auto', flex: 1, pr: 0.5 }}>
                 {sections.map((sec, sIdx) => {
                   const isCurrentSec = sec.sectionId === liveState?.currentSectionId;
                   const totalChunks = sec.chunks?.length || 1;
+                  const isAllSectionHidden = Array.isArray(sec.chunks) && sec.chunks.length > 0 && sec.chunks.every((_, cIdx) => Boolean(hiddenSlides[`${currentSong?._id}_${sec.sectionId}_${cIdx}`]));
 
                   return (
                     <Box
@@ -675,28 +946,69 @@ export default function LiveOperator() {
                         p: 1,
                         borderRadius: 2,
                         border: '1.5px solid',
-                        borderColor: isCurrentSec ? 'primary.main' : 'divider',
+                        borderColor: isCurrentSec ? 'primary.main' : isAllSectionHidden ? 'warning.dark' : 'divider',
                         bgcolor: isCurrentSec
                           ? (theme) => (theme.palette.mode === 'dark' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(56, 189, 248, 0.06)')
+                          : isAllSectionHidden
+                          ? (theme) => (theme.palette.mode === 'dark' ? 'rgba(245, 158, 11, 0.06)' : 'rgba(245, 158, 11, 0.04)')
                           : 'background.paper',
                       }}
                     >
                       <Box
-                        onClick={() => sendCommand('SET_SECTION', { sectionId: sec.sectionId, chunkIndex: 0 })}
                         sx={{
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          cursor: 'pointer',
                           mb: totalChunks > 1 ? 0.5 : 0,
                         }}
                       >
-                        <Typography variant="subtitle2" fontWeight={isCurrentSec ? 800 : 700} sx={{ fontSize: '0.82rem' }}>
-                          {sec.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
-                          {totalChunks} {totalChunks === 1 ? 'slide' : 'slides'}
-                        </Typography>
+                        <Box
+                          onClick={() => sendCommand('SET_SECTION', { sectionId: sec.sectionId, chunkIndex: 0 })}
+                          sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', flex: 1 }}
+                        >
+                          <Typography variant="subtitle2" fontWeight={isCurrentSec ? 800 : 700} sx={{ fontSize: '0.82rem' }}>
+                            {sec.name}
+                          </Typography>
+                          {totalChunks === 1 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+                              (1 slide)
+                            </Typography>
+                          )}
+                        </Box>
+
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          {totalChunks > 1 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+                              {totalChunks} slides
+                            </Typography>
+                          )}
+
+                          {/* Quick Toggle Hide Entire Section */}
+                          <Tooltip title={isAllSectionHidden ? "Unhide all slides in this section" : "Hide all slides in this section"}>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                sendCommand('TOGGLE_HIDE_SECTION', {
+                                  songId: currentSong?._id,
+                                  sectionId: sec.sectionId,
+                                });
+                              }}
+                              sx={{
+                                p: 0.2,
+                                color: isAllSectionHidden ? '#f59e0b' : 'text.secondary',
+                                opacity: 0.8,
+                                '&:hover': { opacity: 1 },
+                              }}
+                            >
+                              {isAllSectionHidden ? (
+                                <VisibilityOffIcon sx={{ fontSize: 14 }} />
+                              ) : (
+                                <VisibilityIcon sx={{ fontSize: 14 }} />
+                              )}
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       </Box>
 
                       {/* 2-line slide pills inside section */}
@@ -704,23 +1016,45 @@ export default function LiveOperator() {
                         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                           {sec.chunks.map((chunk, cIdx) => {
                             const isCurrentChunk = isCurrentSec && liveState?.currentChunkIndex === cIdx;
+                            const isChunkHidden = Boolean(hiddenSlides[`${currentSong?._id}_${sec.sectionId}_${cIdx}`]);
                             return (
-                              <Button
+                              <Tooltip
                                 key={cIdx}
-                                size="small"
-                                variant={isCurrentChunk ? 'contained' : 'outlined'}
-                                onClick={() => sendCommand('SET_SECTION', { sectionId: sec.sectionId, chunkIndex: cIdx })}
-                                sx={{
-                                  minWidth: 26,
-                                  height: 22,
-                                  p: 0,
-                                  fontSize: '0.7rem',
-                                  fontWeight: 700,
-                                  borderRadius: 1,
-                                }}
+                                title={
+                                  isChunkHidden
+                                    ? `Slide ${cIdx + 1} (HIDDEN - Click to view or right-click to unhide)`
+                                    : `Slide ${cIdx + 1} (Right-click to hide/delete)`
+                                }
                               >
-                                {cIdx + 1}
-                              </Button>
+                                <Button
+                                  size="small"
+                                  variant={isCurrentChunk ? 'contained' : 'outlined'}
+                                  color={isChunkHidden ? 'inherit' : isCurrentChunk ? 'primary' : 'inherit'}
+                                  onClick={() => sendCommand('SET_SECTION', { sectionId: sec.sectionId, chunkIndex: cIdx })}
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    sendCommand('TOGGLE_HIDE_SLIDE', {
+                                      songId: currentSong?._id,
+                                      sectionId: sec.sectionId,
+                                      chunkIndex: cIdx,
+                                    });
+                                  }}
+                                  sx={{
+                                    minWidth: 26,
+                                    height: 22,
+                                    p: 0,
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    borderRadius: 1,
+                                    opacity: isChunkHidden ? 0.45 : 1,
+                                    borderStyle: isChunkHidden ? 'dashed' : 'solid',
+                                    borderColor: isChunkHidden ? 'warning.main' : undefined,
+                                    textDecoration: isChunkHidden ? 'line-through' : 'none',
+                                  }}
+                                >
+                                  {cIdx + 1}
+                                </Button>
+                              </Tooltip>
                             );
                           })}
                         </Box>
@@ -747,7 +1081,7 @@ export default function LiveOperator() {
                   borderRadius: 2.5,
                   bgcolor: isBlack ? '#000000' : isClear ? '#0f172a' : '#090a0f',
                   border: '2px solid',
-                  borderColor: isBlack ? '#ef4444' : isClear ? '#f59e0b' : '#38bdf8',
+                  borderColor: isBlack ? '#ef4444' : isClear ? '#f59e0b' : isCurrentSlideHidden ? '#f59e0b' : '#38bdf8',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
@@ -755,20 +1089,22 @@ export default function LiveOperator() {
                   position: 'relative',
                 }}
               >
-                {/* Header Tag with Quick Live Slide Editor */}
+                {/* Header Tag with Quick Live Slide Editor & Hide/Delete Buttons */}
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <Chip
-                      label={isBlack ? 'BLACK SCREEN ACTIVE' : isClear ? 'CLEAR SCREEN ACTIVE' : 'LIVE ON TV'}
+                      label={isBlack ? 'BLACK SCREEN ACTIVE' : isClear ? 'CLEAR SCREEN ACTIVE' : isCurrentSlideHidden ? 'SLIDE HIDDEN ●' : 'LIVE ON TV'}
                       size="small"
                       sx={{
                         fontWeight: 800,
                         fontSize: '0.65rem',
                         height: 20,
-                        bgcolor: isBlack ? '#ef4444' : isClear ? '#f59e0b' : '#38bdf8',
+                        bgcolor: isBlack ? '#ef4444' : isClear ? '#f59e0b' : isCurrentSlideHidden ? '#f59e0b' : '#38bdf8',
                         color: '#000000',
                       }}
                     />
+
+                    {/* Quick Edit Slide & Chords */}
                     <Tooltip title={isEditingSlide ? 'Cancel Edit' : 'Quick Edit Slide & Chords'}>
                       <IconButton
                         size="small"
@@ -792,12 +1128,92 @@ export default function LiveOperator() {
                         {isEditingSlide ? <CloseIcon sx={{ fontSize: 14 }} /> : <EditIcon sx={{ fontSize: 14 }} />}
                       </IconButton>
                     </Tooltip>
+
+                    {/* Quick Hide / Unhide Slide Button */}
+                    <Tooltip title={isCurrentSlideHidden ? 'Unhide Slide (Include in Live Presentation)' : 'Hide Slide (Skip this slide on TV)'}>
+                      <IconButton
+                        size="small"
+                        onClick={() =>
+                          sendCommand('TOGGLE_HIDE_SLIDE', {
+                            songId: currentSong?._id,
+                            sectionId: liveState?.currentSectionId,
+                            chunkIndex: liveState?.currentChunkIndex,
+                          })
+                        }
+                        sx={{
+                          p: 0.3,
+                          color: isCurrentSlideHidden ? '#f59e0b' : 'rgba(255,255,255,0.7)',
+                          bgcolor: isCurrentSlideHidden ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255,255,255,0.08)',
+                          borderRadius: 1.5,
+                          '&:hover': { bgcolor: isCurrentSlideHidden ? 'rgba(245, 158, 11, 0.4)' : 'rgba(255,255,255,0.18)' },
+                        }}
+                      >
+                        {isCurrentSlideHidden ? <VisibilityIcon sx={{ fontSize: 14 }} /> : <VisibilityOffIcon sx={{ fontSize: 14 }} />}
+                      </IconButton>
+                    </Tooltip>
+
+                    {/* Delete / Remove Slide Button */}
+                    <Tooltip title="Delete Slide (Remove from Live Set)">
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          sendCommand('HIDE_SLIDE', {
+                            songId: currentSong?._id,
+                            sectionId: liveState?.currentSectionId,
+                            chunkIndex: liveState?.currentChunkIndex,
+                          });
+                        }}
+                        sx={{
+                          p: 0.3,
+                          color: 'rgba(248, 113, 113, 0.85)',
+                          bgcolor: 'rgba(239, 68, 68, 0.12)',
+                          borderRadius: 1.5,
+                          '&:hover': { bgcolor: 'rgba(239, 68, 68, 0.25)', color: '#ef4444' },
+                        }}
+                      >
+                        <DeleteIcon sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
 
                   <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.6)', fontWeight: 600, fontSize: '0.72rem' }}>
                     {liveState?.currentSectionName || 'Section'} • Slide {(liveState?.currentChunkIndex || 0) + 1}
                   </Typography>
                 </Box>
+
+                {/* Hidden Slide Warning Bar */}
+                {isCurrentSlideHidden && (
+                  <Box
+                    sx={{
+                      bgcolor: 'rgba(245, 158, 11, 0.15)',
+                      border: '1px solid rgba(245, 158, 11, 0.35)',
+                      borderRadius: 1.5,
+                      px: 1,
+                      py: 0.25,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      mt: 0.25,
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ color: '#f59e0b', fontWeight: 700, fontSize: '0.68rem' }}>
+                      ⚠️ This slide is HIDDEN / DELETED (TV skips it)
+                    </Typography>
+                    <Button
+                      size="small"
+                      onClick={() =>
+                        sendCommand('TOGGLE_HIDE_SLIDE', {
+                          songId: currentSong?._id,
+                          sectionId: liveState?.currentSectionId,
+                          chunkIndex: liveState?.currentChunkIndex,
+                        })
+                      }
+                      sx={{ color: '#f59e0b', fontSize: '0.65rem', py: 0, textTransform: 'none', fontWeight: 800 }}
+                    >
+                      Unhide / Restore
+                    </Button>
+                  </Box>
+                )}
 
                 {/* Live Output / Inline Slide Editor */}
                 {isEditingSlide ? (
@@ -883,22 +1299,97 @@ export default function LiveOperator() {
                       <Typography variant="body2" sx={{ color: '#f59e0b', textAlign: 'center', fontWeight: 700 }}>
                         [Screen is Cleared]
                       </Typography>
+                    ) : liveState?.isSplitView ? (
+                      <Grid container spacing={1.5} alignItems="flex-start">
+                        <Grid item xs={6}>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: '#94a3b8',
+                              fontWeight: 800,
+                              textTransform: 'uppercase',
+                              fontSize: '0.65rem',
+                              display: 'block',
+                              mb: 0.25,
+                            }}
+                          >
+                            {liveState?.currentSectionName || 'Section'} (English)
+                          </Typography>
+                          {(liveState?.leftChunk || []).slice(0, 2).map((line, idx) => (
+                            <AnchoredLyricRow
+                              key={`op_left_${idx}`}
+                              line={line}
+                              showChords={showChords}
+                              fontSize="clamp(0.85rem, 1.1vw, 1rem)"
+                              chordColor="#38bdf8"
+                              textColor="#ffffff"
+                              align="left"
+                            />
+                          ))}
+                        </Grid>
+                        <Grid item xs={6} sx={{ borderLeft: '1px solid rgba(255,255,255,0.12)', pl: 1.5 }}>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: '#38bdf8',
+                              fontWeight: 800,
+                              textTransform: 'uppercase',
+                              fontSize: '0.65rem',
+                              display: 'block',
+                              mb: 0.25,
+                            }}
+                          >
+                            {liveState?.currentSectionName || 'Section'} ({liveState?.splitLanguage || 'Regional'})
+                          </Typography>
+                          {(liveState?.rightChunk || []).slice(0, 2).map((line, idx) => (
+                            <AnchoredLyricRow
+                              key={`op_right_${idx}`}
+                              line={line}
+                              showChords={showChords}
+                              fontSize="clamp(0.85rem, 1.1vw, 1rem)"
+                              chordColor="#38bdf8"
+                              textColor="#ffffff"
+                              align="left"
+                            />
+                          ))}
+                        </Grid>
+                      </Grid>
                     ) : currentLines.length === 0 ? (
                       <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', display: 'block' }}>
                         No lyrics in this section
                       </Typography>
                     ) : (
-                      currentLines.slice(0, 2).map((line, idx) => (
-                        <AnchoredLyricRow
-                          key={idx}
-                          line={line}
-                          showChords={showChords}
-                          fontSize="clamp(1.05rem, 1.4vw, 1.25rem)"
-                          chordColor="#38bdf8"
-                          textColor="#ffffff"
-                          align="left"
-                        />
-                      ))
+                      <>
+                        {liveState?.currentSectionName && (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: '#94a3b8',
+                              fontWeight: 800,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.08em',
+                              fontSize: '0.68rem',
+                              display: 'block',
+                              mb: 0.4,
+                              textAlign: 'left',
+                              opacity: 0.9,
+                            }}
+                          >
+                            {liveState.currentSectionName}
+                          </Typography>
+                        )}
+                        {currentLines.slice(0, 2).map((line, idx) => (
+                          <AnchoredLyricRow
+                            key={idx}
+                            line={line}
+                            showChords={showChords}
+                            fontSize="clamp(1.05rem, 1.4vw, 1.25rem)"
+                            chordColor="#38bdf8"
+                            textColor="#ffffff"
+                            align="left"
+                          />
+                        ))}
+                      </>
                     )}
                   </Box>
                 )}

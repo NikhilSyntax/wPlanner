@@ -44,7 +44,7 @@ function App() {
   const user = useSelector((state) => state.auth.user);
 
   useEffect(() => {
-    if (localStorage.getItem('accessToken')) {
+    if (localStorage.getItem('accessToken') || localStorage.getItem('refreshToken')) {
       dispatch(getCurrentUser());
     }
   }, [dispatch]);
