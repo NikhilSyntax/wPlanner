@@ -19,6 +19,10 @@ exports.createServer = (app) => {
   const server = http.createServer(app);
   const ioServer = new IoServer(server, {
     cors: config.socket?.cors || config.cors,
+    transports: ['websocket', 'polling'],
+    perMessageDeflate: false,
+    pingInterval: 10000,
+    pingTimeout: 5000,
   });
   ioInstance = ioServer;
   server.io = ioServer;

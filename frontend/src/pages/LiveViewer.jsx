@@ -122,8 +122,9 @@ export default function LiveViewer() {
       path: '/socket.io',
       query: socketQuery,
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 15,
-      reconnectionDelay: 1500,
+      reconnectionAttempts: 25,
+      reconnectionDelay: 1000,
+      timeout: 5000,
     });
     socketRef.current = socket;
 
@@ -169,9 +170,26 @@ export default function LiveViewer() {
       }
     }
 
+    // Instant cross-window localStorage event fallback
+    const handleStorage = (e) => {
+      if (channelId && e.key === `wplanner_live_sync_${channelId}` && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.payload) {
+            setLiveState((prev) => ({
+              ...prev,
+              ...parsed.payload,
+            }));
+          }
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
     return () => {
       socket.disconnect();
       if (bc) bc.close();
+      window.removeEventListener('storage', handleStorage);
     };
   }, [directEventId, displayToken, fetchViewerState, liveState?.eventId]);
 
@@ -444,7 +462,7 @@ export default function LiveViewer() {
         </Box>
       ) : (
         // Main 2-Line High Contrast Presentation
-        <Fade in={true} timeout={250} key={`${liveState?.currentSongTitle}_${liveState?.currentSectionName}_${JSON.stringify(displayLines)}`}>
+        <Fade in={true} timeout={120} key={`${liveState?.currentSongTitle}_${liveState?.currentSectionName}_${JSON.stringify(displayLines)}`}>
           <Box
             sx={{
               maxWidth: '92vw',

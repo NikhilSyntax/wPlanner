@@ -9,42 +9,61 @@ function generatePairingCode() {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
+// In-Memory Live Session Cache: eventId -> { session, songs, event, lastUpdated }
+const sessionMemoryCache = new Map();
+
 /**
- * Builds the full enriched payload for a live session including parsed songs & sections
+ * Invalidate in-memory cache for an event
  */
-async function buildSessionPayload(session, event) {
-  let songs = [];
-  if (Array.isArray(event.setlist) && event.setlist.length > 0) {
-    const songIds = event.setlist.map((s) => (s._id ? s._id : s));
-    const dbSongs = await Song.find({ _id: { $in: songIds } }).lean();
-    const songMap = new Map(dbSongs.map((s) => [s._id.toString(), s]));
+function invalidateSessionCache(eventId) {
+  if (eventId) {
+    sessionMemoryCache.delete(eventId.toString());
+  }
+}
+exports.invalidateSessionCache = invalidateSessionCache;
 
-    songs = songIds
-      .map((sId) => {
-        const idStr = sId.toString();
-        const s = songMap.get(idStr);
-        if (!s) return null;
-
-        const rawContent = s.content?.chords || s.content?.lyrics || '';
-        const originalKey = s.key || 'C';
-        const targetKey = s.key || 'C';
-        const sections = parseSongToLiveSections(rawContent, originalKey, targetKey);
-
-        return {
-          _id: s._id,
-          title: s.title,
-          artist: s.artist || '',
-          key: originalKey,
-          targetKey,
-          bpm: s.bpm,
-          timeSignature: s.timeSignature,
-          sections,
-        };
-      })
-      .filter(Boolean);
+/**
+ * Parses all songs in an event's setlist into structured 2-line sections
+ */
+async function parseEventSongs(event) {
+  if (!Array.isArray(event.setlist) || event.setlist.length === 0) {
+    return [];
   }
 
-  // Determine current song, section, and chunk
+  const songIds = event.setlist.map((s) => (s._id ? s._id : s));
+  const dbSongs = await Song.find({ _id: { $in: songIds } }).lean();
+  const songMap = new Map(dbSongs.map((s) => [s._id.toString(), s]));
+
+  return songIds
+    .map((sId) => {
+      const idStr = sId.toString();
+      const s = songMap.get(idStr);
+      if (!s) return null;
+
+      const rawContent = s.content?.chords || s.content?.lyrics || '';
+      const originalKey = s.key || 'C';
+      const targetKey = s.key || 'C';
+      const sections = parseSongToLiveSections(rawContent, originalKey, targetKey);
+
+      return {
+        _id: s._id,
+        title: s.title,
+        artist: s.artist || '',
+        key: originalKey,
+        targetKey,
+        bpm: s.bpm,
+        timeSignature: s.timeSignature,
+        sections,
+      };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Synchronously computes current chunk, next chunk, and presentation state from memory
+ */
+function formatSessionPayload(session, songs = []) {
+  // Determine current song
   let currentSong = songs.find((s) => s._id.toString() === session.currentSongId?.toString());
   if (!currentSong && songs.length > 0) {
     currentSong = songs[0];
@@ -132,6 +151,46 @@ async function buildSessionPayload(session, event) {
 }
 
 /**
+ * Loads session and event data, parses songs, and caches them in RAM
+ */
+async function loadAndCacheSession(eventId, churchId) {
+  const eventIdStr = eventId.toString();
+
+  let query = { _id: eventId };
+  if (churchId) query.churchId = churchId;
+  const event = await Event.findOne(query).populate('setlist');
+  if (!event) return null;
+
+  let sessionQuery = { eventId };
+  if (churchId) sessionQuery.churchId = churchId;
+  let session = await LiveSession.findOne(sessionQuery);
+
+  if (!session) {
+    session = new LiveSession({
+      eventId,
+      churchId: event.churchId,
+      pairingCode: generatePairingCode(),
+      status: 'LIVE',
+      displayMode: 'LYRICS_CHORDS',
+    });
+    await session.save();
+  }
+
+  const songs = await parseEventSongs(event);
+  const cacheEntry = { session, songs, event, lastUpdated: Date.now() };
+  sessionMemoryCache.set(eventIdStr, cacheEntry);
+  return cacheEntry;
+}
+
+/**
+ * Builds the full enriched payload for a live session (Backwards compatible helper)
+ */
+async function buildSessionPayload(session, event) {
+  const songs = await parseEventSongs(event);
+  return formatSessionPayload(session, songs);
+}
+
+/**
  * Get or initialize active LiveSession for an event
  */
 exports.getOrCreateLiveSession = async (req, res) => {
@@ -139,26 +198,17 @@ exports.getOrCreateLiveSession = async (req, res) => {
     const { eventId } = req.params;
     const churchId = req.user.churchId;
 
-    const event = await Event.findOne({ _id: eventId, churchId }).populate('setlist');
-    if (!event) {
+    let cached = sessionMemoryCache.get(eventId.toString());
+    if (!cached) {
+      cached = await loadAndCacheSession(eventId, churchId);
+    }
+    if (!cached) {
       return res.status(404).json({ message: 'Event not found' });
     }
 
-    let session = await LiveSession.findOne({ eventId, churchId });
-    if (!session) {
-      session = new LiveSession({
-        eventId,
-        churchId,
-        pairingCode: generatePairingCode(),
-        status: 'LIVE',
-        displayMode: 'LYRICS_CHORDS',
-        createdBy: req.user.userId,
-      });
-      await session.save();
-    }
-
-    const payload = await buildSessionPayload(session, event);
-    await session.save(); // Save any default initialized indices
+    const payload = formatSessionPayload(cached.session, cached.songs);
+    // Non-blocking save of initialized indices
+    cached.session.save().catch((err) => console.error('[LiveController] Save error:', err));
     res.json(payload);
   } catch (err) {
     console.error('[LiveController] getOrCreateLiveSession error:', err);
@@ -214,33 +264,24 @@ exports.pairDisplay = async (req, res) => {
 exports.getViewerStateByEvent = async (req, res) => {
   try {
     const { eventId } = req.params;
-    let session = await LiveSession.findOne({ eventId });
-    const event = await Event.findById(eventId).populate('setlist');
-    if (!event) {
+    let cached = sessionMemoryCache.get(eventId.toString());
+    if (!cached) {
+      cached = await loadAndCacheSession(eventId);
+    }
+    if (!cached) {
       return res.status(404).json({ message: 'Event not found' });
     }
 
-    if (!session) {
-      session = new LiveSession({
-        eventId,
-        churchId: event.churchId,
-        pairingCode: Math.floor(1000 + Math.random() * 9000).toString(),
-        status: 'LIVE',
-        displayMode: 'LYRICS_CHORDS',
-      });
-      await session.save();
-    }
-
-    const fullPayload = await buildSessionPayload(session, event || { setlist: [] });
+    const fullPayload = formatSessionPayload(cached.session, cached.songs);
 
     res.json({
-      eventId: session.eventId,
-      sessionId: session._id,
-      status: session.status,
-      displayMode: session.displayMode,
-      currentSongTitle: session.currentSongTitle,
-      currentSongKey: session.currentSongKey,
-      currentSectionName: session.currentSectionName,
+      eventId: cached.session.eventId,
+      sessionId: cached.session._id,
+      status: cached.session.status,
+      displayMode: cached.session.displayMode,
+      currentSongTitle: cached.session.currentSongTitle,
+      currentSongKey: cached.session.currentSongKey,
+      currentSectionName: cached.session.currentSectionName,
       currentChunk: fullPayload.currentChunk,
       nextChunk: fullPayload.nextChunk,
     });
@@ -261,27 +302,31 @@ exports.getViewerState = async (req, res) => {
       return res.status(401).json({ message: 'Invalid display token' });
     }
 
-    const session = await LiveSession.findOne({ eventId: display.eventId });
-    if (!session) {
+    const eventId = display.eventId;
+    let cached = sessionMemoryCache.get(eventId.toString());
+    if (!cached) {
+      cached = await loadAndCacheSession(eventId);
+    }
+    if (!cached) {
       return res.status(404).json({ message: 'Live session not found' });
     }
 
-    const event = await Event.findById(display.eventId).populate('setlist');
-    const fullPayload = await buildSessionPayload(session, event || { setlist: [] });
+    const fullPayload = formatSessionPayload(cached.session, cached.songs);
 
     display.lastConnectedAt = new Date();
-    await display.save();
+    display.save().catch((err) => console.error('[LiveController] Display save error:', err));
 
     res.json({
-      eventId: session.eventId,
-      sessionId: session._id,
-      status: session.status,
-      displayMode: display.displayModeOverride !== 'DEFAULT' && display.displayModeOverride
-        ? display.displayModeOverride
-        : session.displayMode,
-      currentSongTitle: session.currentSongTitle,
-      currentSongKey: session.currentSongKey,
-      currentSectionName: session.currentSectionName,
+      eventId: cached.session.eventId,
+      sessionId: cached.session._id,
+      status: cached.session.status,
+      displayMode:
+        display.displayModeOverride !== 'DEFAULT' && display.displayModeOverride
+          ? display.displayModeOverride
+          : cached.session.displayMode,
+      currentSongTitle: cached.session.currentSongTitle,
+      currentSongKey: cached.session.currentSongKey,
+      currentSectionName: cached.session.currentSectionName,
       currentChunk: fullPayload.currentChunk,
       nextChunk: fullPayload.nextChunk,
     });
@@ -291,19 +336,37 @@ exports.getViewerState = async (req, res) => {
   }
 };
 
+function queueSessionPersist(session) {
+  if (!session || !session._id) return;
+  const updateDoc = {
+    currentSongId: session.currentSongId,
+    currentSongTitle: session.currentSongTitle,
+    currentSongKey: session.currentSongKey,
+    currentSectionId: session.currentSectionId,
+    currentSectionName: session.currentSectionName,
+    currentChunkIndex: session.currentChunkIndex,
+    displayMode: session.displayMode,
+    customChunkOverrides: session.customChunkOverrides,
+  };
+
+  LiveSession.updateOne({ _id: session._id }, { $set: updateDoc }).catch((err) => {
+    console.error('[LiveController] Background updateOne error:', err.message);
+  });
+}
+
 /**
- * Handle state changes triggered by Live commands
+ * Handle state changes triggered by Live commands (Instant In-Memory Computation & Async DB Save)
  */
 exports.processLiveCommand = async (eventId, command) => {
-  const session = await LiveSession.findOne({ eventId });
-  if (!session) return null;
+  const eventIdStr = eventId.toString();
+  let cached = sessionMemoryCache.get(eventIdStr);
+  if (!cached) {
+    cached = await loadAndCacheSession(eventId);
+  }
+  if (!cached) return null;
 
-  const event = await Event.findById(eventId).populate('setlist');
-  if (!event) return null;
-
+  const { session, songs } = cached;
   const { type, payload } = command;
-  const currentPayload = await buildSessionPayload(session, event);
-  const songs = currentPayload.songs || [];
   const currentSong = songs.find((s) => s._id.toString() === session.currentSongId?.toString()) || songs[0];
 
   if (type === 'SET_SONG') {
@@ -419,8 +482,14 @@ exports.processLiveCommand = async (eventId, command) => {
     }
   }
 
-  await session.save();
-  return buildSessionPayload(session, event);
+  // Update in-memory timestamp
+  cached.lastUpdated = Date.now();
+
+  // Asynchronous non-blocking save to MongoDB (does not delay socket delivery!)
+  queueSessionPersist(session);
+
+  // Return computed payload immediately in < 0.1ms
+  return formatSessionPayload(session, songs);
 };
 
 module.exports.buildSessionPayload = buildSessionPayload;

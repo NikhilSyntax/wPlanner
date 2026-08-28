@@ -74,6 +74,191 @@ function inlineChordProToLine(str = '') {
   return { text, chords };
 }
 
+function computeOptimisticLiveState(state, type, payload = {}) {
+  if (!state) return state;
+
+  const songs = state.songs || [];
+  let currentSongId = state.currentSongId;
+  let currentSongTitle = state.currentSongTitle;
+  let currentSongKey = state.currentSongKey;
+  let currentSectionId = state.currentSectionId;
+  let currentSectionName = state.currentSectionName;
+  let currentChunkIndex = state.currentChunkIndex || 0;
+  let displayMode = state.displayMode || 'LYRICS_CHORDS';
+  let customChunkOverrides = { ...(state.customChunkOverrides || {}) };
+
+  let currentSong = songs.find((s) => s._id?.toString() === currentSongId?.toString()) || songs[0];
+
+  if (type === 'SET_SONG') {
+    const targetSong = songs.find((s) => s._id?.toString() === payload.songId?.toString());
+    if (targetSong) {
+      currentSong = targetSong;
+      currentSongId = targetSong._id;
+      currentSongTitle = targetSong.title;
+      currentSongKey = targetSong.key;
+      currentSectionId = targetSong.sections?.[0]?.sectionId || '';
+      currentSectionName = targetSong.sections?.[0]?.name || '';
+      currentChunkIndex = 0;
+      if (displayMode === 'BLACK' || displayMode === 'CLEAR') {
+        displayMode = 'LYRICS_CHORDS';
+      }
+    }
+  } else if (type === 'SET_SECTION') {
+    if (currentSong && currentSong.sections) {
+      const targetSec = currentSong.sections.find((s) => s.sectionId === payload.sectionId);
+      if (targetSec) {
+        currentSectionId = targetSec.sectionId;
+        currentSectionName = targetSec.name;
+        currentChunkIndex = payload.chunkIndex !== undefined ? payload.chunkIndex : 0;
+        if (displayMode === 'BLACK' || displayMode === 'CLEAR') {
+          displayMode = 'LYRICS_CHORDS';
+        }
+      }
+    }
+  } else if (type === 'NEXT') {
+    if (currentSong && currentSong.sections?.length > 0) {
+      const secIdx = currentSong.sections.findIndex((s) => s.sectionId === currentSectionId);
+      const curSec = currentSong.sections[secIdx >= 0 ? secIdx : 0];
+      const chunks = curSec.chunks || [];
+
+      if (currentChunkIndex + 1 < chunks.length) {
+        currentChunkIndex += 1;
+      } else if (secIdx + 1 < currentSong.sections.length) {
+        const nextSec = currentSong.sections[secIdx + 1];
+        currentSectionId = nextSec.sectionId;
+        currentSectionName = nextSec.name;
+        currentChunkIndex = 0;
+      } else {
+        const songIdx = songs.findIndex((s) => s._id?.toString() === currentSong._id?.toString());
+        if (songIdx + 1 < songs.length) {
+          const nextSong = songs[songIdx + 1];
+          currentSong = nextSong;
+          currentSongId = nextSong._id;
+          currentSongTitle = nextSong.title;
+          currentSongKey = nextSong.key;
+          currentSectionId = nextSong.sections?.[0]?.sectionId || '';
+          currentSectionName = nextSong.sections?.[0]?.name || '';
+          currentChunkIndex = 0;
+        }
+      }
+      if (displayMode === 'BLACK' || displayMode === 'CLEAR') {
+        displayMode = 'LYRICS_CHORDS';
+      }
+    }
+  } else if (type === 'PREV') {
+    if (currentSong && currentSong.sections?.length > 0) {
+      const secIdx = currentSong.sections.findIndex((s) => s.sectionId === currentSectionId);
+      if (currentChunkIndex > 0) {
+        currentChunkIndex -= 1;
+      } else if (secIdx > 0) {
+        const prevSec = currentSong.sections[secIdx - 1];
+        currentSectionId = prevSec.sectionId;
+        currentSectionName = prevSec.name;
+        currentChunkIndex = Math.max((prevSec.chunks?.length || 1) - 1, 0);
+      } else {
+        const songIdx = songs.findIndex((s) => s._id?.toString() === currentSong._id?.toString());
+        if (songIdx > 0) {
+          const prevSong = songs[songIdx - 1];
+          currentSong = prevSong;
+          currentSongId = prevSong._id;
+          currentSongTitle = prevSong.title;
+          currentSongKey = prevSong.key;
+          const lastSec = prevSong.sections?.[(prevSong.sections?.length || 1) - 1];
+          if (lastSec) {
+            currentSectionId = lastSec.sectionId;
+            currentSectionName = lastSec.name;
+            currentChunkIndex = Math.max((lastSec.chunks?.length || 1) - 1, 0);
+          }
+        }
+      }
+      if (displayMode === 'BLACK' || displayMode === 'CLEAR') {
+        displayMode = 'LYRICS_CHORDS';
+      }
+    }
+  } else if (type === 'SET_DISPLAY_MODE') {
+    if (['LYRICS_CHORDS', 'LYRICS', 'CHORDS', 'BLACK', 'CLEAR'].includes(payload.mode)) {
+      displayMode = payload.mode;
+    }
+  } else if (type === 'BLACK_SCREEN') {
+    displayMode = displayMode === 'BLACK' ? 'LYRICS_CHORDS' : 'BLACK';
+  } else if (type === 'CLEAR_SCREEN') {
+    displayMode = displayMode === 'CLEAR' ? 'LYRICS_CHORDS' : 'CLEAR';
+  } else if (type === 'UPDATE_CHUNK') {
+    const { lines, songId, sectionId, chunkIndex } = payload || {};
+    if (Array.isArray(lines)) {
+      const targetSongId = songId || currentSongId;
+      const targetSectionId = sectionId || currentSectionId;
+      const targetChunkIdx = chunkIndex !== undefined ? chunkIndex : currentChunkIndex;
+      const overrideKey = `${targetSongId}_${targetSectionId}_${targetChunkIdx}`;
+      customChunkOverrides[overrideKey] = lines;
+    }
+  }
+
+  // Calculate current and next chunk lines
+  let currentChunk = [];
+  let nextChunk = null;
+  let currentSectionIndex = 0;
+
+  if (currentSong && currentSong.sections?.length > 0) {
+    const secIdx = currentSong.sections.findIndex((sec) => sec.sectionId === currentSectionId);
+    currentSectionIndex = secIdx >= 0 ? secIdx : 0;
+    const curSec = currentSong.sections[currentSectionIndex];
+    currentSectionId = curSec.sectionId;
+    currentSectionName = curSec.name;
+
+    const chunks = curSec.chunks || [];
+    const chunkIdx = Math.min(Math.max(currentChunkIndex || 0, 0), Math.max(chunks.length - 1, 0));
+    currentChunkIndex = chunkIdx;
+    const rawChunk = chunks[chunkIdx] || { lines: [] };
+
+    const overrideKey = `${currentSongId}_${currentSectionId}_${chunkIdx}`;
+    currentChunk = customChunkOverrides[overrideKey] || rawChunk.lines || [];
+
+    if (chunkIdx + 1 < chunks.length) {
+      nextChunk = {
+        sectionName: curSec.name,
+        lines: chunks[chunkIdx + 1].lines,
+      };
+    } else if (currentSectionIndex + 1 < currentSong.sections.length) {
+      const nextSec = currentSong.sections[currentSectionIndex + 1];
+      nextChunk = {
+        sectionName: nextSec.name,
+        lines: nextSec.chunks?.[0]?.lines || [],
+      };
+    } else {
+      const currentSongIdx = songs.findIndex((s) => s._id?.toString() === currentSong._id?.toString());
+      if (currentSongIdx + 1 < songs.length) {
+        const nextSong = songs[currentSongIdx + 1];
+        nextChunk = {
+          songTitle: nextSong.title,
+          sectionName: nextSong.sections?.[0]?.name || 'Intro',
+          lines: nextSong.sections?.[0]?.chunks?.[0]?.lines || [],
+        };
+      } else {
+        nextChunk = {
+          sectionName: 'End of Service',
+          lines: [],
+        };
+      }
+    }
+  }
+
+  return {
+    ...state,
+    currentSongId,
+    currentSongTitle,
+    currentSongKey,
+    currentSectionId,
+    currentSectionName,
+    currentSectionIndex,
+    currentChunkIndex,
+    displayMode,
+    customChunkOverrides,
+    currentChunk,
+    nextChunk,
+  };
+}
+
 export default function LiveOperator() {
   const { eventId } = useParams();
   const navigate = useNavigate();
@@ -93,6 +278,7 @@ export default function LiveOperator() {
   const [editLine2, setEditLine2] = useState('');
 
   const socketRef = useRef(null);
+  const broadcastRef = useRef(null);
 
   // Fetch initial session state
   const fetchSession = useCallback(async () => {
@@ -122,6 +308,9 @@ export default function LiveOperator() {
       path: '/socket.io',
       query: { token },
       transports: ['websocket', 'polling'],
+      reconnectionAttempts: 25,
+      reconnectionDelay: 1000,
+      timeout: 5000,
     });
     socketRef.current = socket;
 
@@ -134,12 +323,14 @@ export default function LiveOperator() {
     });
 
     socket.on('live:state:updated', (newState) => {
-      setLiveState((prev) => ({
-        ...prev,
-        ...newState,
-      }));
-      if (broadcastRef.current) {
-        broadcastRef.current.postMessage({ type: 'LIVE_STATE_UPDATE', payload: newState });
+      if (newState) {
+        setLiveState((prev) => ({
+          ...prev,
+          ...newState,
+        }));
+        if (broadcastRef.current) {
+          broadcastRef.current.postMessage({ type: 'LIVE_STATE_UPDATE', payload: newState });
+        }
       }
     });
 
@@ -149,7 +340,6 @@ export default function LiveOperator() {
   }, [eventId, fetchSession]);
 
   // Zero-latency instant BroadcastChannel across same-machine popups
-  const broadcastRef = useRef(null);
   useEffect(() => {
     if (typeof BroadcastChannel !== 'undefined') {
       try {
@@ -173,8 +363,24 @@ export default function LiveOperator() {
     );
   };
 
-  // Dispatch operator commands via WebSocket & BroadcastChannel
+  // Dispatch operator commands via WebSocket & Instant Local Broadcast (0ms)
   const sendCommand = (type, payload = {}) => {
+    // 1. Instant Optimistic Local UI & BroadcastChannel (0ms delay)
+    setLiveState((prevState) => {
+      const optimistic = computeOptimisticLiveState(prevState, type, payload);
+      if (broadcastRef.current) {
+        broadcastRef.current.postMessage({ type: 'LIVE_STATE_UPDATE', payload: optimistic });
+      }
+      try {
+        localStorage.setItem(
+          `wplanner_live_sync_${eventId}`,
+          JSON.stringify({ payload: optimistic, ts: Date.now() })
+        );
+      } catch (e) {}
+      return optimistic;
+    });
+
+    // 2. Low-latency WebSocket transmission to cloud and remote TV screens
     if (socketRef.current) {
       socketRef.current.emit('live:command', {
         eventId,
