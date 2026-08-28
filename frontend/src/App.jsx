@@ -35,6 +35,8 @@ const TeamDetails = lazy(() => import('./pages/TeamDetails'));
 const TeamChat = lazy(() => import('./pages/TeamChat'));
 const TeamForm = lazy(() => import('./pages/TeamForm'));
 const AutoEventScheduler = lazy(() => import('./pages/AutoEventScheduler'));
+const LiveOperator = lazy(() => import('./pages/LiveOperator'));
+const LiveViewer = lazy(() => import('./pages/LiveViewer'));
 
 function App() {
   const dispatch = useDispatch();
@@ -59,6 +61,10 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/live/viewer" element={<LiveViewer />} />
+          <Route path="/live/viewer/:token" element={<LiveViewer />} />
+          <Route path="/live/viewer/event/:eventId" element={<LiveViewer />} />
+          <Route path="/live/operator/:eventId" element={<LiveOperator />} />
 
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
@@ -70,6 +76,7 @@ function App() {
                 <Route path="events" element={<EventsList />} />
                 <Route path="events/new" element={<EventForm />} />
                 <Route path="events/:id/team" element={<EventTeamBuild />} />
+                <Route path="events/:id/live" element={<LiveOperator />} />
                 <Route
                   path="events/:id/setlist/:songId"
                   element={<EventSetlistSongView />}

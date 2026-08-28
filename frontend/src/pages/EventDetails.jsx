@@ -53,6 +53,7 @@ import {
   Cancel as CancelIcon,
   VolunteerActivism as VolunteerActivismIcon,
   HowToReg as HowToRegIcon,
+  Tv as TvIcon,
 } from '@mui/icons-material';
 import api, { apiUrl } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -1021,6 +1022,22 @@ function EventDetails() {
                     Songs & Setlist
                   </Typography>
                 </Box>
+                {setlist.length > 0 && (
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<TvIcon />}
+                    onClick={() => navigate(`/live/operator/${id}`)}
+                    sx={{
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      boxShadow: '0 4px 14px rgba(56, 189, 248, 0.25)',
+                    }}
+                  >
+                    Present Live (TV)
+                  </Button>
+                )}
               </Box>
 
               {saveMessage && (

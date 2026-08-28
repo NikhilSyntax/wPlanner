@@ -14,6 +14,7 @@ const chatRoutes = require("./routes/chatRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const autoScheduleRoutes = require("./routes/autoScheduleRoutes");
 const churchRoutes = require("./routes/churchRoutes");
+const liveRoutes = require("./routes/liveRoutes");
 const { createServer } = require("./sockets/socketServer");
 const { apiLimiter, authLimiter } = require("./middleware/rateLimiter");
 const { helmetConfig, sanitizeInput } = require("./middleware/security");
@@ -78,6 +79,8 @@ app.use("/api", chatRoutes);
 app.use("/api/notifications", notificationRoutes);
 // Auto Event Scheduler routes
 app.use("/api/auto-schedules", autoScheduleRoutes);
+// Live Presentation routes
+app.use("/api/live", liveRoutes);
 
 // Health check
 app.get("/health", async (req, res) => {

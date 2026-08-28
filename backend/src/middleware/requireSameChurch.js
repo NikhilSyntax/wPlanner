@@ -6,7 +6,7 @@
 module.exports = function requireSameChurch(Model) {
   return async (req, res, next) => {
     try {
-      const resourceId = req.params.id;
+      const resourceId = req.params.id || req.params.eventId;
       const resource = await Model.findById(resourceId);
       if (!resource) {
         return res.status(404).json({ message: 'Resource not found' });

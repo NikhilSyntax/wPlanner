@@ -33,6 +33,7 @@ import {
   Save as SaveIcon,
   Close as CloseIcon,
   OpenInNew as OpenInNewIcon,
+  Tv as TvIcon,
 } from '@mui/icons-material';
 import api from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -234,15 +235,34 @@ function EventSetlistSongView() {
           </Box>
         </Box>
 
-        {setlist.length > 0 && (
-          <Chip
-            label={`Song ${currentIndex + 1} of ${setlist.length}`}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Button
             size="small"
+            variant="contained"
             color="primary"
-            variant="outlined"
-            sx={{ fontWeight: 700, fontSize: '0.75rem', height: 26, flexShrink: 0 }}
-          />
-        )}
+            startIcon={<TvIcon fontSize="small" />}
+            onClick={() => navigate(`/live/operator/${id}`)}
+            sx={{
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              height: 30,
+              textTransform: 'none',
+              borderRadius: 2,
+            }}
+          >
+            Live TV
+          </Button>
+
+          {setlist.length > 0 && (
+            <Chip
+              label={`Song ${currentIndex + 1} of ${setlist.length}`}
+              size="small"
+              color="primary"
+              variant="outlined"
+              sx={{ fontWeight: 700, fontSize: '0.75rem', height: 26, flexShrink: 0 }}
+            />
+          )}
+        </Box>
       </Box>
 
       {/* Song Hero Card with Touch-friendly Navigation Bar */}

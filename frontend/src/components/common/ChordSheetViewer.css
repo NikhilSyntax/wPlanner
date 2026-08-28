@@ -111,6 +111,12 @@
   display: block;
 }
 
+.cs-line-lyric {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
 /* Mode: Chords Visible (Default) */
 .cs-mode-chords .cs-line-chord {
   display: block;
@@ -129,13 +135,22 @@
   line-height: 1.6em;
   min-height: 1.6em;
   margin-bottom: 0.6em;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
 }
 
 .cs-mode-chords .cs-line-empty {
   height: 0.9em;
 }
 
-/* Mode: Lyrics Only (Chords Hidden - Gaps collapse together seamlessly) */
+/* Mode: Lyrics Only (Chords Hidden - Clean responsive wrapped lyrics) */
+.cs-mode-lyrics-only .cs-line {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
 .cs-mode-lyrics-only .cs-line-chord {
   display: none !important;
 }
@@ -148,6 +163,9 @@
   line-height: 1.8;
   margin-bottom: 0 !important;
   min-height: auto;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
 }
 
 .cs-mode-lyrics-only .cs-line-empty {

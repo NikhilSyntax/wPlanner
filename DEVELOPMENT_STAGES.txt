@@ -1,0 +1,265 @@
+================================================================================
+                          wPlanner Platform Development Guide
+                 Stages of Development: Features & Workflows
+================================================================================
+
+This document outlines the progressive architecture, core features, and operational
+workflows across the four major development stages of the wPlanner platform.
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. VERSION 1: Event Creation & Automated Multi-Tier Reminders
+2. VERSION 2: Collaboration, Teams & Real-Time Communication
+3. VERSION 3: Song Bank & Interactive Setlist Integration
+4. VERSION 4: Ministry Statistics, Analytics & Intelligent Automation
+5. SUMMARY: High-Level End-to-End Workflow
+
+================================================================================
+STAGE 1: VERSION 1 - EVENT CREATION & AUTOMATED REMINDERS
+================================================================================
+
+[Primary Objective]
+Establish the foundational event management system that enables leaders to schedule
+worship services and ensures every assigned volunteer and team member receives timely,
+automated reminders across multiple communication channels.
+
+[Key Features]
+--------------------------------------------------------------------------------
+1. Service & Event Scheduling:
+   - Create, edit, publish, and manage worship events and services.
+   - Configure event metadata: Title, Event Type (Sunday Service, Midweek, Youth, etc.),
+     location, description, start date/time, and end date/time.
+   - Event status lifecycle: Draft -> Published -> Completed / Cancelled.
+
+2. Multi-Tier Advance Reminders:
+   - Automated time-based reminder triggers:
+     * 24 Hours in Advance: Next-day preparation alert.
+     * 12 Hours in Advance: Half-day countdown alert.
+     * 2 Hours in Advance: Final call and check-in alert.
+   - Manual broadcast reminder button for instant leader-to-team notifications.
+
+3. Multi-Channel Notification Dispatch:
+   - In-App Notification Center: Persistent badge and notification tray.
+   - Real-Time WebSocket Alerts: Instant notification pops for active users.
+   - Web Push Notifications: Chrome / browser background push banners (via VAPID/Web-Push)
+     even when the user does not have the app tab active.
+
+4. Audience Targeting & De-duplication:
+   - Reminders automatically target all assigned volunteers and team members.
+   - Action initiators / senders are excluded from receiving their own trigger alerts.
+
+[Operational Workflow]
+--------------------------------------------------------------------------------
+Step 1: Church leader logs in and navigates to "Create Event".
+Step 2: Leader inputs service details (Title, Type, Date, Time, Description) and publishes.
+Step 3: Background Scheduler (Cron/Timer) runs periodically in the backend:
+        - Evaluates upcoming scheduled start times against 24h, 12h, and 2h windows.
+        - Identifies assigned members and team recipients.
+Step 4: Notifications are dispatched through in-app channels and Web-Push services.
+Step 5: Volunteers tap/click the notification, which deep-links directly to the Event Overview.
+
+
+================================================================================
+STAGE 2: VERSION 2 - COLLABORATION, TEAMS & REAL-TIME COMMUNICATION
+================================================================================
+
+[Primary Objective]
+Transform single-user planning into a collaborative team ecosystem with role-based
+access control, volunteer scheduling/opt-in confirmations, and real-time chat.
+
+[Key Features]
+--------------------------------------------------------------------------------
+1. Multi-Tenant Church & Team Management:
+   - Multi-church organizational partitioning.
+   - Dedicated Ministry Teams (Worship Team, Tech/Production, Ushers, Hospitality, Media).
+   - Team member directories with designated positions, skills, and contact info.
+
+2. Role-Based Access Control (RBAC):
+   - Super Admin: System-wide oversight.
+   - Church Admin: Church configuration, user approval, team creation, full permissions.
+   - Worship Leader / Event Manager: Event planning, setlist building, roster assignments.
+   - Volunteer / Member: View assigned events, accept/decline invites, access charts & chat.
+
+3. Volunteer Roster & Assignment Workflow:
+   - Assign volunteers to specific service roles (Worship Leader, Acoustic, Electric,
+     Bass, Drums, Keys, Vocals, Sound Tech, Media/Slides, Usher).
+   - Real-time RSVP / Confirmation status: Pending -> Confirmed / Declined / Substitute Requested.
+   - Conflict warnings if volunteers are double-booked.
+
+4. Real-Time Chat & Discussion:
+   - Event-Specific Chat: Dedicated channel per service for rehearsal notes, run-throughs,
+     and prayer requests.
+   - Team Chat: Persistent communication hubs for ongoing department discussions.
+   - Real-time socket delivery, unread message badges, and sender avatars.
+
+[Operational Workflow]
+--------------------------------------------------------------------------------
+Step 1: Church Admin creates teams and invites/approves volunteer user accounts.
+Step 2: Event Planner opens the "Team Build / Assignments" tab of an event.
+Step 3: Planner assigns volunteers to roles and publishes the roster.
+Step 4: Volunteers receive instant assignment notifications and RSVP (Accept / Decline).
+Step 5: Team members open the Event Chat to collaborate on rehearsal timelines, key changes,
+        and service flow in real time.
+
+
+================================================================================
+STAGE 3: VERSION 3 - SONG BANK & INTERACTIVE SETLIST INTEGRATION
+================================================================================
+
+[Primary Objective]
+Centralize the church's musical repertoire and integrate dynamic setlist planning directly
+into events, enabling seamless musician rehearsals and live stage execution.
+
+[Key Features]
+--------------------------------------------------------------------------------
+1. Centralized Song Bank:
+   - Master repository for church songs.
+   - Metadata: Title, Artist, Original Key, BPM / Tempo, Time Signature, CCLI #, Themes.
+   - Rehearsal Assets: Lyrics, Chord Charts, YouTube/Spotify reference links, audio files.
+
+2. Interactive Event Setlist Builder:
+   - Search and attach songs from the Song Bank to specific events.
+   - Drag-and-drop / ordered worship sequence (Opener, Praise, Worship, Offertory, Response).
+   - Event-specific custom key overrides (e.g., Original: D -> Sunday Key: Bb).
+   - Assign specific Vocal Leaders or Lead Instrumentalists per song.
+   - Transition & performance notes (e.g., "Acoustic intro only", "Modulate on Bridge").
+
+3. Live Musician View & Transposition:
+   - Stage-friendly digital setlist view for mobile devices, tablets, and desktops.
+   - Formatted chord sheet presentation with dynamic transposition.
+
+4. Song Usage & Rotation Tracking:
+   - Tracks total times sung and last date used across historical events.
+   - Helps worship leaders avoid song over-repetition and re-introduce classic anthems.
+
+[Operational Workflow]
+--------------------------------------------------------------------------------
+Step 1: Music Director populates the Song Bank with songs, default keys, chords, and links.
+Step 2: Worship Leader opens an upcoming Event and goes to the "Setlist" tab.
+Step 3: Leader searches the Song Bank, adds 4-6 songs, sets keys, and assigns vocal leads.
+Step 4: Musicians receive notification of the published setlist and open the Event Setlist view
+        to review chord sheets and listen to YouTube/audio reference links.
+Step 5: During Sunday rehearsal/service, musicians read chords and lyrics directly in the app.
+Step 6: Upon event completion, song usage metrics (last played date, usage count) update automatically.
+
+
+================================================================================
+STAGE 4: VERSION 4 - STATISTICS, ANALYTICS & INTELLIGENT AUTOMATION
+================================================================================
+
+[Primary Objective]
+Leverage collected platform data to provide actionable ministry health analytics and
+introduce intelligent automation for recurring event generation and roster scheduling.
+
+[Key Features]
+--------------------------------------------------------------------------------
+1. Ministry Analytics & Health Metrics:
+   - Volunteer Participation Analytics:
+     * Individual serving frequencies, total services per month/quarter.
+     * Acceptance / decline rates and response time benchmarks.
+     * Volunteer burnout alerts (warning if a volunteer is scheduled too many consecutive weeks).
+   - Repertoire & Song Analytics:
+     * Most played songs, least played songs, dormant songs (> 90 days unused).
+     * Song theme distribution (Praise vs Worship vs Communion vs Fast/Slow BPMs).
+   - Ministry Growth & Attendance Metrics:
+     * Service counts, team coverage percentage, unfilled role alerts.
+
+2. Auto-Event Scheduler & Recurring Templates:
+   - Create recurring schedule rules (e.g., "Every Sunday at 9:00 AM & 11:15 AM", "Every 1st Wednesday").
+   - Define template parameters: Default Service Type, Title format, Duration, and Assigned Teams.
+   - Rolling Advance Generation: Backend automatically generates events 2 to 6 weeks in advance.
+   - Integrated lifecycle: Auto-generated events inherit multi-tier 24h/12h/2h reminders automatically.
+
+3. Intelligent Roster & Auto-Assignment Engine:
+   - Smart volunteer rotation based on past serving frequency and availability preferences.
+   - Automated conflict resolution preventing cross-team scheduling clashes.
+
+[Operational Workflow]
+--------------------------------------------------------------------------------
+Step 1: Church Admin configures an "Auto-Schedule Template" (e.g. Weekly Sunday Worship Service).
+Step 2: Automated backend worker evaluates schedule rules and auto-provisions upcoming weekly events.
+Step 3: Platform populates default team assignments and schedules notification reminders.
+Step 4: Church leadership views the Ministry Dashboard to analyze monthly trends:
+        - Identify heavily burdened volunteers to rotate off.
+        - Discover under-utilized songs to refresh Sunday setlists.
+        - Verify overall team health, attendance readiness, and fill open volunteer spots.
+
+
+================================================================================
+STAGE 5: VERSION 5 - LIVE LYRICS & CHORDS TV / OPERATOR PRESENTATION SYSTEM
+================================================================================
+
+[Primary Objective]
+Provide an authoritative live presentation system separating the Operator Control Console
+(laptop/tablet) from the Viewer Display (church TV, projector, stage monitor) with
+strict 2-line windowing, character-anchored chord positions, and sub-second WebSocket sync.
+
+[Key Features]
+--------------------------------------------------------------------------------
+1. Authoritative Live Presentation Architecture:
+   - Backend LiveSession as single source of truth across browser refreshes.
+   - Dedicated Live Operator Console (/live/operator/:eventId).
+   - Dedicated Pure Viewer Presentation Screen (/live/viewer/:token).
+   - 4-Digit Display Pairing Code workflow with persistent display tokens.
+
+2. Distance-Optimized Strict 2-Line Windowing:
+   - Always displays exactly TWO lyric lines maximum at any given time.
+   - No continuous scrolling; whole-slide transitions on NEXT / PREV.
+   - Center-aligned, ultra-readable typography optimized for 1080p and 4K TVs.
+
+3. Character-Anchored Chord Alignment:
+   - Chords structurally anchored to exact character positions in the lyric text.
+   - Resilient against zoom, font size variations, and screen aspect ratio changes.
+   - Toggle Chords ON/OFF with dynamic transposition.
+
+4. Operator Control Console & Live Previews:
+   - Real-time Current Live Output (exact 2 lines on TV).
+   - Next Slide Preview (upcoming 2 lines or upcoming song section).
+   - Structured Section Switcher ([Intro], [Verse 1], [Chorus], [Bridge], etc.).
+   - Instant Blackout Screen (B) and Clear Screen (C) modes.
+   - Real-time connected display counter and connection status badge.
+
+[Operational Workflow]
+--------------------------------------------------------------------------------
+Step 1: Worship Leader / Admin opens the Event Setlist and clicks "Present Live (TV)".
+Step 2: TV or Projector opens /live/viewer and enters the 4-digit display pairing code.
+Step 3: TV pairs, remembers display token, and shows the live service state.
+Step 4: Operator presses NEXT / Space or selects sections to advance lyrics & chords 2 lines at a time.
+Step 5: Viewers update instantly via WebSockets without page reload.
+
+
+================================================================================
+HIGH-LEVEL INTEGRATED ARCHITECTURE SUMMARY
+================================================================================
+
+  +----------------------------------------------------------------------------+
+  |                               wPlanner Core                                |
+  +----------------------------------------------------------------------------+
+         |                        |                        |
+         v                        v                        v
+  +--------------+         +--------------+         +--------------+
+  |  VERSION 1   | ------> |  VERSION 2   | ------> |  VERSION 3   |
+  | Events &     |         | Teams, RBAC  |         | Song Bank &  |
+  | Reminders    |         | & Live Chat  |         | Setlist Sync |
+  +--------------+         +--------------+         +--------------+
+         |                        |                        |
+         +------------------------+------------------------+
+                                  |
+                                  v
+                       +----------------------+
+                       |      VERSION 4       |
+                       | Analytics, Insights  |
+                       | & Auto-Scheduling    |
+                       +----------------------+
+                                  |
+                                  v
+                       +----------------------+
+                       |      VERSION 5       |
+                       | Live TV Lyrics,      |
+                       | Chords & Operator    |
+                       +----------------------+
+
+================================================================================
+Generated for wPlanner | Architecture & Feature Specification
+================================================================================
