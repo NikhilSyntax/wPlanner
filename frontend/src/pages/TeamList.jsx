@@ -46,7 +46,6 @@ import {
   Chat as ChatIcon,
   Send as SendIcon,
   Close as CloseIcon,
-  Add as AddIcon,
 } from '@mui/icons-material';
 import { io } from 'socket.io-client';
 import { fetchTeams } from '../store/slices/teamSlice';
@@ -413,17 +412,6 @@ function TeamList() {
               >
                 Roster Chat
               </Button>
-              {isPrivileged && (
-                <Button
-                  variant="outlined"
-                  startIcon={<AddIcon />}
-                  component={Link}
-                  to="/teams/new"
-                  sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
-                >
-                  New Team
-                </Button>
-              )}
             </Box>
           </Box>
 
