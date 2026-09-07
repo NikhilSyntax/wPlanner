@@ -54,6 +54,33 @@ const getSchedule = (row) => row?.schedule || {};
 const getScheduleStart = (row) => getSchedule(row).start || null;
 const getScheduleEnd = (row) => getSchedule(row).end || null;
 
+export const computeEventStatus = (row) => {
+  const backendStatus = String(row?.event?.status || 'draft').toLowerCase();
+  if (backendStatus === 'completed' || backendStatus === 'cancelled' || backendStatus === 'draft') {
+    return backendStatus;
+  }
+  const start = getScheduleStart(row) ? new Date(getScheduleStart(row)) : null;
+  const end = getScheduleEnd(row) ? new Date(getScheduleEnd(row)) : null;
+  const now = new Date();
+
+  if (backendStatus === 'published' || backendStatus === 'confirmed') {
+    if (start && end) {
+      if (now < start) return 'published';
+      if (now >= start && now <= end) return 'in_progress';
+      if (now > end) return 'completed';
+    } else if (end && now > end) {
+      return 'completed';
+    } else if (start && now > start) {
+      const fallbackEnd = new Date(start.getTime() + 3 * 60 * 60 * 1000);
+      if (now > fallbackEnd) return 'completed';
+      return 'in_progress';
+    }
+    return 'published';
+  }
+
+  return backendStatus;
+};
+
 function EventsList() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -92,26 +119,9 @@ function EventsList() {
       );
     }
 
-    const computeStatus = (row) => {
-      const backendStatus = row.event?.status || 'draft';
-      const start = getScheduleStart(row) ? new Date(getScheduleStart(row)) : null;
-      const end = getScheduleEnd(row) ? new Date(getScheduleEnd(row)) : null;
-      const now = new Date();
-      if (backendStatus === 'draft') return 'draft';
-      if (backendStatus === 'published') {
-        if (start && end) {
-          if (now < start) return 'published';
-          if (now >= start && now <= end) return 'in_progress';
-          if (now > end) return 'completed';
-        }
-        return 'published';
-      }
-      return backendStatus;
-    };
-
     if (statusFilter) {
       filtered = filtered.filter(
-        (event) => computeStatus(event) === statusFilter
+        (event) => computeEventStatus(event) === statusFilter
       );
     }
 
@@ -177,14 +187,14 @@ function EventsList() {
   // 2. Drafts / Unconfirmed proposals
   // 3. Completed worship events
   const scheduledEvents = filteredEvents.filter((e) => {
-    const st = e.event?.status || 'draft';
+    const st = computeEventStatus(e);
     return st === 'published' || st === 'in_progress';
   });
   const draftEvents = filteredEvents.filter(
-    (e) => (e.event?.status || 'draft') === 'draft'
+    (e) => computeEventStatus(e) === 'draft'
   );
   const completedEvents = filteredEvents.filter(
-    (e) => (e.event?.status || 'draft') === 'completed'
+    (e) => computeEventStatus(e) === 'completed'
   );
 
   const mainColumns = [
@@ -296,24 +306,7 @@ function EventsList() {
       id: 'status',
       label: 'Status',
       render: (row) => {
-        const backendStatus = row.event?.status || 'draft';
-        const start = getScheduleStart(row) ? new Date(getScheduleStart(row)) : null;
-        const end = getScheduleEnd(row) ? new Date(getScheduleEnd(row)) : null;
-        const now = new Date();
-
-        let display = backendStatus;
-        if (backendStatus === 'draft') {
-          display = 'draft';
-        } else if (backendStatus === 'published') {
-          if (start && end) {
-            if (now < start) display = 'published';
-            else if (now >= start && now <= end) display = 'in_progress';
-            else if (now > end) display = 'completed';
-          } else {
-            display = 'published';
-          }
-        }
-
+        const display = computeEventStatus(row);
         const label =
           display === 'published'
             ? 'Confirmed'
@@ -329,7 +322,7 @@ function EventsList() {
         );
       },
       sortable: true,
-      sortKey: (row) => row.event?.status || 'draft',
+      sortKey: (row) => computeEventStatus(row),
     },
     {
       id: 'actions',
@@ -832,124 +825,130 @@ function EventsList() {
       </Paper>
 
       {/* 1. Main Confirmed & Active Events Table */}
-      <Box sx={{ mb: 3.5 }}>
-        <DataTable
-          title={
-            <Stack direction="row" alignItems="center" spacing={1.5}>
-              <EventIcon color="primary" sx={{ fontSize: 22 }} />
-              <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.05rem' }}>
-                Confirmed & Scheduled Events
-              </Typography>
-              <Chip
-                label={`${scheduledEvents.length} Active`}
-                size="small"
-                color="primary"
-                variant="outlined"
-                sx={{ fontWeight: 600, height: 22, fontSize: '0.75rem' }}
-              />
-            </Stack>
-          }
-          searchable={false}
-          columns={mainColumns}
-          data={scheduledEvents}
-          actions={false}
-          onRowClick={(row) => navigate(`/events/${row._id}`)}
-          emptyMessage={
-            <Box textAlign="center" py={4}>
-              <Typography variant="body2" color="text.secondary">
-                No confirmed events match your filter.
-              </Typography>
-            </Box>
-          }
-        />
-      </Box>
+      {(!statusFilter || statusFilter === 'published' || statusFilter === 'in_progress') && (
+        <Box sx={{ mb: 3.5 }}>
+          <DataTable
+            title={
+              <Stack direction="row" alignItems="center" spacing={1.5}>
+                <EventIcon color="primary" sx={{ fontSize: 22 }} />
+                <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.05rem' }}>
+                  Confirmed & Scheduled Events
+                </Typography>
+                <Chip
+                  label={`${scheduledEvents.length} Active`}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ fontWeight: 600, height: 22, fontSize: '0.75rem' }}
+                />
+              </Stack>
+            }
+            searchable={false}
+            columns={mainColumns}
+            data={scheduledEvents}
+            actions={false}
+            onRowClick={(row) => navigate(`/events/${row._id}`)}
+            emptyMessage={
+              <Box textAlign="center" py={4}>
+                <Typography variant="body2" color="text.secondary">
+                  No confirmed events match your filter.
+                </Typography>
+              </Box>
+            }
+          />
+        </Box>
+      )}
 
       {/* 2. Drafts & Unconfirmed Events Table */}
-      <Box sx={{ mb: 3.5 }}>
-        <DataTable
-          title={
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 1 }}>
-              <Stack direction="row" alignItems="center" spacing={1.5}>
-                <HourglassEmptyIcon sx={{ color: '#d97706', fontSize: 22 }} />
-                <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.05rem' }}>
-                  Drafts / Unconfirmed Events
+      {(!statusFilter || statusFilter === 'draft') && (
+        <Box sx={{ mb: 3.5 }}>
+          <DataTable
+            title={
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 1 }}>
+                <Stack direction="row" alignItems="center" spacing={1.5}>
+                  <HourglassEmptyIcon sx={{ color: '#d97706', fontSize: 22 }} />
+                  <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.05rem' }}>
+                    Drafts / Unconfirmed Events
+                  </Typography>
+                  <Chip
+                    label={`${draftEvents.length} Pending`}
+                    size="small"
+                    sx={{
+                      fontWeight: 600,
+                      height: 22,
+                      fontSize: '0.75rem',
+                      bgcolor: 'rgba(245, 158, 11, 0.1)',
+                      color: '#d97706',
+                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                    }}
+                  />
+                </Stack>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.78rem' }}>
+                  {isFullAdmin
+                    ? 'Review and click Confirm to publish events for church members.'
+                    : 'Events created by team members awaiting admin confirmation.'}
                 </Typography>
-                <Chip
-                  label={`${draftEvents.length} Pending`}
-                  size="small"
-                  sx={{
-                    fontWeight: 600,
-                    height: 22,
-                    fontSize: '0.75rem',
-                    bgcolor: 'rgba(245, 158, 11, 0.1)',
-                    color: '#d97706',
-                    border: '1px solid rgba(245, 158, 11, 0.3)',
-                  }}
-                />
-              </Stack>
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.78rem' }}>
-                {isFullAdmin
-                  ? 'Review and click Confirm to publish events for church members.'
-                  : 'Events created by team members awaiting admin confirmation.'}
-              </Typography>
-            </Box>
-          }
-          searchable={false}
-          columns={draftColumns}
-          data={draftEvents}
-          actions={false}
-          onRowClick={(row) => navigate(`/events/${row._id}`)}
-          emptyMessage={
-            <Box textAlign="center" py={4}>
-              <Typography variant="body2" color="text.secondary">
-                No draft or unconfirmed events at this time.
-              </Typography>
-            </Box>
-          }
-        />
-      </Box>
+              </Box>
+            }
+            searchable={false}
+            columns={draftColumns}
+            data={draftEvents}
+            actions={false}
+            onRowClick={(row) => navigate(`/events/${row._id}`)}
+            emptyMessage={
+              <Box textAlign="center" py={4}>
+                <Typography variant="body2" color="text.secondary">
+                  No draft or unconfirmed events at this time.
+                </Typography>
+              </Box>
+            }
+          />
+        </Box>
+      )}
 
       {/* 3. Completed Worship Events Archive Table */}
-      <Box sx={{ mb: 2 }}>
-        <DataTable
-          title={
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 1 }}>
-              <Stack direction="row" alignItems="center" spacing={1.5}>
-                <CheckCircleIcon sx={{ color: '#059669', fontSize: 22 }} />
-                <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.05rem' }}>
-                  Completed Worship Events
+      {(!statusFilter || statusFilter === 'completed') && (
+        <Box sx={{ mb: 2 }}>
+          <DataTable
+            title={
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flexWrap: 'wrap', gap: 1 }}>
+                <Stack direction="row" alignItems="center" spacing={1.5}>
+                  <CheckCircleIcon sx={{ color: '#059669', fontSize: 22 }} />
+                  <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.05rem' }}>
+                    Completed Worship Events
+                  </Typography>
+                  <Chip
+                    label={`${completedEvents.length} Completed`}
+                    size="small"
+                    color="success"
+                    variant="outlined"
+                    sx={{
+                      fontWeight: 600,
+                      height: 22,
+                      fontSize: '0.75rem',
+                    }}
+                  />
+                </Stack>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.78rem' }}>
+                  Finished worship services with recorded song performance histories.
                 </Typography>
-                <Chip
-                  label={`${completedEvents.length} Completed`}
-                  size="small"
-                  color="success"
-                  variant="outlined"
-                  sx={{
-                    fontWeight: 600,
-                    height: 22,
-                    fontSize: '0.75rem',
-                  }}
-                />
-              </Stack>
-              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.78rem' }}>
-                Finished worship services with recorded song performance histories.
-              </Typography>
-            </Box>
-          }
-          searchable={false}
-          columns={completedColumns}
-          data={completedEvents}
-          actions={false}
-          onRowClick={(row) => navigate(`/events/${row._id}`)}
-          emptyMessage={
-            <Box textAlign="center" py={4}>
-              <Typography variant="body2" color="text.secondary">
-                No completed worship events yet.
-              </Typography>
-            </Box>
-          }
-        />
-      </Box>
+              </Box>
+            }
+            searchable={false}
+            columns={completedColumns}
+            data={completedEvents}
+            actions={false}
+            onRowClick={(row) => navigate(`/events/${row._id}`)}
+            emptyMessage={
+              <Box textAlign="center" py={4}>
+                <Typography variant="body2" color="text.secondary">
+                  No completed worship events yet.
+                </Typography>
+              </Box>
+            }
+          />
+        </Box>
+      )}
     </Box>
   );
 }
