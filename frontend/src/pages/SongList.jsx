@@ -29,6 +29,9 @@ import {
   Chip,
   Card,
   CardContent,
+  Stack,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import SongForm from '../pages/SongForm';
 import {
@@ -40,19 +43,47 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Clear as ClearIcon,
+  CalendarMonth as EditCalendarIcon,
+  DeleteOutline as DeleteOutlineIcon,
+  CloudDownload as ImportIcon,
 } from '@mui/icons-material';
 import DataTable from '../components/common/DataTable';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import { useAuth } from '../hooks/useAuth';
+import ImportSongModal from '../components/songs/ImportSongModal';
 
 function SongList() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+
+  const isAdmin = Boolean(
+    user?.isAdmin ||
+    user?.isSubAdmin ||
+    user?.role === 'Admin' ||
+    user?.role === 'admin' ||
+    user?.roles?.includes('admin') ||
+    user?.role === 'team_leader'
+  );
+
   const [tabIndex, setTabIndex] = useState(0);
   const [songs, setSongs] = useState([]);
   const [filters, setFilters] = useState({ title: '', artist: '', key: '' });
   const [loading, setLoading] = useState(true);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedSongHistory, setSelectedSongHistory] = useState(null);
+
+  // Edit Last Used Dialog State
+  const [editLastUsedOpen, setEditLastUsedOpen] = useState(false);
+  const [selectedSongForEdit, setSelectedSongForEdit] = useState(null);
+  const [lastUsedDate, setLastUsedDate] = useState('');
+  const [lastUsedEventTitle, setLastUsedEventTitle] = useState('');
+  const [lastUsedKey, setLastUsedKey] = useState('C');
+  const [lastUsedNotes, setLastUsedNotes] = useState('');
+  const [savingLastUsed, setSavingLastUsed] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importedSongForEditor, setImportedSongForEditor] = useState(null);
 
   useEffect(() => {
     fetchSongs();
@@ -95,6 +126,93 @@ function SongList() {
       console.error(err);
       setSelectedSongHistory(song);
       setHistoryDialogOpen(true);
+    }
+  };
+
+  const handleOpenEditLastUsed = (song) => {
+    setSelectedSongForEdit(song);
+    // Pre-fill with existing lastPerformed or today's date formatted as YYYY-MM-DD
+    const existingDate = song.usage?.lastPerformed ? new Date(song.usage.lastPerformed) : new Date();
+    const yyyy = existingDate.getFullYear();
+    const mm = String(existingDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(existingDate.getDate()).padStart(2, '0');
+    setLastUsedDate(`${yyyy}-${mm}-${dd}`);
+    setLastUsedEventTitle('');
+    setLastUsedKey(song.key || 'C');
+    setLastUsedNotes('');
+    setEditLastUsedOpen(true);
+  };
+
+  const handleSaveLastUsed = async () => {
+    if (!lastUsedDate) {
+      alert('Please select a valid date.');
+      return;
+    }
+    try {
+      setSavingLastUsed(true);
+      const res = await api.put(`/songs/${selectedSongForEdit._id}/usage`, {
+        action: 'setLastUsed',
+        lastPerformed: new Date(lastUsedDate).toISOString(),
+        eventTitle: lastUsedEventTitle.trim() || 'Worship Service',
+        key: lastUsedKey,
+        notes: lastUsedNotes.trim(),
+      });
+
+      setSongs((prev) =>
+        prev.map((s) => (s._id === selectedSongForEdit._id ? res.data : s))
+      );
+      if (selectedSongHistory && selectedSongHistory._id === selectedSongForEdit._id) {
+        setSelectedSongHistory(res.data);
+      }
+      setToastMessage(`Last used date updated for "${selectedSongForEdit.title}"`);
+      setEditLastUsedOpen(false);
+    } catch (err) {
+      console.error('Error saving last used date:', err);
+      alert(err.response?.data?.message || 'Failed to update last used date.');
+    } finally {
+      setSavingLastUsed(false);
+    }
+  };
+
+  const handleClearLastUsed = async () => {
+    if (!window.confirm(`Clear last used date for "${selectedSongForEdit?.title}"?`)) {
+      return;
+    }
+    try {
+      setSavingLastUsed(true);
+      const res = await api.put(`/songs/${selectedSongForEdit._id}/usage`, {
+        action: 'clearLastUsed',
+        clearManualHistory: true,
+      });
+      setSongs((prev) =>
+        prev.map((s) => (s._id === selectedSongForEdit._id ? res.data : s))
+      );
+      if (selectedSongHistory && selectedSongHistory._id === selectedSongForEdit._id) {
+        setSelectedSongHistory(res.data);
+      }
+      setToastMessage(`Cleared last used date for "${selectedSongForEdit.title}"`);
+      setEditLastUsedOpen(false);
+    } catch (err) {
+      console.error('Error clearing last used date:', err);
+      alert('Failed to clear last used date.');
+    } finally {
+      setSavingLastUsed(false);
+    }
+  };
+
+  const handleDeleteHistoryEntry = async (songId, usageId) => {
+    if (!window.confirm('Remove this performance entry?')) return;
+    try {
+      const res = await api.put(`/songs/${songId}/usage`, {
+        action: 'deleteUsage',
+        usageId,
+      });
+      setSongs((prev) => prev.map((s) => (s._id === songId ? res.data : s)));
+      setSelectedSongHistory(res.data);
+      setToastMessage('Performance record removed.');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to remove performance entry.');
     }
   };
 
@@ -181,34 +299,91 @@ function SongList() {
         const lastUsed = row.usage?.lastPerformed;
         if (!lastUsed) {
           return (
-            <Typography variant="caption" color="text.secondary">
-              Never used
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography variant="caption" color="text.secondary">
+                Never used
+              </Typography>
+              {isAdmin && (
+                <Tooltip title="Set when song was used">
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenEditLastUsed(row);
+                    }}
+                    sx={{
+                      p: 0.35,
+                      color: 'primary.main',
+                      bgcolor: 'rgba(37, 99, 235, 0.08)',
+                      '&:hover': { bgcolor: 'rgba(37, 99, 235, 0.18)' },
+                    }}
+                  >
+                    <EditCalendarIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
           );
         }
         const d = new Date(lastUsed);
         if (Number.isNaN(d.getTime())) {
           return (
-            <Typography variant="caption" color="text.secondary">
-              Never used
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography variant="caption" color="text.secondary">
+                Never used
+              </Typography>
+              {isAdmin && (
+                <Tooltip title="Set when song was used">
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenEditLastUsed(row);
+                    }}
+                    sx={{ p: 0.35, color: 'primary.main' }}
+                  >
+                    <EditCalendarIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
           );
         }
         return (
-          <Tooltip title="View performance history">
-            <Chip
-              icon={<HistoryIcon sx={{ fontSize: '14px !important' }} />}
-              label={d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleOpenHistory(row);
-              }}
-              clickable
-              variant="outlined"
-              sx={{ fontSize: '0.75rem', fontWeight: 500 }}
-            />
-          </Tooltip>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Tooltip title="View performance history">
+              <Chip
+                icon={<HistoryIcon sx={{ fontSize: '14px !important' }} />}
+                label={d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenHistory(row);
+                }}
+                clickable
+                variant="outlined"
+                sx={{ fontSize: '0.75rem', fontWeight: 500 }}
+              />
+            </Tooltip>
+            {isAdmin && (
+              <Tooltip title="Edit when song was used">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenEditLastUsed(row);
+                  }}
+                  sx={{
+                    p: 0.35,
+                    color: 'text.secondary',
+                    '&:hover': { color: 'primary.main', bgcolor: 'rgba(37, 99, 235, 0.08)' },
+                  }}
+                >
+                  <EditCalendarIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
         );
       },
     },
@@ -278,7 +453,7 @@ function SongList() {
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button
             variant={tabIndex === 0 ? 'contained' : 'outlined'}
             onClick={() => setTabIndex(0)}
@@ -289,10 +464,22 @@ function SongList() {
           <Button
             variant={tabIndex === 1 ? 'contained' : 'outlined'}
             startIcon={<AddIcon />}
-            onClick={() => setTabIndex(1)}
+            onClick={() => {
+              setImportedSongForEditor(null);
+              setTabIndex(1);
+            }}
             sx={{ borderRadius: 2 }}
           >
             Add New Song
+          </Button>
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={<ImportIcon />}
+            onClick={() => setImportModalOpen(true)}
+            sx={{ borderRadius: 2 }}
+          >
+            Import Song
           </Button>
         </Box>
       </Box>
@@ -397,11 +584,16 @@ function SongList() {
 
       {tabIndex === 1 && (
         <SongForm
+          initialData={importedSongForEditor}
           onSave={() => {
+            setImportedSongForEditor(null);
             setTabIndex(0);
             fetchSongs();
           }}
-          onClose={() => setTabIndex(0)}
+          onClose={() => {
+            setImportedSongForEditor(null);
+            setTabIndex(0);
+          }}
         />
       )}
 
@@ -411,9 +603,31 @@ function SongList() {
         onClose={() => setHistoryDialogOpen(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{ sx: { borderRadius: 3, p: 1 } }}
       >
-        <DialogTitle sx={{ fontWeight: 700 }}>
-          Song Performance History: <span style={{ color: '#2563eb' }}>{selectedSongHistory?.title}</span>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography variant="subtitle1" fontWeight={700}>
+              Song Performance History
+            </Typography>
+            <Typography variant="caption" color="primary.main" fontWeight={600}>
+              {selectedSongHistory?.title}
+            </Typography>
+          </Box>
+          {isAdmin && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<EditCalendarIcon sx={{ fontSize: 15 }} />}
+              onClick={() => {
+                setHistoryDialogOpen(false);
+                handleOpenEditLastUsed(selectedSongHistory);
+              }}
+              sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', borderRadius: 1.5 }}
+            >
+              Record / Edit Date
+            </Button>
+          )}
         </DialogTitle>
         <DialogContent dividers>
           {selectedSongHistory?.usage?.usageHistory &&
@@ -425,6 +639,7 @@ function SongList() {
                     <TableCell>Worship Event</TableCell>
                     <TableCell>Date Performed</TableCell>
                     <TableCell align="center">Key Performed</TableCell>
+                    {isAdmin && <TableCell align="right">Actions</TableCell>}
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -433,9 +648,29 @@ function SongList() {
                     .map((usage, idx) => (
                       <TableRow key={idx}>
                         <TableCell>
-                          <Typography variant="body2" fontWeight={600}>
-                            {usage.eventTitle || 'Worship Service'}
-                          </Typography>
+                          <Box display="flex" alignItems="center" gap={0.75}>
+                            <Typography variant="body2" fontWeight={600}>
+                              {usage.eventTitle || 'Worship Service'}
+                            </Typography>
+                            {usage.isManual && (
+                              <Chip
+                                label="Manual"
+                                size="small"
+                                sx={{
+                                  fontSize: '0.65rem',
+                                  height: 18,
+                                  bgcolor: 'rgba(14, 165, 233, 0.1)',
+                                  color: '#0284c7',
+                                  fontWeight: 600,
+                                }}
+                              />
+                            )}
+                          </Box>
+                          {usage.notes && (
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              {usage.notes}
+                            </Typography>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Typography variant="caption" color="text.secondary">
@@ -456,6 +691,21 @@ function SongList() {
                             sx={{ fontWeight: 700, fontSize: '0.75rem' }}
                           />
                         </TableCell>
+                        {isAdmin && (
+                          <TableCell align="right">
+                            {usage.isManual && (
+                              <Tooltip title="Delete manual entry">
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => handleDeleteHistoryEntry(selectedSongHistory._id, usage._id)}
+                                >
+                                  <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                 </TableBody>
@@ -463,7 +713,7 @@ function SongList() {
             </TableContainer>
           ) : (
             <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
-              This song has not been scheduled in any worship events yet.
+              This song has not been scheduled or recorded in any worship events yet.
             </Typography>
           )}
         </DialogContent>
@@ -473,6 +723,153 @@ function SongList() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Admin Edit Last Used Dialog */}
+      <Dialog
+        open={editLastUsedOpen}
+        onClose={() => !savingLastUsed && setEditLastUsedOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3, p: 1 } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <Box
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: 2,
+              bgcolor: 'rgba(37, 99, 235, 0.1)',
+              color: 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <EditCalendarIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Box>
+            <Typography variant="subtitle1" fontWeight={700}>
+              Edit Last Used Date
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {selectedSongForEdit?.title} {selectedSongForEdit?.artist ? `• ${selectedSongForEdit.artist}` : ''}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2.5} sx={{ mt: 0.5 }}>
+            <TextField
+              label="Date When Song Was Used"
+              type="date"
+              fullWidth
+              size="small"
+              value={lastUsedDate}
+              onChange={(e) => setLastUsedDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              helperText="Set when this song was performed or last used in church"
+            />
+
+            <TextField
+              label="Service / Event Name"
+              placeholder="e.g. Sunday Morning Worship"
+              fullWidth
+              size="small"
+              value={lastUsedEventTitle}
+              onChange={(e) => setLastUsedEventTitle(e.target.value)}
+            />
+
+            <FormControl fullWidth size="small">
+              <InputLabel>Key Performed</InputLabel>
+              <Select
+                value={lastUsedKey}
+                label="Key Performed"
+                onChange={(e) => setLastUsedKey(e.target.value)}
+              >
+                {['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].map((k) => (
+                  <MenuItem key={k} value={k}>
+                    Key of {k}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <TextField
+              label="Notes (Optional)"
+              placeholder="e.g. Led by guest team, special arrangement"
+              fullWidth
+              size="small"
+              multiline
+              rows={2}
+              value={lastUsedNotes}
+              onChange={(e) => setLastUsedNotes(e.target.value)}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, justifyContent: 'space-between' }}>
+          {selectedSongForEdit?.usage?.lastPerformed ? (
+            <Button
+              color="error"
+              size="small"
+              onClick={handleClearLastUsed}
+              disabled={savingLastUsed}
+              sx={{ textTransform: 'none' }}
+            >
+              Clear Date
+            </Button>
+          ) : (
+            <Box />
+          )}
+
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => setEditLastUsedOpen(false)}
+              disabled={savingLastUsed}
+              sx={{ textTransform: 'none', borderRadius: 1.5 }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={handleSaveLastUsed}
+              disabled={savingLastUsed || !lastUsedDate}
+              sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 1.5 }}
+            >
+              {savingLastUsed ? 'Saving...' : 'Save Date'}
+            </Button>
+          </Box>
+        </DialogActions>
+      </Dialog>
+
+      {/* Ultimate Guitar Song Import Modal */}
+      <ImportSongModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImportToEditor={(imported) => {
+          setImportModalOpen(false);
+          if (imported.existingSongId) {
+            navigate(`/songs/${imported.existingSongId}/edit`, { state: { importedSong: imported } });
+          } else {
+            setImportedSongForEditor(imported);
+            setTabIndex(1);
+          }
+        }}
+        onSongSaved={(savedSong) => {
+          fetchSongs();
+          setToastMessage(`Song "${savedSong.title}" saved successfully to library!`);
+        }}
+      />
+
+      {/* Action Feedback Toast */}
+      <Snackbar
+        open={Boolean(toastMessage)}
+        autoHideDuration={3500}
+        onClose={() => setToastMessage('')}
+        message={toastMessage}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -15,7 +15,6 @@ import {
   Select,
   IconButton,
   Alert,
-  Divider,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -25,10 +24,11 @@ import {
   LibraryMusic as LibraryMusicIcon,
 } from '@mui/icons-material';
 
-function SongForm({ onSave, onClose }) {
+function SongForm({ onSave, onClose, initialData }) {
   const { id } = useParams();
   const isEdit = !!id;
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [form, setForm] = useState({
     title: '',
@@ -41,30 +41,57 @@ function SongForm({ onSave, onClose }) {
     genre: '',
     tags: '',
     chords: '',
+    capo: 0,
+    tuning: 'Standard',
+    source: { type: 'manual' },
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (isEdit) fetchSong();
-  }, [id]);
+    if (isEdit) {
+      fetchSong();
+    } else {
+      const imp = initialData || location.state?.importedSong;
+      if (imp) {
+        setForm((prev) => ({
+          ...prev,
+          title: imp.title || prev.title,
+          artist: imp.artist || prev.artist,
+          album: imp.album || prev.album,
+          year: imp.year || prev.year,
+          key: imp.key || prev.key,
+          bpm: imp.bpm !== undefined ? String(imp.bpm) : prev.bpm,
+          timeSignature: imp.timeSignature || prev.timeSignature,
+          chords: imp.content?.chords || imp.content?.lyrics || (typeof imp.content === 'string' ? imp.content : prev.chords),
+          capo: imp.capo !== undefined ? imp.capo : prev.capo,
+          tuning: imp.tuning || prev.tuning,
+          source: imp.source || prev.source,
+        }));
+      }
+    }
+  }, [id, initialData, location.state]);
 
   const fetchSong = async () => {
     try {
       setLoading(true);
       const res = await api.get(`/songs/${id}`);
       const song = res.data;
+      const imported = initialData || location.state?.importedSong;
       setForm({
-        title: song.title || '',
-        artist: song.artist || '',
+        title: imported?.title || song.title || '',
+        artist: imported?.artist || song.artist || '',
         album: song.album || '',
         year: song.year || '',
-        key: song.key || 'C',
-        bpm: song.bpm || '',
-        timeSignature: song.timeSignature || '4/4',
+        key: imported?.key || song.key || 'C',
+        bpm: imported?.bpm !== undefined ? String(imported.bpm) : (song.bpm || ''),
+        timeSignature: imported?.timeSignature || song.timeSignature || '4/4',
         genre: (song.genre || []).join(', '),
         tags: (song.tags || []).join(', '),
-        chords: song.content?.chords || song.content?.lyrics || '',
+        chords: imported?.content?.chords || imported?.content?.lyrics || (typeof imported?.content === 'string' ? imported.content : '') || song.content?.chords || song.content?.lyrics || '',
+        capo: imported?.capo !== undefined ? imported.capo : song.capo || 0,
+        tuning: imported?.tuning || song.tuning || 'Standard',
+        source: imported?.source || song.source || { type: 'manual' },
       });
     } catch (err) {
       console.error(err);
@@ -86,8 +113,11 @@ function SongForm({ onSave, onClose }) {
 
     const payload = {
       ...form,
-      year: form.year ? parseInt(form.year) : undefined,
-      bpm: form.bpm ? parseInt(form.bpm) : undefined,
+      year: form.year ? parseInt(form.year, 10) : undefined,
+      bpm: form.bpm ? parseInt(form.bpm, 10) : undefined,
+      capo: form.capo ? parseInt(form.capo, 10) : 0,
+      tuning: form.tuning || 'Standard',
+      source: form.source || { type: 'manual' },
       genre: form.genre ? form.genre.split(',').map((g) => g.trim()).filter(Boolean) : [],
       tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
       content: { chords: form.chords },
@@ -253,6 +283,33 @@ function SongForm({ onSave, onClose }) {
                   <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
+                      label="Capo"
+                      name="capo"
+                      type="number"
+                      value={form.capo}
+                      onChange={handleChange}
+                      placeholder="0 (no capo)"
+                      variant="outlined"
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Tuning"
+                      name="tuning"
+                      value={form.tuning}
+                      onChange={handleChange}
+                      placeholder="e.g. Standard"
+                      variant="outlined"
+                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
                       label="Release Year"
                       name="year"
                       type="number"
@@ -294,7 +351,7 @@ function SongForm({ onSave, onClose }) {
             </Card>
           </Grid>
 
-          {/* Chords Sheet Entry */}
+          {/* Chords Sheet Entry - Original Monospace Sheet */}
           <Grid item xs={12} lg={6}>
             <Card sx={{ borderRadius: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
               <CardContent sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column' }}>

@@ -51,23 +51,39 @@ async function enrichSongsUsage(songs, { persist = true } = {}) {
     const songIdStr = String(song._id);
     const eventEntries = eventsBySongId.get(songIdStr) || [];
 
-    // Sort usage history descending by date (latest first)
-    eventEntries.sort((a, b) => new Date(b.usedAt) - new Date(a.usedAt));
-
-    const lastPerformed = eventEntries.length > 0 ? eventEntries[0].usedAt : null;
-    const timesPerformed = eventEntries.length;
-
     const currentUsage = song.usage || {};
+
+    // Retain any manual usage entries added by admins
+    const manualEntries = (currentUsage.usageHistory || []).filter(
+      (entry) => !entry.eventId || entry.isManual
+    );
+
+    // Merge scheduled event entries and manual entries
+    const combinedHistory = [...eventEntries, ...manualEntries];
+    combinedHistory.sort((a, b) => new Date(b.usedAt) - new Date(a.usedAt));
+
+    // Determine the true most recent lastPerformed date
+    let effectiveLastPerformed = combinedHistory.length > 0 ? combinedHistory[0].usedAt : null;
+    if (currentUsage.manualLastPerformed) {
+      const manualDate = new Date(currentUsage.manualLastPerformed);
+      if (!effectiveLastPerformed || manualDate > new Date(effectiveLastPerformed)) {
+        effectiveLastPerformed = currentUsage.manualLastPerformed;
+      }
+    }
+
+    const timesPerformed = combinedHistory.length;
+
     const hasChanged =
-      String(currentUsage.lastPerformed) !== String(lastPerformed) ||
+      String(currentUsage.lastPerformed) !== String(effectiveLastPerformed) ||
       currentUsage.timesPerformed !== timesPerformed ||
-      JSON.stringify(currentUsage.usageHistory || []) !== JSON.stringify(eventEntries);
+      JSON.stringify(currentUsage.usageHistory || []) !== JSON.stringify(combinedHistory);
 
     song.usage = {
       ...currentUsage,
-      lastPerformed,
+      lastPerformed: effectiveLastPerformed,
+      manualLastPerformed: currentUsage.manualLastPerformed,
       timesPerformed,
-      usageHistory: eventEntries,
+      usageHistory: combinedHistory,
     };
 
     if (hasChanged && persist) {
@@ -86,6 +102,7 @@ async function enrichSongsUsage(songs, { persist = true } = {}) {
           {
             $set: {
               "usage.lastPerformed": item.usage.lastPerformed,
+              "usage.manualLastPerformed": item.usage.manualLastPerformed,
               "usage.timesPerformed": item.usage.timesPerformed,
               "usage.usageHistory": item.usage.usageHistory,
             },

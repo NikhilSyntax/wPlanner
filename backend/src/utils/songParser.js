@@ -12,7 +12,7 @@ const CHORD_REGEX_STR =
 const CHORD_TOKEN_REGEX = new RegExp(`^${CHORD_REGEX_STR}$`);
 
 const SECTION_REGEX =
-  /^\s*(\[|\()?(Intro|Verse(?:\s*\d+)?|Chorus(?:\s*\d+)?|Pre-Chorus(?:\s*\d+)?|Bridge(?:\s*\d+)?|Outro|Ending|Tag|Interlude|Hook|Solo|Instrumental)(\]|\)|\:)?\s*$/i;
+  /^\s*(\[|\()?(Intro|Verse(?:\s*\d+)?|Chorus(?:\s*\d+)?|Pre-Chorus(?:\s*\d+)?|Bridge(?:\s*\d+)?|Outro|Ending|Tag|Interlude|Hook|Solo|Instrumental|Prelude|Postlude|Pallavi(?:\s*\d+)?|Anupallavi(?:\s*\d+)?|Charanam(?:\s*\d+)?|Refrain|Stanza(?:\s*\d+)?|Coro|Estrofa(?:\s*\d+)?|Puente)(\]|\)|\:)?\s*$/i;
 
 function isCombiningCodePoint(code) {
   if (code >= 0x0300 && code <= 0x036f) return true;
@@ -202,7 +202,8 @@ function parseSongToLiveSections(rawContent = '', originalKey = 'C', targetKey =
   }
 
   const semitones = getSemitoneShift(originalKey, targetKey);
-  const rawLines = rawContent.split(/\r?\n/);
+  const cleanContent = (rawContent || '').replace(/\[\/?tab\]/gi, '');
+  const rawLines = cleanContent.split(/\r?\n/);
 
   const sections = [];
   let currentSection = {

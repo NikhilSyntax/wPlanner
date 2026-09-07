@@ -34,10 +34,12 @@ import {
   Close as CloseIcon,
   OpenInNew as OpenInNewIcon,
   Tv as TvIcon,
+  CloudDownload as ImportIcon,
 } from '@mui/icons-material';
 import api from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ChordSheetViewer from '../components/common/ChordSheetViewer';
+import ImportSongModal from '../components/songs/ImportSongModal';
 
 const KEY_OPTIONS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const TIME_SIG_OPTIONS = ['2/4', '3/4', '4/4', '5/4', '6/8', '7/8'];
@@ -62,6 +64,8 @@ function EventSetlistSongView() {
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
+  // Import Modal State
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     title: '',
     artist: '',
@@ -403,24 +407,42 @@ function EventSetlistSongView() {
               </Button>
             </Box>
 
-            <Button
-              variant="outlined"
-              color="inherit"
-              size="small"
-              startIcon={<EditIcon sx={{ fontSize: 15 }} />}
-              onClick={handleOpenEditModal}
-              sx={{
-                textTransform: 'none',
-                borderRadius: 1.75,
-                fontWeight: 600,
-                fontSize: '0.78rem',
-                py: 0.5,
-                px: 1.25,
-                ml: 'auto',
-              }}
-            >
-              Edit Sheet
-            </Button>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
+              <Button
+                variant="outlined"
+                color="primary"
+                size="small"
+                startIcon={<ImportIcon sx={{ fontSize: 16 }} />}
+                onClick={() => setImportModalOpen(true)}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 1.75,
+                  fontWeight: 600,
+                  fontSize: '0.78rem',
+                  py: 0.5,
+                  px: 1.25,
+                }}
+              >
+                Import Song
+              </Button>
+              <Button
+                variant="outlined"
+                color="inherit"
+                size="small"
+                startIcon={<EditIcon sx={{ fontSize: 15 }} />}
+                onClick={handleOpenEditModal}
+                sx={{
+                  textTransform: 'none',
+                  borderRadius: 1.75,
+                  fontWeight: 600,
+                  fontSize: '0.78rem',
+                  py: 0.5,
+                  px: 1.25,
+                }}
+              >
+                Edit Sheet
+              </Button>
+            </Box>
           </Box>
         </CardContent>
       </Card>
@@ -456,13 +478,32 @@ function EventSetlistSongView() {
               Edit Lyrics & Chords
             </Typography>
           </Box>
-          <IconButton
-            size="small"
-            onClick={() => setEditDialogOpen(false)}
-            disabled={editLoading}
-          >
-            <CloseIcon fontSize="small" />
-          </IconButton>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Button
+              size="small"
+              variant="outlined"
+              color="primary"
+              startIcon={<ImportIcon sx={{ fontSize: 15 }} />}
+              onClick={() => setImportModalOpen(true)}
+              sx={{
+                textTransform: 'none',
+                borderRadius: 1.5,
+                fontWeight: 600,
+                fontSize: '0.75rem',
+                py: 0.35,
+                px: 1.25,
+              }}
+            >
+              Import Song
+            </Button>
+            <IconButton
+              size="small"
+              onClick={() => setEditDialogOpen(false)}
+              disabled={editLoading}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
         </DialogTitle>
 
         <DialogContent dividers sx={{ py: 2.5 }}>
@@ -615,6 +656,29 @@ function EventSetlistSongView() {
           </Stack>
         </DialogActions>
       </Dialog>
+
+      {/* Ultimate Guitar Song Import Modal */}
+      <ImportSongModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        targetSongId={songId}
+        targetSongTitle={song?.title}
+        onImportToEditor={(imported) => {
+          setEditForm((prev) => ({
+            title: imported.title || prev.title || song?.title || '',
+            artist: imported.artist || prev.artist || song?.artist || '',
+            key: imported.key || prev.key || song?.key || 'C',
+            bpm: imported.bpm !== undefined ? String(imported.bpm) : prev.bpm || (song?.bpm ? String(song.bpm) : ''),
+            timeSignature: imported.timeSignature || prev.timeSignature || song?.timeSignature || '4/4',
+            content: imported.content?.chords || imported.content?.lyrics || prev.content,
+          }));
+          setEditDialogOpen(true);
+        }}
+        onSongSaved={(updatedSong) => {
+          setSong(updatedSong);
+          setToastMessage(`Song "${updatedSong.title}" updated successfully with imported lyrics & chords!`);
+        }}
+      />
     </Box>
   );
 }

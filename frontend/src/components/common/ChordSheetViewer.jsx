@@ -51,6 +51,9 @@ import {
   Close as CloseIcon,
   Save as SaveIcon,
   VerticalSplit as SplitViewIcon,
+  CloudDownload as ImportIcon,
+  BookmarkAdded as BookmarkAddedIcon,
+  Bookmark as BookmarkIcon,
 } from '@mui/icons-material';
 import api from '../../services/api';
 import './ChordSheetViewer.css';
@@ -71,7 +74,7 @@ const CHORD_TOKEN_REGEX = new RegExp(`^${CHORD_REGEX_STR}$`);
 
 // Section title matching
 const SECTION_REGEX =
-  /^\s*(\[|\()?(Intro|Verse(?:\s*\d+)?|Chorus(?:\s*\d+)?|Pre-Chorus(?:\s*\d+)?|Bridge(?:\s*\d+)?|Outro|Ending|Tag|Interlude|Hook|Solo|Instrumental)(\]|\)|\:)?\s*$/i;
+  /^\s*(\[|\()?(Intro|Verse(?:\s*\d+)?|Chorus(?:\s*\d+)?|Pre-Chorus(?:\s*\d+)?|Bridge(?:\s*\d+)?|Outro|Ending|Tag|Interlude|Hook|Solo|Instrumental|Prelude|Postlude|Pallavi(?:\s*\d+)?|Anupallavi(?:\s*\d+)?|Charanam(?:\s*\d+)?|Refrain|Stanza(?:\s*\d+)?|Coro|Estrofa(?:\s*\d+)?|Puente)(\]|\)|\:)?\s*$/i;
 
 const LANGUAGE_PRESETS = [
   'Telugu',
@@ -149,7 +152,8 @@ export const transposeKeyName = (key, semitones) => {
  * Check if a line is predominantly chord tokens
  */
 const isChordLine = (line) => {
-  const trimmed = line.trim();
+  const cleanLine = (line || '').replace(/\[\/?tab\]/gi, '');
+  const trimmed = cleanLine.trim();
   if (!trimmed) return false;
   if (SECTION_REGEX.test(trimmed)) return false;
 
@@ -165,13 +169,226 @@ const isChordLine = (line) => {
   return chordCount / tokens.length >= 0.5;
 };
 
+const tokenizeChordLine = (line, transpose = 0, index = 0) => {
+  const cleanLine = (line || '').replace(/\[\/?tab\]/gi, '');
+  const tokens = [];
+  const regex = /([^\s]+|\s+)/g;
+  let match;
+  const rawTokens = [];
+
+  while ((match = regex.exec(cleanLine)) !== null) {
+    const item = match[0];
+    if (/^\s+$/.test(item)) {
+      rawTokens.push({ type: 'space', text: item });
+    } else if (CHORD_TOKEN_REGEX.test(item)) {
+      const transposed = transposeChord(item, transpose);
+      rawTokens.push({
+        type: 'chord',
+        original: item,
+        text: transposed,
+      });
+    } else {
+      rawTokens.push({ type: 'text', text: item });
+    }
+  }
+
+  // Preserve character column alignment across transpositions by compensating adjacent space tokens
+  for (let i = 0; i < rawTokens.length; i++) {
+    const token = rawTokens[i];
+    if (token.type === 'chord' && transpose !== 0) {
+      const diff = token.text.length - token.original.length;
+      if (diff !== 0 && i + 1 < rawTokens.length && rawTokens[i + 1].type === 'space') {
+        const nextSpace = rawTokens[i + 1];
+        if (diff > 0 && nextSpace.text.length > diff) {
+          rawTokens[i + 1] = {
+            ...nextSpace,
+            text: nextSpace.text.substring(diff),
+          };
+        } else if (diff < 0) {
+          rawTokens[i + 1] = {
+            ...nextSpace,
+            text: ' '.repeat(Math.abs(diff)) + nextSpace.text,
+          };
+        }
+      }
+    }
+    tokens.push(rawTokens[i]);
+  }
+
+  return {
+    type: 'chord-line',
+    tokens,
+    raw: line,
+    index,
+  };
+};
+
+/**
+ * Splits a monospace chord line and lyric line together at word boundaries
+ * so chords NEVER separate from their lyrics on mobile view, while preserving
+ * exact 1-to-1 character column positions on every line.
+ */
+const splitMonospacePair = (chordLine, lyricLine, maxChars, transpose) => {
+  const rawChord = chordLine ? chordLine.raw : '';
+  const rawLyric = lyricLine ? lyricLine.raw : '';
+  const totalLen = Math.max(rawChord.length, rawLyric.length);
+
+  if (totalLen <= maxChars || maxChars === Infinity) {
+    return [{
+      chordLine,
+      lyricLine,
+    }];
+  }
+
+  const chunks = [];
+  let curChord = rawChord;
+  let curLyric = rawLyric;
+
+  while (curChord.length > 0 || curLyric.length > 0) {
+    const curLen = Math.max(curChord.length, curLyric.length);
+    if (curLen <= maxChars) {
+      chunks.push({
+        chordLine: tokenizeChordLine(curChord, transpose),
+        lyricLine: { type: 'lyric-line', raw: curLyric },
+      });
+      break;
+    }
+
+    // Find all chord positions in curChord so we never slice a chord in half
+    const chordSpans = [];
+    const chordRegex = /\S+/g;
+    let m;
+    while ((m = chordRegex.exec(curChord)) !== null) {
+      chordSpans.push({ start: m.index, end: m.index + m[0].length });
+    }
+
+    // Target split point at or before maxChars
+    const searchLimit = Math.min(maxChars, curLen);
+    const lyricWindow = curLyric.substring(0, searchLimit + 1);
+    let splitPos = lyricWindow.lastIndexOf(' ');
+
+    const minSplitThreshold = Math.max(12, Math.floor(maxChars * 0.35));
+    if (splitPos < minSplitThreshold) {
+      const chordWindow = curChord.substring(0, searchLimit + 1);
+      const chordSpace = chordWindow.lastIndexOf(' ');
+      if (chordSpace >= minSplitThreshold) {
+        splitPos = chordSpace;
+      } else {
+        splitPos = searchLimit;
+      }
+    }
+
+    // Ensure splitPos does not slice through any chord token
+    for (const span of chordSpans) {
+      if (span.start < splitPos && splitPos < span.end) {
+        if (span.start >= minSplitThreshold) {
+          splitPos = span.start;
+        } else if (span.end <= searchLimit + 3) {
+          splitPos = span.end;
+        }
+        break;
+      }
+    }
+
+    // Advance past the space if it was a space split
+    if (splitPos < curLen && curLyric[splitPos] === ' ' && curChord[splitPos] === ' ') {
+      splitPos = splitPos + 1;
+    }
+
+    splitPos = Math.max(1, Math.min(splitPos, curLen));
+
+    const chunkChordText = curChord.substring(0, splitPos);
+    const chunkLyricText = curLyric.substring(0, splitPos);
+
+    chunks.push({
+      chordLine: tokenizeChordLine(chunkChordText, transpose),
+      lyricLine: { type: 'lyric-line', raw: chunkLyricText },
+    });
+
+    let nextChord = curChord.substring(splitPos);
+    let nextLyric = curLyric.substring(splitPos);
+
+    // If both nextChord and nextLyric start with spaces, trim equal common indent
+    // so wrapped lines don't waste horizontal space on mobile, while keeping 1:1 alignment
+    let leadChordSpaces = 0;
+    while (leadChordSpaces < nextChord.length && nextChord[leadChordSpaces] === ' ') {
+      leadChordSpaces++;
+    }
+    let leadLyricSpaces = 0;
+    while (leadLyricSpaces < nextLyric.length && nextLyric[leadLyricSpaces] === ' ') {
+      leadLyricSpaces++;
+    }
+    const commonIndent = Math.min(leadChordSpaces, leadLyricSpaces);
+    if (commonIndent > 0) {
+      nextChord = nextChord.substring(commonIndent);
+      nextLyric = nextLyric.substring(commonIndent);
+    }
+
+    curChord = nextChord;
+    curLyric = nextLyric;
+  }
+
+  return chunks;
+};
+
+const splitMonospaceChordLine = (chordLine, maxChars, transpose) => {
+  const raw = chordLine.raw || '';
+  if (raw.length <= maxChars || maxChars === Infinity) {
+    return [chordLine];
+  }
+  const chunks = [];
+  let cur = raw;
+  while (cur.length > 0) {
+    if (cur.length <= maxChars) {
+      chunks.push(tokenizeChordLine(cur, transpose));
+      break;
+    }
+    const windowText = cur.substring(0, maxChars + 1);
+    let splitAt = windowText.lastIndexOf(' ');
+    if (splitAt < Math.floor(maxChars * 0.35)) {
+      splitAt = maxChars;
+    } else {
+      splitAt = splitAt + 1;
+    }
+    chunks.push(tokenizeChordLine(cur.substring(0, splitAt), transpose));
+    cur = cur.substring(splitAt).trimStart();
+  }
+  return chunks;
+};
+
+const splitMonospaceLyricLine = (lyricLine, maxChars) => {
+  const raw = lyricLine.raw || '';
+  if (raw.length <= maxChars || maxChars === Infinity) {
+    return [lyricLine];
+  }
+  const chunks = [];
+  let cur = raw;
+  while (cur.length > 0) {
+    if (cur.length <= maxChars) {
+      chunks.push({ type: 'lyric-line', raw: cur });
+      break;
+    }
+    const windowText = cur.substring(0, maxChars + 1);
+    let splitAt = windowText.lastIndexOf(' ');
+    if (splitAt < Math.floor(maxChars * 0.35)) {
+      splitAt = maxChars;
+    } else {
+      splitAt = splitAt + 1;
+    }
+    chunks.push({ type: 'lyric-line', raw: cur.substring(0, splitAt) });
+    cur = cur.substring(splitAt).trimStart();
+  }
+  return chunks;
+};
+
 /**
  * Parse raw text into line tokens and section headers
  */
 const parseContentLines = (content = '', transpose = 0) => {
   if (!content) return { parsedLines: [], sections: [] };
 
-  const lines = content.split(/\r?\n/);
+  const cleanContent = content.replace(/\[\/?tab\]/gi, '');
+  const lines = cleanContent.split(/\r?\n/);
   const resultLines = [];
   const extractedSections = [];
 
@@ -191,10 +408,10 @@ const parseContentLines = (content = '', transpose = 0) => {
 
       let category = 'default';
       const lower = cleanName.toLowerCase();
-      if (lower.includes('chorus')) category = 'chorus';
-      else if (lower.includes('bridge')) category = 'bridge';
-      else if (lower.includes('verse')) category = 'verse';
-      else if (lower.includes('intro') || lower.includes('outro') || lower.includes('tag')) category = 'intro';
+      if (lower.includes('chorus') || lower.includes('pallavi') || lower.includes('refrain') || lower.includes('coro')) category = 'chorus';
+      else if (lower.includes('bridge') || lower.includes('puente')) category = 'bridge';
+      else if (lower.includes('verse') || lower.includes('charanam') || lower.includes('stanza') || lower.includes('estrofa')) category = 'verse';
+      else if (lower.includes('intro') || lower.includes('outro') || lower.includes('tag') || lower.includes('prelude') || lower.includes('postlude')) category = 'intro';
 
       resultLines.push({
         type: 'section',
@@ -208,41 +425,7 @@ const parseContentLines = (content = '', transpose = 0) => {
     }
 
     if (isChordLine(line)) {
-      const tokens = [];
-      const regex = /([^\s]+|\s+)/g;
-      let match;
-      let lastIdx = 0;
-
-      while ((match = regex.exec(line)) !== null) {
-        const item = match[0];
-        if (/^\s+$/.test(item)) {
-          tokens.push({ type: 'space', text: item });
-        } else if (CHORD_TOKEN_REGEX.test(item)) {
-          const transposed = transposeChord(item, transpose);
-          tokens.push({
-            type: 'chord',
-            original: item,
-            text: transposed,
-          });
-        } else {
-          tokens.push({ type: 'text', text: item });
-        }
-        lastIdx = regex.lastIndex;
-      }
-
-      if (lastIdx < line.length) {
-        tokens.push({
-          type: 'space',
-          text: line.substring(lastIdx),
-        });
-      }
-
-      resultLines.push({
-        type: 'chord-line',
-        tokens,
-        raw: line,
-        index,
-      });
+      resultLines.push(tokenizeChordLine(line, transpose, index));
       return;
     }
 
@@ -269,12 +452,38 @@ function ChordSheetViewer({
   initialTranspose = 0,
   initialShowChords = true,
   onEdit,
+  onImport,
 }) {
   const [showChords, setShowChords] = useState(initialShowChords);
 
   useEffect(() => {
     setShowChords(initialShowChords);
   }, [initialShowChords]);
+
+  const [containerWidth, setContainerWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1200
+  );
+
+  useEffect(() => {
+    const updateWidth = () => {
+      if (viewerContainerRef.current) {
+        setContainerWidth(viewerContainerRef.current.clientWidth || window.innerWidth);
+      } else if (typeof window !== 'undefined') {
+        setContainerWidth(window.innerWidth);
+      }
+    };
+    updateWidth();
+    let observer;
+    if (viewerContainerRef.current && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(updateWidth);
+      observer.observe(viewerContainerRef.current);
+    }
+    window.addEventListener('resize', updateWidth);
+    return () => {
+      if (observer) observer.disconnect();
+      window.removeEventListener('resize', updateWidth);
+    };
+  }, []);
 
   const [transpose, setTranspose] = useState(initialTranspose);
   const [themeMode, setThemeMode] = useState('light');
@@ -300,6 +509,63 @@ function ChordSheetViewer({
   const [savingLang, setSavingLang] = useState(false);
   const [langError, setLangError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
+
+  // Personal transposed key & chords preference (per-user, non-destructive to church master)
+  const [personalPreference, setPersonalPreference] = useState(() => {
+    if (song?.userPreference) return song.userPreference;
+    if (typeof window !== 'undefined' && songId) {
+      try {
+        const cached = localStorage.getItem(`wplanner_user_key_pref_${songId}`);
+        return cached ? JSON.parse(cached) : null;
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
+  const [savingPersonalPref, setSavingPersonalPref] = useState(false);
+
+  useEffect(() => {
+    if (song?.userPreference) {
+      setPersonalPreference(song.userPreference);
+      if (initialTranspose === 0 && song.userPreference.transpose !== undefined) {
+        setTranspose(song.userPreference.transpose);
+      }
+    } else if (songId) {
+      let loadedFromLocal = false;
+      try {
+        const cached = localStorage.getItem(`wplanner_user_key_pref_${songId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setPersonalPreference(parsed);
+          if (initialTranspose === 0 && parsed.transpose !== undefined) {
+            setTranspose(parsed.transpose);
+          }
+          loadedFromLocal = true;
+        }
+      } catch (e) {}
+
+      // Fetch from API in background if not already provided
+      api.get(`/songs/${songId}/personal-key`)
+        .then((res) => {
+          if (res.data?.userPreference) {
+            setPersonalPreference(res.data.userPreference);
+            try {
+              localStorage.setItem(
+                `wplanner_user_key_pref_${songId}`,
+                JSON.stringify(res.data.userPreference)
+              );
+            } catch (e) {}
+            if (initialTranspose === 0 && res.data.userPreference.transpose !== undefined) {
+              setTranspose(res.data.userPreference.transpose);
+            }
+          } else if (!loadedFromLocal) {
+            setPersonalPreference(null);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [song?.userPreference, songId, initialTranspose]);
 
   const regionalList = useMemo(() => {
     return Array.isArray(song?.regionalLyrics) ? song.regionalLyrics : [];
@@ -394,6 +660,68 @@ function ChordSheetViewer({
   };
 
   const currentDisplayKey = transposeKeyName(originalKey, transpose);
+
+  const isPersonalKeyActive = Boolean(
+    personalPreference &&
+    personalPreference.key === currentDisplayKey &&
+    personalPreference.transpose === transpose
+  );
+
+  const handleSavePersonalKey = async () => {
+    if (!songId) {
+      setToastMessage('Song ID is missing. Cannot save personal key.');
+      return;
+    }
+    try {
+      setSavingPersonalPref(true);
+      const transposedChords = getTransposedRawText();
+      const res = await api.put(`/songs/${songId}/personal-key`, {
+        key: currentDisplayKey,
+        transpose,
+        chords: transposedChords,
+      });
+
+      const updatedPref = res.data?.userPreference || {
+        key: currentDisplayKey,
+        transpose,
+        chords: transposedChords,
+      };
+
+      setPersonalPreference(updatedPref);
+      try {
+        localStorage.setItem(`wplanner_user_key_pref_${songId}`, JSON.stringify(updatedPref));
+      } catch (e) {}
+
+      setToastMessage(
+        `Key of ${currentDisplayKey} saved for your profile! Other users will still see the church's original key (${originalKey || 'C'}).`
+      );
+    } catch (err) {
+      console.error('Error saving personal key preference:', err);
+      setToastMessage(err?.response?.data?.message || 'Failed to save personal key preference.');
+    } finally {
+      setSavingPersonalPref(false);
+    }
+  };
+
+  const handleResetPersonalKey = async () => {
+    try {
+      setSavingPersonalPref(true);
+      if (songId) {
+        await api.delete(`/songs/${songId}/personal-key`).catch(() => {});
+        try {
+          localStorage.removeItem(`wplanner_user_key_pref_${songId}`);
+        } catch (e) {}
+      }
+      setPersonalPreference(null);
+      setTranspose(0);
+      setToastMessage(`Reset to church's original key of ${originalKey || 'C'}.`);
+    } catch (err) {
+      console.error('Error resetting personal key preference:', err);
+      setToastMessage('Failed to reset key preference.');
+    } finally {
+      setSavingPersonalPref(false);
+    }
+  };
 
   // Parse lines for primary view
   const { parsedLines, sections } = useMemo(() => {
@@ -560,45 +888,109 @@ function ChordSheetViewer({
     });
   };
 
-  const renderSheetLines = (lines) => {
-    return lines.map((line, idx) => {
-      if (!showChords && line.type === 'chord-line') return null;
-      if (line.type === 'empty') return <div key={idx} className="cs-line cs-line-empty" />;
-      if (line.type === 'section') {
+  const renderChordTokens = (tokens) => {
+    return tokens.map((token, tIdx) => {
+      if (token.type === 'space') return <span key={tIdx}>{token.text}</span>;
+      if (token.type === 'chord') {
         return (
-          <div key={idx} id={line.id} className={`cs-section-header cs-section-${line.category}`}>
+          <span
+            key={tIdx}
+            className={`chord-badge-${highlightStyle}`}
+            title={`Original: ${token.original} | Transposed: ${token.text}`}
+          >
+            {token.text}
+          </span>
+        );
+      }
+      return <span key={tIdx}>{token.text}</span>;
+    });
+  };
+
+  const renderSheetLines = (lines) => {
+    const isMobile = containerWidth <= 768;
+    const innerPadding = containerWidth <= 600 ? 32 : 48;
+    let availableWidth = Math.max(200, containerWidth - innerPadding);
+    if (twoColumns && containerWidth > 768) {
+      availableWidth = Math.max(200, (availableWidth - 32) / 2);
+    } else if (isSplitMode && containerWidth > 768) {
+      availableWidth = Math.max(200, (availableWidth - 24) / 2);
+    }
+
+    const charWidth = fontSize * 0.605;
+    const fitChars = Math.max(22, Math.floor(availableWidth / charWidth) - 1);
+    const maxChars = isMobile
+      ? fitChars
+      : (twoColumns || isSplitMode ? fitChars : Infinity);
+
+    const rendered = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      if (!showChords && line.type === 'chord-line') {
+        continue;
+      }
+
+      if (line.type === 'empty') {
+        rendered.push(<div key={`empty-${i}`} className="cs-line cs-line-empty" />);
+        continue;
+      }
+
+      if (line.type === 'section') {
+        rendered.push(
+          <div key={`sec-${i}`} id={line.id} className={`cs-section-header cs-section-${line.category}`}>
             <MusicNoteIcon sx={{ fontSize: '0.9em' }} />
             {line.cleanName}
           </div>
         );
+        continue;
       }
+
+      // If chord-line is followed by lyric-line, render as synchronized monospace pairs
+      if (showChords && line.type === 'chord-line' && lines[i + 1] && lines[i + 1].type === 'lyric-line') {
+        const chordLine = line;
+        const lyricLine = lines[i + 1];
+        i++; // skip paired lyric line
+
+        const chunks = splitMonospacePair(chordLine, lyricLine, maxChars, transpose);
+        chunks.forEach((chunk, cIdx) => {
+          rendered.push(
+            <div key={`pair-${i}-${cIdx}`} className="cs-paired-block">
+              <div className="cs-line cs-line-chord">
+                {chunk.chordLine.tokens.length > 0 ? renderChordTokens(chunk.chordLine.tokens) : '\u00A0'}
+              </div>
+              <div className="cs-line cs-line-lyric">
+                {chunk.lyricLine.raw || '\u00A0'}
+              </div>
+            </div>
+          );
+        });
+        continue;
+      }
+
       if (line.type === 'chord-line') {
-        return (
-          <div key={idx} className="cs-line cs-line-chord">
-            {line.tokens.map((token, tIdx) => {
-              if (token.type === 'space') return <span key={tIdx}>{token.text}</span>;
-              if (token.type === 'chord') {
-                return (
-                  <span
-                    key={tIdx}
-                    className={`chord-badge-${highlightStyle}`}
-                    title={`Original: ${token.original} | Transposed: ${token.text}`}
-                  >
-                    {token.text}
-                  </span>
-                );
-              }
-              return <span key={tIdx}>{token.text}</span>;
-            })}
+        if (!showChords) continue;
+        const chunks = splitMonospaceChordLine(line, maxChars, transpose);
+        chunks.forEach((chunk, cIdx) => {
+          rendered.push(
+            <div key={`chord-${i}-${cIdx}`} className="cs-line cs-line-chord">
+              {chunk.tokens.length > 0 ? renderChordTokens(chunk.tokens) : '\u00A0'}
+            </div>
+          );
+        });
+        continue;
+      }
+
+      // Standalone lyric line
+      const chunks = splitMonospaceLyricLine(line, maxChars);
+      chunks.forEach((chunk, cIdx) => {
+        rendered.push(
+          <div key={`lyric-${i}-${cIdx}`} className="cs-line cs-line-lyric">
+            {chunk.raw || '\u00A0'}
           </div>
         );
-      }
-      return (
-        <div key={idx} className="cs-line cs-line-lyric">
-          {line.raw}
-        </div>
-      );
-    });
+      });
+    }
+    return rendered;
   };
 
   const isSplitMode = selectedLanguage === 'split';
@@ -606,8 +998,8 @@ function ChordSheetViewer({
   return (
     <Box
       ref={viewerContainerRef}
-      className={`chord-sheet-container theme-${themeMode} ${
-        isFullscreen ? 'fullscreen-mode' : ''
+      className={`chord-sheet-container theme-${themeMode} chord-sheet-theme-${themeMode} ${
+        isFullscreen ? 'fullscreen-mode chord-sheet-fullscreen' : ''
       }`}
     >
       <Snackbar
@@ -627,8 +1019,8 @@ function ChordSheetViewer({
               {isSplitMode
                 ? `(Split: English + ${selectedSplitLanguage})`
                 : selectedLanguage !== 'original'
-                ? `(${selectedLanguage})`
-                : ''}
+                  ? `(${selectedLanguage})`
+                  : ''}
             </Typography>
             <Chip
               size="small"
@@ -890,6 +1282,67 @@ function ChordSheetViewer({
                     ))}
                   </Select>
                 </FormControl>
+
+                {/* Save My Transposed Key Button (Personal preference only) */}
+                {songId && (
+                  <Divider orientation="vertical" flexItem sx={{ mx: 0.5, height: 18, alignSelf: 'center' }} />
+                )}
+
+                {songId && isPersonalKeyActive ? (
+                  <Stack direction="row" alignItems="center" gap={0.5}>
+                    <Tooltip title={`Key of ${currentDisplayKey} is saved for your personal view. Other church members see the church original Key of ${originalKey || 'C'}.`}>
+                      <Chip
+                        icon={<BookmarkAddedIcon sx={{ fontSize: '14px !important', color: 'inherit' }} />}
+                        label={`My Key: ${currentDisplayKey}`}
+                        size="small"
+                        color="secondary"
+                        sx={{
+                          height: 24,
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                        }}
+                      />
+                    </Tooltip>
+                    <Tooltip title={`Reset to church original key of ${originalKey || 'C'}`}>
+                      <IconButton
+                        size="small"
+                        onClick={handleResetPersonalKey}
+                        disabled={savingPersonalPref}
+                        sx={{
+                          width: 22,
+                          height: 22,
+                          color: 'text.secondary',
+                          '&:hover': { color: 'error.main' },
+                        }}
+                      >
+                        <CloseIcon sx={{ fontSize: 13 }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                ) : songId && (transpose !== 0 || (personalPreference && personalPreference.key !== currentDisplayKey)) ? (
+                  <Tooltip title={`Save lyrics & chords in Key of ${currentDisplayKey} for your profile only. Other church members will still see the church original (${originalKey || 'C'}).`}>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="secondary"
+                      startIcon={<SaveIcon sx={{ fontSize: 13 }} />}
+                      onClick={handleSavePersonalKey}
+                      disabled={savingPersonalPref}
+                      sx={{
+                        height: 24,
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        textTransform: 'none',
+                        px: 1,
+                        borderRadius: 1.25,
+                        boxShadow: 'none',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {savingPersonalPref ? 'Saving...' : `Save My Key (${currentDisplayKey})`}
+                    </Button>
+                  </Tooltip>
+                ) : null}
               </Box>
             )}
           </Box>
@@ -1051,6 +1504,26 @@ function ChordSheetViewer({
                 </IconButton>
               </Tooltip>
 
+              {onImport && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  startIcon={<ImportIcon sx={{ fontSize: 14 }} />}
+                  onClick={onImport}
+                  sx={{
+                    height: 30,
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    borderRadius: 1.5,
+                    px: 1.25,
+                  }}
+                >
+                  Import Song
+                </Button>
+              )}
+
               {onEdit && (
                 <Button
                   size="small"
@@ -1136,9 +1609,8 @@ function ChordSheetViewer({
                 </Typography>
               </Box>
               <Box
-                className={`chord-sheet-body ${
-                  showChords ? 'cs-mode-chords' : 'cs-mode-lyrics-only'
-                }`}
+                className={`chord-sheet-body ${showChords ? 'cs-mode-chords' : 'cs-mode-lyrics-only'
+                  }`}
                 style={{ fontSize: `${fontSize}px` }}
               >
                 {leftSplitData.parsedLines.length > 0 ? (
@@ -1159,9 +1631,8 @@ function ChordSheetViewer({
                 </Typography>
               </Box>
               <Box
-                className={`chord-sheet-body ${
-                  showChords ? 'cs-mode-chords' : 'cs-mode-lyrics-only'
-                }`}
+                className={`chord-sheet-body ${showChords ? 'cs-mode-chords' : 'cs-mode-lyrics-only'
+                  }`}
                 style={{ fontSize: `${fontSize}px` }}
               >
                 {rightSplitData.parsedLines.length > 0 ? (
@@ -1178,9 +1649,8 @@ function ChordSheetViewer({
       ) : parsedLines.length > 0 ? (
         // ================= STANDARD VIEW =================
         <Box
-          className={`chord-sheet-body ${
-            showChords ? 'cs-mode-chords' : 'cs-mode-lyrics-only'
-          } ${twoColumns ? 'chord-sheet-columns-2' : ''}`}
+          className={`chord-sheet-body ${showChords ? 'cs-mode-chords' : 'cs-mode-lyrics-only'
+            } ${twoColumns ? 'chord-sheet-columns-2' : ''}`}
           style={{ fontSize: `${fontSize}px` }}
         >
           {renderSheetLines(parsedLines)}
@@ -1350,6 +1820,15 @@ function ChordSheetViewer({
           </Stack>
         </Box>
       </Box>
+
+      {/* Action Feedback Toast */}
+      <Snackbar
+        open={Boolean(toastMessage)}
+        autoHideDuration={4000}
+        onClose={() => setToastMessage('')}
+        message={toastMessage}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   );
 }

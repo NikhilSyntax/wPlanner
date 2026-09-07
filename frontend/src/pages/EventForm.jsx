@@ -25,7 +25,6 @@ import {
   Cancel as CancelIcon,
   Event as EventIcon,
   Schedule as ScheduleIcon,
-  Group as GroupIcon,
   ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 import {
@@ -33,7 +32,6 @@ import {
   updateEvent,
   fetchEventById,
 } from '../store/slices/eventSlice';
-import { fetchTeams } from '../store/slices/teamSlice';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import api from '../services/api';
 
@@ -64,7 +62,6 @@ function EventForm() {
   const dispatch = useDispatch();
 
   const { currentEvent, loading, error } = useSelector((state) => state.events);
-  const { teams, loading: teamsLoading } = useSelector((state) => state.teams);
   const { user } = useSelector((state) => state.auth);
   const isLocked = isEdit && isEventLocked(currentEvent, user);
 
@@ -75,14 +72,12 @@ function EventForm() {
     start: '',
     end: '',
     timezone: 'America/New_York',
-    teamId: '',
   });
 
   const [formErrors, setFormErrors] = useState({});
   const [submitLoading, setSubmitLoading] = useState(false);
 
   useEffect(() => {
-    dispatch(fetchTeams());
     if (isEdit) {
       dispatch(fetchEventById(id));
     }
@@ -114,7 +109,6 @@ function EventForm() {
         start: toLocalInput(currentEvent.schedule?.start),
         end: toLocalInput(currentEvent.schedule?.end),
         timezone: currentEvent.schedule?.timezone || 'America/New_York',
-        teamId: currentEvent.team?._id || currentEvent.team || '',
       });
     }
   }, [currentEvent, isEdit]);
@@ -124,10 +118,6 @@ function EventForm() {
 
     if (!formData.title.trim()) {
       errors.title = 'Event title is required';
-    }
-
-    if (!formData.description.trim()) {
-      errors.description = 'Event description is required';
     }
 
     if (!formData.start) {
@@ -201,7 +191,6 @@ function EventForm() {
           end: new Date(formData.end).toISOString(),
           timezone: formData.timezone,
         },
-        ...(formData.teamId ? { team: formData.teamId } : {}),
       };
 
       if (isEdit) {
@@ -229,7 +218,7 @@ function EventForm() {
     navigate('/events');
   };
 
-  if (loading || teamsLoading) {
+  if (loading) {
     return <LoadingSpinner />;
   }
 
@@ -290,7 +279,7 @@ function EventForm() {
                       fullWidth
                       multiline
                       rows={4}
-                      label="Description"
+                      label="Description (Optional)"
                       name="description"
                       value={formData.description}
                       onChange={handleInputChange('description')}
@@ -301,7 +290,7 @@ function EventForm() {
                     />
                   </Grid>
 
-                  <Grid item xs={12} md={6}>
+                  <Grid item xs={12}>
                     <FormControl fullWidth error={!!formErrors.type}>
                       <InputLabel>Event Type</InputLabel>
                       <Select
@@ -330,39 +319,6 @@ function EventForm() {
                           sx={{ mt: 1, ml: 2 }}
                         >
                           {formErrors.type}
-                        </Typography>
-                      )}
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={12} md={6}>
-                    <FormControl fullWidth error={!!formErrors.teamId}>
-                      <InputLabel>Assigned Team (Optional)</InputLabel>
-                      <Select
-                        value={formData.teamId}
-                        label="Assigned Team (Optional)"
-                        onChange={handleInputChange('teamId')}
-                        sx={{ borderRadius: 2 }}
-                      >
-                        <MenuItem value="">
-                          <em>Select a team</em>
-                        </MenuItem>
-                        {teams.map((team) => (
-                          <MenuItem key={team._id} value={team._id}>
-                            <Box display="flex" alignItems="center" gap={1}>
-                              <GroupIcon fontSize="small" />
-                              <Typography>{team.name}</Typography>
-                            </Box>
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      {formErrors.teamId && (
-                        <Typography
-                          variant="caption"
-                          color="error"
-                          sx={{ mt: 1, ml: 2 }}
-                        >
-                          {formErrors.teamId}
                         </Typography>
                       )}
                     </FormControl>
@@ -524,23 +480,6 @@ function EventForm() {
                     {formData.description ||
                       'Event description will appear here...'}
                   </Typography>
-
-                  <Divider sx={{ my: 2 }} />
-
-                  <Box
-                    sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
-                  >
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <GroupIcon fontSize="small" color="primary" />
-                      <Typography variant="body2">
-                        <strong>Team:</strong>{' '}
-                        {formData.teamId
-                          ? teams.find((t) => t._id === formData.teamId)
-                              ?.name || 'Unknown'
-                          : 'Not selected'}
-                      </Typography>
-                    </Box>
-                  </Box>
                 </Paper>
               </CardContent>
             </Card>
@@ -554,7 +493,7 @@ function EventForm() {
               ✨ Event Setup Summary
             </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12} md={6}>
                 <Paper
                   sx={{
                     p: 2,
@@ -570,26 +509,7 @@ function EventForm() {
                   </Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={12} md={3}>
-                <Paper
-                  sx={{
-                    p: 2,
-                    textAlign: 'center',
-                    bgcolor: 'background.paper',
-                  }}
-                >
-                  <Typography variant="body2" color="text.secondary">
-                    Team Assigned
-                  </Typography>
-                  <Typography variant="h6" sx={{ mt: 1 }}>
-                    {formData.teamId
-                      ? teams.find((t) => t._id === formData.teamId)?.name ||
-                        '...'
-                      : 'Optional'}
-                  </Typography>
-                </Paper>
-              </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12} md={6}>
                 <Paper
                   sx={{
                     p: 2,

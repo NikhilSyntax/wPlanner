@@ -3,16 +3,11 @@
    ========================================================================== */
 
 /* Root theme variables */
+/* Root theme variables & defaults */
 .chord-sheet-container {
   --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  transition: var(--transition-smooth);
-  position: relative;
-}
-
-/* Theme: Studio Light */
-.chord-sheet-theme-light {
   --cs-bg: #ffffff;
   --cs-paper-bg: #f8fafc;
   --cs-border: #e2e8f0;
@@ -23,12 +18,32 @@
   --cs-section-border: #cbd5e1;
   --cs-chord-pill-bg: #eff6ff;
   --cs-chord-pill-text: #1d4ed8;
-  --cs-chord-pill-border: #bfdbfe;
+  --cs-chord-pill-border: #3b82f6;
+  --cs-chord-hover-bg: #dbeafe;
+  transition: var(--transition-smooth);
+  position: relative;
+}
+
+/* Theme: Studio Light */
+.chord-sheet-theme-light,
+.theme-light {
+  --cs-bg: #ffffff;
+  --cs-paper-bg: #f8fafc;
+  --cs-border: #e2e8f0;
+  --cs-text-main: #0f172a;
+  --cs-text-muted: #64748b;
+  --cs-section-bg: #f1f5f9;
+  --cs-section-text: #1e293b;
+  --cs-section-border: #cbd5e1;
+  --cs-chord-pill-bg: #eff6ff;
+  --cs-chord-pill-text: #1d4ed8;
+  --cs-chord-pill-border: #3b82f6;
   --cs-chord-hover-bg: #dbeafe;
 }
 
 /* Theme: Stage Dark */
-.chord-sheet-theme-dark {
+.chord-sheet-theme-dark,
+.theme-dark {
   --cs-bg: #090d16;
   --cs-paper-bg: #0f172a;
   --cs-border: #1e293b;
@@ -37,14 +52,15 @@
   --cs-section-bg: #1e293b;
   --cs-section-text: #38bdf8;
   --cs-section-border: #334155;
-  --cs-chord-pill-bg: rgba(59, 130, 246, 0.2);
-  --cs-chord-pill-text: #60a5fa;
-  --cs-chord-pill-border: rgba(96, 165, 250, 0.35);
-  --cs-chord-hover-bg: rgba(59, 130, 246, 0.35);
+  --cs-chord-pill-bg: rgba(59, 130, 246, 0.22);
+  --cs-chord-pill-text: #93c5fd;
+  --cs-chord-pill-border: #60a5fa;
+  --cs-chord-hover-bg: rgba(59, 130, 246, 0.38);
 }
 
 /* Theme: Warm Sepia */
-.chord-sheet-theme-sepia {
+.chord-sheet-theme-sepia,
+.theme-sepia {
   --cs-bg: #faf7ee;
   --cs-paper-bg: #f5efe1;
   --cs-border: #e6dcbe;
@@ -54,8 +70,8 @@
   --cs-section-text: #78350f;
   --cs-section-border: #d7cca9;
   --cs-chord-pill-bg: #fef3c7;
-  --cs-chord-pill-text: #b45309;
-  --cs-chord-pill-border: #fde68a;
+  --cs-chord-pill-text: #92400e;
+  --cs-chord-pill-border: #d97706;
   --cs-chord-hover-bg: #fde68a;
 }
 
@@ -105,39 +121,40 @@
   }
 }
 
-/* Line base styles */
+/* Mode: Chords Visible (Default - Pixel-perfect monospace alignment) */
+.cs-paired-block {
+  margin-bottom: 0.65em;
+}
+
 .cs-line {
-  white-space: pre;
+  white-space: pre !important;
   display: block;
 }
 
-.cs-line-lyric {
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-  overflow-wrap: break-word !important;
-}
-
-/* Mode: Chords Visible (Default) */
 .cs-mode-chords .cs-line-chord {
   display: block;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono) !important;
   font-weight: 700;
-  letter-spacing: 0px;
-  line-height: 1.6em;
-  min-height: 1.6em;
+  letter-spacing: 0px !important;
+  word-spacing: 0px !important;
+  line-height: 1.5em;
+  min-height: 1.5em;
+  white-space: pre !important;
 }
 
 .cs-mode-chords .cs-line-lyric {
-  font-family: var(--font-sans);
+  display: block;
+  font-family: var(--font-mono) !important;
   color: var(--cs-text-main);
   font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.6em;
-  min-height: 1.6em;
-  margin-bottom: 0.6em;
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-  overflow-wrap: break-word !important;
+  letter-spacing: 0px !important;
+  word-spacing: 0px !important;
+  line-height: 1.5em;
+  min-height: 1.5em;
+  white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  margin-bottom: 0 !important;
 }
 
 .cs-mode-chords .cs-line-empty {
@@ -155,8 +172,12 @@
   display: none !important;
 }
 
+.cs-mode-lyrics-only .cs-paired-block {
+  margin-bottom: 0.4em;
+}
+
 .cs-mode-lyrics-only .cs-line-lyric {
-  font-family: var(--font-sans);
+  font-family: var(--font-sans) !important;
   color: var(--cs-text-main);
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -219,34 +240,41 @@
 /* ================= Chord Highlight Styles ================= */
 
 /* Style: Modern Pill (Default)
-   Uses negative margin to compensate for padding+border so chord
-   positions stay aligned with the lyric line below. */
+   Uses font-size: inherit, font-family: inherit, letter-spacing: 0px,
+   and exact negative margin (-4px) compensating for padding (3px) + border (1px)
+   so the chord's inline advance in monospace matches 1ch per character with 0 drift. */
 .chord-badge-pill {
   display: inline-block;
   background-color: var(--cs-chord-pill-bg);
   color: var(--cs-chord-pill-text);
-  border: 1px solid var(--cs-chord-pill-border);
+  border: 1.5px solid var(--cs-chord-pill-border);
   padding: 0px 4px;
-  margin: 0 -5px; /* compensate: 4px padding + 1px border each side */
-  border-radius: 4px;
+  margin: 0 -5.5px;
+  border-radius: 5px;
+  font-family: inherit !important;
+  font-size: 1em !important;
   font-weight: 700;
-  font-size: 0.95em;
+  letter-spacing: 0px !important;
   line-height: 1.35;
   transition: var(--transition-smooth);
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.15);
 }
 
 .chord-badge-pill:hover {
   background-color: var(--cs-chord-hover-bg);
+  border-color: #1d4ed8;
   transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
 }
 
 /* Style: Bold Text Color Only */
 .chord-badge-bold {
   color: var(--cs-chord-pill-text);
+  font-family: inherit !important;
+  font-size: 1em !important;
   font-weight: 800;
-  font-size: 1.02em;
+  letter-spacing: 0px !important;
   cursor: pointer;
   transition: var(--transition-smooth);
 }
@@ -255,32 +283,47 @@
   text-decoration: underline;
 }
 
-/* Style: Vibrant Stage Glow
-   Same negative-margin trick as pill to preserve chord alignment. */
+/* Style: Vibrant Stage Glow (Cyan Glow) */
 .chord-badge-glow {
   display: inline-block;
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.25) 0%, rgba(139, 92, 246, 0.25) 100%);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.4);
+  background: rgba(6, 182, 212, 0.08);
+  color: #0e7490;
+  border: 1.5px solid rgba(6, 182, 212, 0.38);
   padding: 0px 4px;
-  margin: 0 -5px; /* compensate: 4px padding + 1px border each side */
+  margin: 0 -5.5px;
   border-radius: 5px;
-  font-weight: 700;
-  text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+  font-family: inherit !important;
+  font-size: 1em !important;
+  font-weight: 800;
+  letter-spacing: 0px !important;
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.18), 0 1px 2px rgba(0, 0, 0, 0.04);
   cursor: pointer;
   transition: var(--transition-smooth);
 }
 
 .chord-badge-glow:hover {
-  border-color: rgba(56, 189, 248, 0.8);
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);
+  background: rgba(6, 182, 212, 0.16);
+  border-color: #0891b2;
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.32);
+  transform: translateY(-1px);
+}
+
+.chord-sheet-theme-dark .chord-badge-glow,
+.theme-dark .chord-badge-glow {
+  background: rgba(6, 182, 212, 0.15);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.5);
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
 }
 
 /* Style: Off / Neutral */
 .chord-badge-off {
   color: var(--cs-text-main);
+  font-family: inherit !important;
+  font-size: 1em !important;
   font-weight: 700;
+  letter-spacing: 0px !important;
 }
 
 /* Quick Jump Section Bar */

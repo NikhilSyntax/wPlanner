@@ -534,19 +534,57 @@ function EventDetails() {
       setAddSongError('Song title is required');
       return;
     }
+    if (isLocked) {
+      setAddSongError('Event is locked and cannot be modified');
+      return;
+    }
     try {
       setAddSongLoading(true);
       setAddSongError('');
-      await api.post('/songs', {
-        title,
-        key: newSongKey,
+
+      // Check if this song already exists in the church songs bank
+      const existingInBank = songs.find(
+        (s) => (s.title || '').trim().toLowerCase() === title.toLowerCase()
+      );
+
+      // If already present in current setlist, inform user
+      if (
+        existingInBank &&
+        setlist.some((s) => String(s._id) === String(existingInBank._id))
+      ) {
+        setAddSongError('This song is already in the current setlist.');
+        return;
+      }
+
+      let songToAdd = existingInBank;
+      if (!songToAdd) {
+        const res = await api.post('/songs', {
+          title,
+          key: newSongKey,
+        });
+        songToAdd = res.data?.song || res.data;
+      }
+
+      if (!songToAdd || !songToAdd._id) {
+        throw new Error('Failed to create or retrieve song');
+      }
+
+      // Directly add to current setlist and immediately save to event in database
+      const updatedSetlistIds = [
+        ...setlist.map((s) => s._id),
+        songToAdd._id,
+      ];
+
+      await api.put(`/events/${id}`, {
+        setlist: updatedSetlistIds,
       });
+
       setNewSongTitle('');
       setNewSongKey('C');
       await loadPageData(false);
       setSaveMessage({
         type: 'success',
-        text: 'Song added to your songs database.',
+        text: `"${songToAdd.title || title}" added and saved to current setlist!`,
       });
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (err) {
@@ -1325,6 +1363,12 @@ function EventDetails() {
                         label="Quick add song title"
                         value={newSongTitle}
                         onChange={(e) => setNewSongTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleQuickAddSong();
+                          }
+                        }}
                         sx={{ flex: 1, minWidth: { xs: 150, sm: 220 } }}
                       />
                       <FormControl size="small" sx={{ minWidth: 85 }}>

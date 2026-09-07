@@ -1,4 +1,5 @@
 const Song = require('../models/Song');
+const UserSongPreference = require('../models/UserSongPreference');
 const { enrichSongsUsage } = require('../utils/enrichSongUsage');
 
 // List songs with optional filters — strictly scoped to the user's church
@@ -41,6 +42,25 @@ exports.getSong = async (req, res) => {
     }).lean();
     if (!song) return res.status(404).json({ message: 'Song not found' });
     const [enriched] = await enrichSongsUsage([song]);
+
+    // Attach per-user preference if present for the current user
+    const userId = req.user._id || req.user.id;
+    if (userId) {
+      const userPref = await UserSongPreference.findOne({
+        songId: song._id,
+        userId,
+      }).lean();
+      if (userPref) {
+        enriched.userPreference = {
+          key: userPref.key,
+          transpose: userPref.transpose,
+          capo: userPref.capo,
+          chords: userPref.chords,
+          updatedAt: userPref.updatedAt,
+        };
+      }
+    }
+
     res.json(enriched);
   } catch (err) {
     console.error(err);
@@ -54,7 +74,7 @@ exports.getSong = async (req, res) => {
 // Create a new song (team_leader or admin) — automatically scoped to the user's church
 exports.createSong = async (req, res) => {
   try {
-    const { title, artist, album, year, key, bpm, timeSignature, genre, tags, content } = req.body;
+    const { title, artist, album, year, key, bpm, timeSignature, genre, tags, content, source, capo, tuning } = req.body;
     const normalizedTimeSignature = normalizeTimeSignature(timeSignature);
     if (timeSignature != null && timeSignature !== '' && !normalizedTimeSignature) {
       return res.status(400).json({
@@ -72,7 +92,10 @@ exports.createSong = async (req, res) => {
       timeSignature: normalizedTimeSignature,
       genre: genre || [],
       tags: tags || [],
-      content: content || {}
+      content: content || {},
+      source: source || { type: 'manual' },
+      capo: capo || 0,
+      tuning: tuning || 'Standard',
     });
     await song.save();
     res.status(201).json(song);
@@ -190,3 +213,196 @@ exports.transposeSong = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// Update song usage / last used date (Admin or Team Leader)
+exports.updateSongUsage = async (req, res) => {
+  try {
+    if (!req.user?.churchId) {
+      return res.status(404).json({ message: 'Song not found' });
+    }
+
+    const isPrivileged =
+      Boolean(req.user.isAdmin || req.user.isSubAdmin) ||
+      ['admin', 'team_leader', 'worship leader', 'pastor'].includes(
+        String(req.user.role || '').toLowerCase()
+      ) ||
+      (Array.isArray(req.user.roles) &&
+        req.user.roles.some((r) =>
+          ['admin', 'team_leader', 'worship leader', 'pastor'].includes(String(r).toLowerCase())
+        ));
+
+    if (!isPrivileged) {
+      return res.status(403).json({ message: 'Access denied. Only church admins or leaders can edit song usage.' });
+    }
+
+    const song = await Song.findOne({
+      _id: req.params.id,
+      churchId: req.user.churchId,
+    });
+
+    if (!song) {
+      return res.status(404).json({ message: 'Song not found' });
+    }
+
+    const { action = 'setLastUsed', lastPerformed, eventTitle, key, notes, usageId } = req.body;
+
+    if (!song.usage) {
+      song.usage = {
+        timesPerformed: 0,
+        lastPerformed: null,
+        manualLastPerformed: null,
+        usageHistory: [],
+        favorites: [],
+      };
+    }
+
+    if (action === 'clearLastUsed') {
+      song.usage.manualLastPerformed = null;
+      song.usage.lastPerformed = null;
+      if (req.body.clearManualHistory) {
+        song.usage.usageHistory = (song.usage.usageHistory || []).filter((e) => e.eventId && !e.isManual);
+      }
+    } else if (action === 'deleteUsage' && usageId) {
+      song.usage.usageHistory = (song.usage.usageHistory || []).filter(
+        (e) => String(e._id) !== String(usageId)
+      );
+    } else {
+      if (!lastPerformed) {
+        return res.status(400).json({ message: 'A valid date is required for last used.' });
+      }
+
+      const parsedDate = new Date(lastPerformed);
+      if (Number.isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ message: 'Invalid date provided.' });
+      }
+
+      const entryTitle = eventTitle?.trim() || 'Worship Service (Manual Entry)';
+      const entryKey = key?.trim() || song.key || 'C';
+
+      if (action === 'editUsage' && usageId) {
+        const found = (song.usage.usageHistory || []).find(
+          (e) => String(e._id) !== String(usageId)
+        );
+        if (found) {
+          found.usedAt = parsedDate;
+          found.eventTitle = entryTitle;
+          found.key = entryKey;
+          if (notes !== undefined) found.notes = notes;
+        }
+      } else {
+        song.usage.usageHistory = song.usage.usageHistory || [];
+        song.usage.usageHistory.push({
+          eventTitle: entryTitle,
+          usedAt: parsedDate,
+          key: entryKey,
+          isManual: true,
+          notes: notes || '',
+        });
+      }
+
+      song.usage.manualLastPerformed = parsedDate;
+      song.usage.lastPerformed = parsedDate;
+    }
+
+    await song.save();
+
+    // Re-enrich with real schedule events & manual entries
+    const [enriched] = await enrichSongsUsage([song]);
+    res.json(enriched);
+  } catch (err) {
+    console.error('Error updating song usage:', err);
+    res.status(500).json({ message: 'Failed to update song usage.' });
+  }
+};
+
+// Get personal key preference for the authenticated user
+exports.getUserSongPreference = async (req, res) => {
+  try {
+    if (!req.user?.churchId) {
+      return res.status(404).json({ message: 'Song not found' });
+    }
+    const userId = req.user._id || req.user.id;
+    const userPref = await UserSongPreference.findOne({
+      songId: req.params.id,
+      userId,
+    }).lean();
+    res.json({ userPreference: userPref || null });
+  } catch (err) {
+    console.error('Error fetching user song preference:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Save / update personal key & transposed chords for the authenticated user
+// Guaranteed NOT to alter the church's master song for other users
+exports.saveUserSongPreference = async (req, res) => {
+  try {
+    if (!req.user?.churchId) {
+      return res.status(404).json({ message: 'Song not found' });
+    }
+    const song = await Song.findOne({
+      _id: req.params.id,
+      churchId: req.user.churchId,
+    }).lean();
+    if (!song) {
+      return res.status(404).json({ message: 'Song not found' });
+    }
+
+    const { key, transpose = 0, capo = 0, chords = '' } = req.body;
+    if (!key) {
+      return res.status(400).json({ message: 'Key is required' });
+    }
+
+    const userId = req.user._id || req.user.id;
+    const preference = await UserSongPreference.findOneAndUpdate(
+      { userId, songId: song._id },
+      {
+        $set: {
+          churchId: req.user.churchId,
+          key: String(key).trim(),
+          transpose: Number(transpose) || 0,
+          capo: Number(capo) || 0,
+          chords: chords || '',
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    res.json({
+      success: true,
+      message: `Key of ${preference.key} saved for your profile. Other church members will still see the church original.`,
+      userPreference: {
+        key: preference.key,
+        transpose: preference.transpose,
+        capo: preference.capo,
+        chords: preference.chords,
+        updatedAt: preference.updatedAt,
+      },
+    });
+  } catch (err) {
+    console.error('Error saving user song preference:', err);
+    res.status(500).json({ message: 'Failed to save personal key preference' });
+  }
+};
+
+// Reset personal key preference back to the church's original key
+exports.deleteUserSongPreference = async (req, res) => {
+  try {
+    if (!req.user?.churchId) {
+      return res.status(404).json({ message: 'Song not found' });
+    }
+    const userId = req.user._id || req.user.id;
+    await UserSongPreference.findOneAndDelete({
+      userId,
+      songId: req.params.id,
+    });
+    res.json({
+      success: true,
+      message: 'Personal key preference reset to church original.',
+    });
+  } catch (err) {
+    console.error('Error deleting user song preference:', err);
+    res.status(500).json({ message: 'Failed to reset personal key preference' });
+  }
+};
+

@@ -59,12 +59,15 @@ const songSchema = new mongoose.Schema({
   usage: {
     timesPerformed: { type: Number, default: 0 },
     lastPerformed: Date,
+    manualLastPerformed: Date,
     usageHistory: [
       {
         eventId: { type: mongoose.Schema.Types.ObjectId, ref: "Event" },
         eventTitle: String,
         usedAt: { type: Date, default: Date.now },
         key: { type: String, default: "C" },
+        isManual: { type: Boolean, default: false },
+        notes: String,
       },
     ],
     favorites: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
@@ -84,6 +87,14 @@ const songSchema = new mongoose.Schema({
       },
     },
   ],
+  capo: { type: Number, default: 0 },
+  tuning: { type: String, default: 'Standard' },
+  source: {
+    type: { type: String, enum: ['manual', 'external'], default: 'manual' },
+    provider: { type: String, default: null },
+    url: { type: String, default: null },
+    importedAt: { type: Date, default: null },
+  },
   metadata: {
     version: { type: Number, default: 1 },
     createdAt: { type: Date, default: Date.now },
@@ -95,6 +106,8 @@ songSchema.index({ title: 1 });
 songSchema.index({ artist: 1 });
 songSchema.index({ key: 1 });
 songSchema.index({ genre: 1 });
+songSchema.index({ 'source.url': 1 });
 songSchema.index({ "content.lyrics": "text" });
 
 module.exports = mongoose.model("Song", songSchema);
+
