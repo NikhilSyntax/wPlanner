@@ -365,8 +365,6 @@ exports.getOrCreateLiveSession = async (req, res) => {
     }
 
     const payload = formatSessionPayload(cached.session, cached.songs);
-    // Non-blocking save of initialized indices
-    cached.session.save().catch((err) => console.error('[LiveController] Save error:', err));
     res.json(payload);
   } catch (err) {
     console.error('[LiveController] getOrCreateLiveSession error:', err);
@@ -474,8 +472,10 @@ exports.getViewerState = async (req, res) => {
 
     const fullPayload = formatSessionPayload(cached.session, cached.songs);
 
-    display.lastConnectedAt = new Date();
-    display.save().catch((err) => console.error('[LiveController] Display save error:', err));
+    LiveDisplay.updateOne(
+      { _id: display._id },
+      { $set: { lastConnectedAt: new Date() } }
+    ).catch((err) => console.error('[LiveController] Display save error:', err.message));
 
     res.json({
       eventId: cached.session.eventId,

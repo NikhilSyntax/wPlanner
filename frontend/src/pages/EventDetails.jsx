@@ -8,6 +8,7 @@ import {
   Typography,
   Button,
   TextField,
+  Autocomplete,
   FormControl,
   InputLabel,
   Select,
@@ -60,6 +61,8 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import { getEventDisplayTitle } from '../utils/eventTitle';
 import { isEventLocked, EVENT_LOCKED_MESSAGE } from '../utils/eventLock';
 import { mergeSetlistWithBank, mergeSongWithBank, songsByIdMap } from '../utils/songDisplay';
+import { getRecommendedSongs } from '../utils/songRecommendations';
+import { fuzzySearchSongs } from '../utils/fuzzySearch';
 
 const eventTypeColors = {
   service: 'primary',
@@ -116,7 +119,6 @@ function EventDetails() {
   const [error, setError] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [songs, setSongs] = useState([]);
-  const [songQuery, setSongQuery] = useState('');
   const [newSongTitle, setNewSongTitle] = useState('');
   const [newSongKey, setNewSongKey] = useState('C');
   const [addSongLoading, setAddSongLoading] = useState(false);
@@ -500,33 +502,12 @@ function EventDetails() {
     'A#',
     'B',
   ];
-  const filteredSongs = songs.filter((song) => {
-    const q = songQuery.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      String(song.title || '')
-        .toLowerCase()
-        .includes(q) ||
-      String(song.artist || '')
-        .toLowerCase()
-        .includes(q)
-    );
-  });
-  const setlistSongIds = new Set(setlist.map((s) => s._id));
   const songsById = songsByIdMap(songs);
-  const setlistKeys = new Set(
-    setlist
-      .map((s) => s.key)
-      .filter((k) => typeof k === 'string' && k.trim().length > 0)
-  );
-  const recommendedSongs = filteredSongs
-    .filter((song) => !setlistSongIds.has(song._id))
-    .sort((a, b) => {
-      const aMatch = setlistKeys.has(a.key) ? 1 : 0;
-      const bMatch = setlistKeys.has(b.key) ? 1 : 0;
-      if (aMatch !== bMatch) return bMatch - aMatch;
-      return String(a.title || '').localeCompare(String(b.title || ''));
-    });
+  const recommendedSongs = getRecommendedSongs({
+    songs,
+    setlist,
+    maxRecommendations: 3,
+  });
 
   const handleQuickAddSong = async () => {
     const title = newSongTitle.trim();
@@ -542,27 +523,32 @@ function EventDetails() {
       setAddSongLoading(true);
       setAddSongError('');
 
-      // Check if this song already exists in the church songs bank
-      const existingInBank = songs.find(
+      // Check if this song exists in the church songs bank (exact or close fuzzy match)
+      const exactInBank = songs.find(
         (s) => (s.title || '').trim().toLowerCase() === title.toLowerCase()
       );
+      const fuzzyMatches = fuzzySearchSongs(songs, title, 0.82);
+      const existingInBank = exactInBank || (fuzzyMatches.length > 0 ? fuzzyMatches[0] : null);
 
-      // If already present in current setlist, inform user
+      // If already present in current setlist, inform user and do not create duplicate
       if (
         existingInBank &&
         setlist.some((s) => String(s._id) === String(existingInBank._id))
       ) {
-        setAddSongError('This song is already in the current setlist.');
+        setAddSongError(`"${existingInBank.title}" is already in this event's setlist.`);
         return;
       }
 
       let songToAdd = existingInBank;
+      let isBrandNew = false;
       if (!songToAdd) {
         const res = await api.post('/songs', {
           title,
           key: newSongKey,
+          autoImport: true,
         });
         songToAdd = res.data?.song || res.data;
+        isBrandNew = true;
       }
 
       if (!songToAdd || !songToAdd._id) {
@@ -582,11 +568,16 @@ function EventDetails() {
       setNewSongTitle('');
       setNewSongKey('C');
       await loadPageData(false);
+      const isAutoImported = songToAdd?.source?.provider === 'ultimate_guitar';
       setSaveMessage({
         type: 'success',
-        text: `"${songToAdd.title || title}" added and saved to current setlist!`,
+        text: isBrandNew
+          ? isAutoImported
+            ? `"${songToAdd.title}" imported from Ultimate Guitar and added to setlist!`
+            : `"${songToAdd.title || title}" created and added to setlist!`
+          : `"${songToAdd.title || title}" added from song bank to setlist!`,
       });
-      setTimeout(() => setSaveMessage(''), 3000);
+      setTimeout(() => setSaveMessage(''), 3500);
     } catch (err) {
       console.error('Failed to add song:', err);
       setAddSongError(
@@ -626,7 +617,23 @@ function EventDetails() {
     setSetlist((prev) => applyKey(prev));
     setSongs((prev) => applyKey(prev));
     try {
-      await api.put(`/songs/${songId}`, { key: newKey });
+      const res = await api.put(`/songs/${songId}`, { key: newKey });
+      const updatedSong = res.data?.song || res.data;
+      if (updatedSong && updatedSong._id) {
+        setSongs((prev) =>
+          prev.map((s) => (String(s._id) === String(songId) ? updatedSong : s))
+        );
+        setSetlist((prev) =>
+          prev.map((s) =>
+            String(s._id) === String(songId) ? { ...s, ...updatedSong } : s
+          )
+        );
+      }
+      setSaveMessage({
+        type: 'success',
+        text: `Transposed chords to Key ${newKey}!`,
+      });
+      setTimeout(() => setSaveMessage(''), 3000);
     } catch (err) {
       console.error('Failed to update song key:', err);
       setSaveMessage({
@@ -1356,20 +1363,175 @@ function EventDetails() {
                         flexWrap: 'wrap',
                       }}
                     >
-                      <TextField
-                        inputRef={addSongTitleInputRef}
-                        size="small"
-                        placeholder="Enter song title..."
-                        label="Quick add song title"
-                        value={newSongTitle}
-                        onChange={(e) => setNewSongTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleQuickAddSong();
+                      <Autocomplete
+                        freeSolo
+                        openOnFocus
+                        ListboxProps={{
+                          sx: {
+                            maxHeight: 155,
+                            '& .MuiAutocomplete-option': {
+                              minHeight: 'auto',
+                              py: 0.75,
+                            },
+                          },
+                        }}
+                        options={songs}
+                        getOptionLabel={(option) => {
+                          if (typeof option === 'string') return option;
+                          return option.title || '';
+                        }}
+                        filterOptions={(options, params) => {
+                          const q = (params.inputValue || '').trim();
+                          if (!q) {
+                            return options;
+                          }
+
+                          const qLower = q.toLowerCase();
+
+                          // 1. Exact or direct substring/prefix matches
+                          const substringMatches = options.filter((opt) => {
+                            const t = (opt.title || '').toLowerCase();
+                            const a = (opt.artist || '').toLowerCase();
+                            return t.includes(qLower) || a.includes(qLower);
+                          });
+
+                          if (substringMatches.length > 0) {
+                            const hasExactMatch = substringMatches.some(
+                              (opt) => (opt.title || '').trim().toLowerCase() === qLower
+                            );
+                            const results = [...substringMatches];
+                            if (!hasExactMatch) {
+                              results.push({
+                                inputValue: params.inputValue,
+                                title: `Create new song: "${params.inputValue}"`,
+                                isNew: true,
+                              });
+                            }
+                            return results;
+                          }
+
+                          // 2. If no direct match, find fuzzy / typo "Did you mean?" matches (Show ONLY 1 best match)
+                          const fuzzyResults = fuzzySearchSongs(options, q, 0.45);
+
+                          if (fuzzyResults.length > 0) {
+                            const topMatch = {
+                              ...fuzzyResults[0],
+                              _isDidYouMean: true,
+                            };
+                            return [
+                              topMatch,
+                              {
+                                inputValue: params.inputValue,
+                                title: `Create new song: "${params.inputValue}"`,
+                                isNew: true,
+                              },
+                            ];
+                          }
+
+                          // 3. No match at all -> show create new song
+                          return [
+                            {
+                              inputValue: params.inputValue,
+                              title: `Create new song: "${params.inputValue}"`,
+                              isNew: true,
+                            },
+                          ];
+                        }}
+                        inputValue={newSongTitle}
+                        onInputChange={(event, newInputValue) => {
+                          setNewSongTitle(newInputValue);
+                          const exactMatch = songs.find(
+                            (s) =>
+                              (s.title || '').trim().toLowerCase() ===
+                              newInputValue.trim().toLowerCase()
+                          );
+                          if (exactMatch && exactMatch.key) {
+                            setNewSongKey(exactMatch.key);
                           }
                         }}
-                        sx={{ flex: 1, minWidth: { xs: 150, sm: 220 } }}
+                        onChange={(event, newValue) => {
+                          if (typeof newValue === 'string') {
+                            setNewSongTitle(newValue);
+                          } else if (newValue && newValue.isNew) {
+                            setNewSongTitle(newValue.inputValue);
+                          } else if (newValue) {
+                            setNewSongTitle(newValue.title || '');
+                            if (newValue.key) {
+                              setNewSongKey(newValue.key);
+                            }
+                          } else {
+                            setNewSongTitle('');
+                          }
+                        }}
+                        renderOption={(props, option) => {
+                          if (option.isNew) {
+                            return (
+                              <li {...props} key="new-song-option">
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5, color: 'primary.main' }}>
+                                  <AddIcon sx={{ fontSize: 18 }} />
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                    {option.title}
+                                  </Typography>
+                                </Box>
+                              </li>
+                            );
+                          }
+                          const alreadyInSetlist = setlist.some(
+                            (s) => String(s._id) === String(option._id)
+                          );
+                          return (
+                            <li {...props} key={option._id}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', py: 0.5 }}>
+                                <Box sx={{ minWidth: 0, mr: 1 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, flexWrap: 'wrap' }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                                      {option.title}
+                                    </Typography>
+                                    {option._isDidYouMean && (
+                                      <Chip
+                                        size="small"
+                                        label="Did you mean?"
+                                        color="secondary"
+                                        sx={{ height: 18, fontSize: '0.625rem', fontWeight: 700 }}
+                                      />
+                                    )}
+                                  </Box>
+                                  {option.artist && (
+                                    <Typography variant="caption" color="text.secondary" noWrap display="block">
+                                      {option.artist}
+                                    </Typography>
+                                  )}
+                                </Box>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                                  {option.key && (
+                                    <Chip size="small" label={`Key ${option.key}`} sx={{ height: 20, fontSize: '0.6875rem' }} />
+                                  )}
+                                  {alreadyInSetlist ? (
+                                    <Chip size="small" label="In Setlist" color="default" sx={{ height: 20, fontSize: '0.6875rem' }} />
+                                  ) : (
+                                    <Chip size="small" label="In Library" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.6875rem' }} />
+                                  )}
+                                </Box>
+                              </Box>
+                            </li>
+                          );
+                        }}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            inputRef={addSongTitleInputRef}
+                            size="small"
+                            placeholder="Search library songs (typo-tolerant) or enter new..."
+                            label="Quick add song title"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleQuickAddSong();
+                              }
+                            }}
+                          />
+                        )}
+                        sx={{ flex: 1, minWidth: { xs: 150, sm: 260 } }}
                       />
                       <FormControl size="small" sx={{ minWidth: 85 }}>
                         <InputLabel>Key</InputLabel>
@@ -1404,19 +1566,10 @@ function EventDetails() {
                   </Alert>
                 )}
 
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
+                <Box sx={{ mb: 1.5 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                     Recommended Songs
                   </Typography>
-                  <TextField
-                    fullWidth
-                    size="small"
-                    placeholder="Search recommended songs by title or artist..."
-                    label="Search recommended songs"
-                    value={songQuery}
-                    onChange={(e) => setSongQuery(e.target.value)}
-                    sx={{ mb: 2 }}
-                  />
                 </Box>
 
                 {/* Recommended Songs List */}
@@ -1430,6 +1583,7 @@ function EventDetails() {
                   >
                     {recommendedSongs.map((song) => {
                       const displaySong = mergeSongWithBank(song, songsById);
+                      const isKeyRec = song._recType === 'key';
                       return (
                         <Paper
                           key={displaySong._id}
@@ -1451,8 +1605,10 @@ function EventDetails() {
                                 width: 32,
                                 height: 32,
                                 borderRadius: 1.5,
-                                bgcolor: 'rgba(245, 158, 11, 0.1)',
-                                color: '#f59e0b',
+                                bgcolor: isKeyRec
+                                  ? 'rgba(245, 158, 11, 0.1)'
+                                  : 'rgba(59, 130, 246, 0.1)',
+                                color: isKeyRec ? '#f59e0b' : '#2563eb',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -1462,10 +1618,33 @@ function EventDetails() {
                               <MusicIcon sx={{ fontSize: 18 }} />
                             </Box>
                             <Box sx={{ minWidth: 0, flex: 1 }}>
-                              <SongTitleWithTimeSignature
-                                title={displaySong.title}
-                                timeSignature={displaySong.timeSignature}
-                              />
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                <SongTitleWithTimeSignature
+                                  title={displaySong.title}
+                                  timeSignature={displaySong.timeSignature}
+                                />
+                                {song._recReason && (
+                                  <Chip
+                                    size="small"
+                                    label={song._recReason}
+                                    variant="outlined"
+                                    sx={{
+                                      height: 20,
+                                      fontSize: '0.6875rem',
+                                      fontWeight: 600,
+                                      borderColor: isKeyRec
+                                        ? 'rgba(245, 158, 11, 0.4)'
+                                        : 'rgba(59, 130, 246, 0.4)',
+                                      color: isKeyRec
+                                        ? 'warning.dark'
+                                        : 'primary.main',
+                                      bgcolor: isKeyRec
+                                        ? 'rgba(245, 158, 11, 0.06)'
+                                        : 'rgba(59, 130, 246, 0.06)',
+                                    }}
+                                  />
+                                )}
+                              </Box>
                               {displaySong.artist && (
                                 <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ mt: 0.2 }}>
                                   {displaySong.artist}
@@ -1522,9 +1701,9 @@ function EventDetails() {
                     variant="body2"
                     color="text.secondary"
                   >
-                    {setlist.length > 0
-                      ? 'No recommendations match your search. Add a different song or clear search.'
-                      : 'Add at least one song to the setlist to get key-based recommendations.'}
+                    {songQuery
+                      ? 'No recommendations match your search. Clear or change search query.'
+                      : 'All available songs are already in the setlist.'}
                   </Typography>
                 )}
               </Box>

@@ -306,9 +306,88 @@ function finalizeSection(section) {
   };
 }
 
+function transposeLine(line, semitones) {
+  if (semitones === 0 || !line) return line;
+
+  // 1. Handle [ch]...[/ch] tags
+  if (/\[ch\]/.test(line)) {
+    return line.replace(/\[ch\](.*?)\[\/ch\]/g, (match, chord) => {
+      return '[ch]' + transposeChord(chord, semitones) + '[/ch]';
+    });
+  }
+
+  // 2. Handle [G] inline bracket chords
+  if (/\[[A-G][#b]?[^\]]*\]/.test(line) && !SECTION_REGEX.test(line.trim())) {
+    return line.replace(/\[([A-G][#b]?[^\]]*)\]/g, (match, chord) => {
+      if (CHORD_TOKEN_REGEX.test(chord)) {
+        return '[' + transposeChord(chord, semitones) + ']';
+      }
+      return match;
+    });
+  }
+
+  // 3. Handle standalone chord line
+  if (isChordLine(line)) {
+    const regex = /([^\s]+|\s+)/g;
+    let match;
+    const tokens = [];
+    while ((match = regex.exec(line)) !== null) {
+      const item = match[0];
+      if (/^\s+$/.test(item)) {
+        tokens.push({ type: 'space', text: item });
+      } else if (CHORD_TOKEN_REGEX.test(item)) {
+        const transposed = transposeChord(item, semitones);
+        tokens.push({ type: 'chord', original: item, text: transposed });
+      } else {
+        tokens.push({ type: 'text', text: item });
+      }
+    }
+
+    // Preserve column alignment
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i];
+      if (token.type === 'chord') {
+        const diff = token.text.length - token.original.length;
+        if (diff !== 0 && i + 1 < tokens.length && tokens[i + 1].type === 'space') {
+          const spaceToken = tokens[i + 1];
+          if (diff > 0) {
+            spaceToken.text = spaceToken.text.substring(Math.min(diff, spaceToken.text.length - 1));
+          } else {
+            spaceToken.text = ' '.repeat(Math.abs(diff)) + spaceToken.text;
+          }
+        }
+      }
+    }
+
+    return tokens.map((t) => t.text).join('');
+  }
+
+  return line;
+}
+
+/**
+ * Transposes all chords in a raw chord sheet text from one key to another.
+ *
+ * @param {string} rawContent - The chord sheet text
+ * @param {string} fromKey - Original key (e.g. 'G')
+ * @param {string} toKey - Target key (e.g. 'D')
+ * @returns {string} The transposed chord sheet text
+ */
+function transposeChordsText(rawContent, fromKey, toKey) {
+  if (!rawContent || typeof rawContent !== 'string') return rawContent;
+  const semitones = getSemitoneShift(fromKey, toKey);
+  if (semitones === 0) return rawContent;
+
+  const lines = rawContent.split(/\r?\n/);
+  const transposedLines = lines.map((line) => transposeLine(line, semitones));
+  return transposedLines.join('\n');
+}
+
 module.exports = {
   parseSongToLiveSections,
   transposeChord,
+  transposeChordsText,
+  transposeLine,
   getSemitoneShift,
   snapToGraphemeCluster,
   SHARPS,

@@ -1,6 +1,37 @@
 const Song = require('../models/Song');
 const UserSongPreference = require('../models/UserSongPreference');
 const { enrichSongsUsage } = require('../utils/enrichSongUsage');
+const { defaultSongImportService } = require('../services/songImport/SongImportService');
+const { transposeChordsText } = require('../utils/songParser');
+
+const VALID_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const VALID_TIME_SIGNATURES = ['2/4', '3/4', '4/4', '5/4', '6/8', '7/8'];
+
+const ENHARMONIC_MAP = {
+  DB: 'C#',
+  EB: 'D#',
+  GB: 'F#',
+  AB: 'G#',
+  BB: 'A#',
+};
+
+function normalizeKey(key) {
+  if (!key || typeof key !== 'string') return 'C';
+  const trimmed = key.trim();
+  const match = trimmed.match(/^([A-Ga-g][#b]?)/);
+  if (!match) return VALID_KEYS.includes(trimmed.toUpperCase()) ? trimmed.toUpperCase() : 'C';
+  let root = match[1].toUpperCase();
+  if (root.length === 2 && root[1] === 'B' && ENHARMONIC_MAP[root]) {
+    root = ENHARMONIC_MAP[root];
+  }
+  return VALID_KEYS.includes(root) ? root : 'C';
+}
+
+function normalizeTimeSignature(value) {
+  if (value == null || value === '') return undefined;
+  const trimmed = String(value).trim();
+  return VALID_TIME_SIGNATURES.includes(trimmed) ? trimmed : null;
+}
 
 // List songs with optional filters — strictly scoped to the user's church
 exports.getSongs = async (req, res) => {
@@ -74,28 +105,99 @@ exports.getSong = async (req, res) => {
 // Create a new song (team_leader or admin) — automatically scoped to the user's church
 exports.createSong = async (req, res) => {
   try {
-    const { title, artist, album, year, key, bpm, timeSignature, genre, tags, content, source, capo, tuning } = req.body;
-    const normalizedTimeSignature = normalizeTimeSignature(timeSignature);
-    if (timeSignature != null && timeSignature !== '' && !normalizedTimeSignature) {
+    const { title, artist, album, year, key, bpm, timeSignature, genre, tags, content, source, capo, tuning, autoImport } = req.body;
+    if (!title || !title.trim()) {
+      return res.status(400).json({ message: 'Song title is required' });
+    }
+
+    const trimmedTitle = title.trim();
+
+    // Check if song already exists for this church (case-insensitive exact title match)
+    const escapedTitle = trimmedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const existing = await Song.findOne({
+      churchId: req.user.churchId,
+      title: { $regex: new RegExp(`^${escapedTitle}$`, 'i') },
+    });
+
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+
+    let finalTitle = trimmedTitle;
+    let finalArtist = artist;
+    let finalKey = key ? normalizeKey(key) : null;
+    let finalBpm = bpm;
+    let finalTimeSignature = normalizeTimeSignature(timeSignature);
+    let finalContent = content || {};
+    let finalSource = source || { type: 'manual' };
+    let finalCapo = typeof capo === 'number' ? capo : 0;
+    let finalTuning = tuning || 'Standard';
+
+    // Auto-import chord chart from Ultimate Guitar with typo tolerance if no chords content was supplied
+    const shouldAutoImport =
+      autoImport !== false &&
+      (!content || (!content.chords && !content.lyrics && !content.tabs));
+
+    if (shouldAutoImport) {
+      try {
+        const importResult = await defaultSongImportService.autoImportBestMatch({
+          query: trimmedTitle,
+          churchId: req.user.churchId,
+          keyPreference: key,
+        });
+
+        if (importResult.imported && importResult.song) {
+          const imported = importResult.song;
+          // Use official song title from Ultimate Guitar if user typed a typo
+          finalTitle = imported.title || trimmedTitle;
+          finalArtist = finalArtist || imported.artist;
+          if (!finalKey && imported.key) {
+            finalKey = normalizeKey(imported.key);
+          }
+          finalBpm = finalBpm || imported.bpm;
+          if (!finalTimeSignature && imported.timeSignature) {
+            finalTimeSignature = normalizeTimeSignature(imported.timeSignature);
+          }
+          finalContent = imported.content || finalContent;
+          finalSource = imported.source || {
+            type: 'external',
+            provider: 'ultimate_guitar',
+            url: importResult.match?.url,
+            importedAt: new Date(),
+          };
+          if (typeof imported.capo === 'number') {
+            finalCapo = imported.capo;
+          }
+          if (imported.tuning) {
+            finalTuning = imported.tuning;
+          }
+        }
+      } catch (importErr) {
+        console.warn('Auto-import on song create encountered error:', importErr.message);
+      }
+    }
+
+    if (timeSignature != null && timeSignature !== '' && !finalTimeSignature) {
       return res.status(400).json({
         message: `Invalid time signature. Allowed: ${VALID_TIME_SIGNATURES.join(', ')}`,
       });
     }
+
     const song = new Song({
       churchId: req.user.churchId,
-      title,
-      artist,
+      title: finalTitle,
+      artist: finalArtist,
       album,
       year,
-      key: key || 'C',
-      bpm,
-      timeSignature: normalizedTimeSignature,
+      key: finalKey || 'C',
+      bpm: finalBpm,
+      timeSignature: finalTimeSignature || '4/4',
       genre: genre || [],
       tags: tags || [],
-      content: content || {},
-      source: source || { type: 'manual' },
-      capo: capo || 0,
-      tuning: tuning || 'Standard',
+      content: finalContent,
+      source: finalSource,
+      capo: finalCapo,
+      tuning: finalTuning,
     });
     await song.save();
     res.status(201).json(song);
@@ -108,15 +210,6 @@ exports.createSong = async (req, res) => {
   }
 };
 
-const VALID_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const VALID_TIME_SIGNATURES = ['2/4', '3/4', '4/4', '5/4', '6/8', '7/8'];
-
-function normalizeTimeSignature(value) {
-  if (value == null || value === '') return undefined;
-  const trimmed = String(value).trim();
-  return VALID_TIME_SIGNATURES.includes(trimmed) ? trimmed : null;
-}
-
 // Update a song — must belong to the user's church
 exports.updateSong = async (req, res) => {
   try {
@@ -124,11 +217,55 @@ exports.updateSong = async (req, res) => {
       return res.status(404).json({ message: 'Song not found' });
     }
     const updates = { ...req.body };
-    // Prevent churchId from being changed via update
     delete updates.churchId;
-    if (updates.key !== undefined && !VALID_KEYS.includes(updates.key)) {
-      return res.status(400).json({ message: 'Invalid key' });
+
+    const existingSong = await Song.findOne({
+      _id: req.params.id,
+      churchId: req.user.churchId,
+    });
+    if (!existingSong) return res.status(404).json({ message: 'Song not found' });
+
+    if (updates.key !== undefined) {
+      const normalizedNewKey = normalizeKey(updates.key);
+      if (!VALID_KEYS.includes(normalizedNewKey)) {
+        return res.status(400).json({ message: 'Invalid key' });
+      }
+      updates.key = normalizedNewKey;
+
+      // Automatically transpose chord charts when the key changes
+      const oldKey = existingSong.key || 'C';
+      if (oldKey !== normalizedNewKey) {
+        const currentChords =
+          updates.content?.chords !== undefined
+            ? updates.content.chords
+            : existingSong.content?.chords;
+
+        if (currentChords) {
+          const transposedChords = transposeChordsText(currentChords, oldKey, normalizedNewKey);
+          updates.content = {
+            ...(existingSong.content ? existingSong.content.toObject?.() || existingSong.content : {}),
+            ...(updates.content || {}),
+            chords: transposedChords,
+          };
+        }
+
+        // Also transpose regional lyrics chords if present
+        if (existingSong.regionalLyrics && existingSong.regionalLyrics.length > 0 && !updates.regionalLyrics) {
+          updates.regionalLyrics = existingSong.regionalLyrics.map((reg) => {
+            const regChords = reg.content?.chords;
+            if (!regChords) return reg;
+            return {
+              ...(reg.toObject?.() || reg),
+              content: {
+                ...(reg.content?.toObject?.() || reg.content || {}),
+                chords: transposeChordsText(regChords, oldKey, normalizedNewKey),
+              },
+            };
+          });
+        }
+      }
     }
+
     if (updates.timeSignature !== undefined) {
       const normalizedTimeSignature = normalizeTimeSignature(updates.timeSignature);
       if (updates.timeSignature != null && updates.timeSignature !== '' && !normalizedTimeSignature) {
@@ -138,12 +275,12 @@ exports.updateSong = async (req, res) => {
       }
       updates.timeSignature = normalizedTimeSignature;
     }
+
     const song = await Song.findOneAndUpdate(
       { _id: req.params.id, churchId: req.user.churchId },
       { $set: updates },
       { new: true }
     );
-    if (!song) return res.status(404).json({ message: 'Song not found' });
     res.json(song);
   } catch (err) {
     console.error(err);

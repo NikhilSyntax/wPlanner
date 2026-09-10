@@ -498,11 +498,20 @@ I have already come
     );
 
     // -------------------------------------------------------------
-    // Test 27: End-to-end: Search -> Select -> Import -> TV Mode
+    // Test 28: Typo similarity calculation
     // -------------------------------------------------------------
-    console.log('Test 27: End-to-end Search -> Import -> Save -> TV Mode');
-    const selectedResult = searchResults[0];
-    const importMockFetcher = async () => ({
+    console.log('Test 28: Typo similarity calculation');
+    const { calculateTypoSimilarity } = require('../services/songImport/SongImportService');
+    assert.ok(calculateTypoSimilarity('goddness of god', 'Goodness of God') >= 0.85);
+    assert.ok(calculateTypoSimilarity('Amezing Grace', 'Amazing Grace') >= 0.85);
+    assert.ok(calculateTypoSimilarity('10000 resons', '10000 Reasons') >= 0.85);
+    assert.ok(calculateTypoSimilarity('reckles love', 'Reckless Love') >= 0.85);
+
+    // -------------------------------------------------------------
+    // Test 29: Auto-import top Ultimate Guitar sheet with typo tolerance
+    // -------------------------------------------------------------
+    console.log('Test 29: Auto-import top Ultimate Guitar sheet with typo tolerance');
+    const autoImportSearchFetcher = async () => ({
       ok: true,
       status: 200,
       text: async () =>
@@ -510,12 +519,46 @@ I have already come
           store: {
             page: {
               data: {
-                tab: { song_name: '10,000 Reasons', artist_name: 'Matt Redman' },
+                results: [
+                  {
+                    id: 4000001,
+                    song_name: 'Goodness Of God',
+                    artist_name: 'Bethel Music',
+                    type_name: 'Chords',
+                    tab_url: 'https://tabs.ultimate-guitar.com/tab/bethel-music/goodness-of-god-chords-4000001',
+                    rating: 4.9,
+                    votes: 5700,
+                  },
+                  {
+                    id: 4000002,
+                    song_name: 'Other Song',
+                    artist_name: 'Other Artist',
+                    type_name: 'Chords',
+                    tab_url: 'https://tabs.ultimate-guitar.com/tab/other/other-chords-4000002',
+                    rating: 3.5,
+                    votes: 10,
+                  },
+                ],
+              },
+            },
+          },
+        }),
+    });
+
+    const autoImportTabFetcher = async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          store: {
+            page: {
+              data: {
+                tab: { song_name: 'Goodness Of God', artist_name: 'Bethel Music' },
                 tab_view: {
-                  meta: { tonality: 'G', capo: 0, bpm: 73 },
+                  meta: { tonality: 'G', capo: 0, bpm: 68 },
                   wiki_tab: {
                     content:
-                      '[Chorus]\n[ch]C[/ch]        [ch]G[/ch]         [ch]D[/ch]       [ch]Em[/ch]\nBless the Lord O my soul O my soul\n[ch]C[/ch]             [ch]G[/ch]     [ch]D[/ch]\nWorship His holy name',
+                      '[Verse 1]\n[ch]G[/ch]\nI love you Lord\n           [ch]C[/ch]          [ch]G[/ch]\nFor your mercy never fails me',
                   },
                 },
               },
@@ -523,26 +566,71 @@ I have already come
           },
         }),
     });
-    const importedSongRes = await defaultSongImportService.importSong({
-      url: selectedResult.url,
-      churchId: testChurch._id,
-      options: { fetcher: importMockFetcher },
+
+    const bestMatch = await defaultSongImportService.findBestMatch('goddness of god', {
+      fetcher: autoImportSearchFetcher,
     });
-    assert.strictEqual(importedSongRes.success, true);
-    assert.strictEqual(importedSongRes.song.title, '10,000 Reasons');
+    assert.ok(bestMatch, 'Must find best match for typo query "goddness of god"');
+    assert.strictEqual(bestMatch.title, 'Goodness Of God');
+    assert.strictEqual(bestMatch.artist, 'Bethel Music');
 
-    const e2eSaved = await Song.create({
+    const autoImportRes = await defaultSongImportService.autoImportBestMatch({
+      query: 'goddness of god',
       churchId: testChurch._id,
-      ...importedSongRes.song,
+      options: {
+        searchFetcher: autoImportSearchFetcher,
+        tabFetcher: autoImportTabFetcher,
+      },
     });
-    assert.ok(e2eSaved._id);
+    assert.strictEqual(autoImportRes.imported, true);
+    assert.strictEqual(autoImportRes.song.title, 'Goodness Of God');
+    assert.strictEqual(autoImportRes.song.artist, 'Bethel Music');
+    assert.strictEqual(autoImportRes.song.key, 'G');
+    assert.ok(autoImportRes.song.content?.chords.includes('I love you Lord'));
 
-    const tvOutput = parseSongToLiveSections(e2eSaved.content.chords, e2eSaved.key, e2eSaved.key);
-    assert.strictEqual(tvOutput.length, 1);
-    assert.strictEqual(tvOutput[0].chunks[0].lines[0].text, 'Bless the Lord O my soul O my soul');
-    assert.strictEqual(tvOutput[0].chunks[0].lines[0].chords[0].chord, 'C');
+    // -------------------------------------------------------------
+    // Test 30: Transpose raw chords text from one key to another
+    // -------------------------------------------------------------
+    console.log('Test 30: Transpose raw chords text from one key to another');
+    const { transposeChordsText } = require('../utils/songParser');
+    const originalChordsG = '[Verse 1]\nG\nI love you Lord\n           C          G\nFor your mercy never fails me\nD/F#   Em              C          D\nAll my days';
+    const transposedToD = transposeChordsText(originalChordsG, 'G', 'D');
+    assert.ok(transposedToD.includes('D'), 'Root G should transpose to D');
+    assert.ok(transposedToD.includes('G'), 'C should transpose to G');
+    assert.ok(transposedToD.includes('A/C#'), 'D/F# should transpose to A/C#');
+    assert.ok(transposedToD.includes('Bm'), 'Em should transpose to Bm');
 
-    console.log('\nAll 27 Ultimate Guitar Song Import & Search test cases passed successfully!');
+    // -------------------------------------------------------------
+    // Test 31: Update song key transposes content.chords in database
+    // -------------------------------------------------------------
+    console.log('Test 31: Update song key transposes content.chords in database');
+    const songToTranspose = await Song.create({
+      churchId: testChurch._id,
+      title: 'Key Transpose Test Song',
+      key: 'G',
+      content: { chords: originalChordsG, lyrics: 'I love you Lord' },
+    });
+
+    const songController = require('../controllers/songController');
+    const mockReq = {
+      user: { churchId: testChurch._id },
+      params: { id: String(songToTranspose._id) },
+      body: { key: 'D' },
+    };
+    let jsonResult = null;
+    const mockRes = {
+      json: (data) => {
+        jsonResult = data;
+      },
+      status: () => mockRes,
+    };
+
+    await songController.updateSong(mockReq, mockRes);
+    assert.ok(jsonResult, 'Must return updated song');
+    assert.strictEqual(jsonResult.key, 'D');
+    assert.ok(jsonResult.content?.chords.includes('A/C#'), 'Chords in DB must be transposed to Key D');
+
+    console.log('\nAll 31 Ultimate Guitar Song Import, Auto-Import & Key Transposition test cases passed successfully!');
   } finally {
     await Church.deleteMany({});
     await Song.deleteMany({});

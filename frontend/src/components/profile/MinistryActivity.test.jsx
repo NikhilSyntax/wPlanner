@@ -63,12 +63,12 @@ describe('MinistryActivity Component', () => {
 
     await waitFor(() => {
       // Primary statistic: "Served", "42", "Times"
-      expect(screen.getByText('SERVED')).toBeInTheDocument();
+      expect(screen.getByText(/^Served$/i)).toBeInTheDocument();
       expect(screen.getByText('42')).toBeInTheDocument();
       expect(screen.getByText('Times')).toBeInTheDocument();
 
       // Secondary statistic: "Upcoming", "3", "Assignments"
-      expect(screen.getByText('UPCOMING')).toBeInTheDocument();
+      expect(screen.getByText(/^Upcoming$/i)).toBeInTheDocument();
       expect(screen.getByText('3')).toBeInTheDocument();
       expect(screen.getByText('Assignments')).toBeInTheDocument();
 

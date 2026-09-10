@@ -367,6 +367,9 @@ class UltimateGuitarProvider extends ExternalSongProvider {
     }
 
     if (!response.ok) {
+      if (response.status === 404) {
+        return [];
+      }
       if (response.status === 429) {
         const err = new Error('Search rate limit reached. Please wait a moment and try again.');
         err.statusCode = 429;
