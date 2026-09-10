@@ -47,11 +47,38 @@ const TIME_SIG_OPTIONS = ['2/4', '3/4', '4/4', '5/4', '6/8', '7/8'];
 function EventSetlistSongView() {
   const { id, songId } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const view = searchParams.get('view');
-  // If view=lyrics, default to hiding chords; otherwise show chords
-  const initialShowChords = view !== 'lyrics';
+  const viewQuery = searchParams.get('view');
+  // Track current view mode ('chords' or 'lyrics') with persistence
+  const [viewMode, setViewMode] = useState(() => {
+    if (viewQuery === 'lyrics') return 'lyrics';
+    if (viewQuery === 'chords') return 'chords';
+    try {
+      const saved = localStorage.getItem('wplanner_setlist_view_mode');
+      if (saved === 'lyrics' || saved === 'chords') return saved;
+    } catch (e) {}
+    return 'chords';
+  });
+
+  // Keep viewMode synced if URL query explicitly changes
+  useEffect(() => {
+    if (viewQuery === 'lyrics' || viewQuery === 'chords') {
+      setViewMode(viewQuery);
+      try {
+        localStorage.setItem('wplanner_setlist_view_mode', viewQuery);
+      } catch (e) {}
+    }
+  }, [viewQuery]);
+
+  const handleViewModeChange = (newMode) => {
+    const normalized = newMode === 'lyrics' ? 'lyrics' : 'chords';
+    setViewMode(normalized);
+    try {
+      localStorage.setItem('wplanner_setlist_view_mode', normalized);
+    } catch (e) {}
+    setSearchParams({ view: normalized }, { replace: true });
+  };
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -115,14 +142,12 @@ function EventSetlistSongView() {
 
   const goNextSong = () => {
     if (!nextSong?._id) return;
-    const query = view ? `?view=${view}` : '';
-    navigate(`/events/${id}/setlist/${nextSong._id}${query}`);
+    navigate(`/events/${id}/setlist/${nextSong._id}?view=${viewMode}`);
   };
 
   const goPrevSong = () => {
     if (!prevSong?._id) return;
-    const query = view ? `?view=${view}` : '';
-    navigate(`/events/${id}/setlist/${prevSong._id}${query}`);
+    navigate(`/events/${id}/setlist/${prevSong._id}?view=${viewMode}`);
   };
 
   const handleOpenEditModal = () => {
@@ -231,7 +256,7 @@ function EventSetlistSongView() {
               noWrap
               sx={{ lineHeight: 1.2, fontSize: { xs: '1.05rem', sm: '1.25rem' } }}
             >
-              {view === 'lyrics' ? 'Song Lyrics' : 'Chords & Lyrics'}
+              {viewMode === 'lyrics' ? 'Song Lyrics' : 'Chords & Lyrics'}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap display="block">
               {eventTitle}
@@ -449,7 +474,7 @@ function EventSetlistSongView() {
 
       {/* Unified Chord Sheet Viewer with Hide/Show Chords initialized from URL query */}
       <ChordSheetViewer
-        key={`${songId}-${view}-${song?.updatedAt || ''}`}
+        key={`${songId}-${viewMode}-${song?.updatedAt || ''}`}
         songId={songId}
         song={song}
         onSaveSong={(updated) => setSong(updated)}
@@ -457,7 +482,8 @@ function EventSetlistSongView() {
         originalKey={song?.key || 'C'}
         title={song?.title}
         artist={song?.artist}
-        initialShowChords={initialShowChords}
+        initialShowChords={viewMode !== 'lyrics'}
+        onViewModeChange={handleViewModeChange}
         onEdit={handleOpenEditModal}
       />
 

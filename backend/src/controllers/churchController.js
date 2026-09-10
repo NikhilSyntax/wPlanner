@@ -363,47 +363,107 @@ exports.updateMemberRole = async (req, res) => {
       church.createdBy.toString() === target._id.toString()
     );
 
+    const validRoles = User.ROLE_OPTIONS || [
+      "Admin",
+      "Sub-Admin",
+      "Worship Leader",
+      "Singer",
+      "Guitarist",
+      "Keyboardist",
+      "Drummer",
+      "Bassist",
+      "Production",
+      "Member",
+      "Other",
+    ];
+
+    if (role !== undefined) {
+      if (typeof role !== "string" || !validRoles.includes(role.trim())) {
+        return res.status(400).json({
+          message: `Invalid role. Must be one of: ${validRoles.join(", ")}`,
+        });
+      }
+    }
+
     if (adminRole !== undefined) {
       if (!["admin", "sub-admin", "member"].includes(adminRole)) {
         return res.status(400).json({
           message: "adminRole must be one of: 'admin', 'sub-admin', 'member'",
         });
       }
+    }
 
-      // Demoting church creator is forbidden
-      if (isCreator && adminRole !== "admin") {
-        return res.status(403).json({
-          message: "The church creator must remain an administrator",
-        });
-      }
+    const trimmedRole = role && typeof role === "string" ? role.trim() : null;
 
-      // Non-creator admin cannot demote another full admin
-      if (
-        target.isAdmin &&
-        adminRole !== "admin" &&
-        church?.createdBy &&
-        church.createdBy.toString() !== admin._id.toString() &&
-        !target._id.equals(admin._id)
-      ) {
-        return res.status(403).json({
-          message: "Only the church creator can demote another administrator",
-        });
-      }
+    // Check demotion attempt
+    const willDemoteCreator = isCreator && (
+      (adminRole && adminRole !== "admin") ||
+      (trimmedRole && (trimmedRole === "Sub-Admin" || (trimmedRole !== "Admin" && adminRole === "member")))
+    );
+    if (willDemoteCreator) {
+      return res.status(403).json({
+        message: "The church creator must remain an administrator",
+      });
+    }
 
-      if (adminRole === "admin") {
+    const isNonCreatorDemotingAdmin = (
+      target.isAdmin &&
+      church?.createdBy &&
+      church.createdBy.toString() !== admin._id.toString() &&
+      !target._id.equals(admin._id) &&
+      (
+        (adminRole && adminRole !== "admin") ||
+        (trimmedRole && trimmedRole !== "Admin" && (!adminRole || adminRole === "member"))
+      )
+    );
+    if (isNonCreatorDemotingAdmin) {
+      return res.status(403).json({
+        message: "Only the church creator can demote another administrator",
+      });
+    }
+
+    // Apply role and admin access updates
+    if (trimmedRole) {
+      target.role = trimmedRole;
+      if (trimmedRole === "Admin") {
         target.isAdmin = true;
         target.isSubAdmin = false;
-      } else if (adminRole === "sub-admin") {
+      } else if (trimmedRole === "Sub-Admin") {
         target.isAdmin = false;
         target.isSubAdmin = true;
       } else {
+        // Standard ministry role
+        if (adminRole === "admin") {
+          target.isAdmin = true;
+          target.isSubAdmin = false;
+        } else if (adminRole === "sub-admin") {
+          target.isAdmin = false;
+          target.isSubAdmin = true;
+        } else if (adminRole === "member") {
+          target.isAdmin = false;
+          target.isSubAdmin = false;
+        }
+      }
+    } else if (adminRole) {
+      if (adminRole === "admin") {
+        target.isAdmin = true;
+        target.isSubAdmin = false;
+        if (target.role === "Member" || target.role === "Sub-Admin") {
+          target.role = "Admin";
+        }
+      } else if (adminRole === "sub-admin") {
+        target.isAdmin = false;
+        target.isSubAdmin = true;
+        if (target.role === "Admin" || target.role === "Member") {
+          target.role = "Sub-Admin";
+        }
+      } else if (adminRole === "member") {
         target.isAdmin = false;
         target.isSubAdmin = false;
+        if (target.role === "Admin" || target.role === "Sub-Admin") {
+          target.role = "Member";
+        }
       }
-    }
-
-    if (role && typeof role === "string") {
-      target.role = role.trim();
     }
 
     await target.save();

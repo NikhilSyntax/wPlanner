@@ -451,6 +451,8 @@ function ChordSheetViewer({
   timeSignature,
   initialTranspose = 0,
   initialShowChords = true,
+  onViewModeChange,
+  onToggleShowChords,
   onEdit,
   onImport,
 }) {
@@ -1053,7 +1055,12 @@ function ChordSheetViewer({
           <Box display="flex" alignItems="center" gap={1}>
             <IconButton
               size="small"
-              onClick={() => setShowChords(!showChords)}
+              onClick={() => {
+                const nextVal = !showChords;
+                setShowChords(nextVal);
+                if (onViewModeChange) onViewModeChange(nextVal ? 'chords' : 'lyrics');
+                if (onToggleShowChords) onToggleShowChords(nextVal);
+              }}
               sx={{ color: showChords ? '#38bdf8' : 'inherit' }}
               title={showChords ? 'Hide Chords (Lyrics Only)' : 'Show Chords'}
             >
@@ -1105,7 +1112,12 @@ function ChordSheetViewer({
                 value={showChords ? 'chords' : 'lyrics'}
                 exclusive
                 onChange={(e, val) => {
-                  if (val) setShowChords(val === 'chords');
+                  if (val) {
+                    const isChords = val === 'chords';
+                    setShowChords(isChords);
+                    if (onViewModeChange) onViewModeChange(val);
+                    if (onToggleShowChords) onToggleShowChords(isChords);
+                  }
                 }}
                 sx={{
                   height: 32,

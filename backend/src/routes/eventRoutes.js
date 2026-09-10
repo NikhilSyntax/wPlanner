@@ -49,6 +49,18 @@ router.post(
   blockCompletedEventLock,
   eventController.addAssignment
 );
+router.patch(
+  '/:id/assignments/:userId/role',
+  requireSameChurch(Event),
+  blockCompletedEventLock,
+  eventController.updateAssignmentRole
+);
+router.patch(
+  '/:id/assignments/:userId',
+  requireSameChurch(Event),
+  blockCompletedEventLock,
+  eventController.updateAssignmentRole
+);
 router.post(
   '/:id/event-team',
   requireSameChurch(Event),

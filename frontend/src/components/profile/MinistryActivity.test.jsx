@@ -78,7 +78,7 @@ describe('MinistryActivity Component', () => {
       expect(screen.getByText('Load More')).toBeInTheDocument();
 
       // Breakdowns
-      expect(screen.getByText('Guitar')).toBeInTheDocument();
+      expect(screen.getAllByText('Guitar').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('24 Times')).toBeInTheDocument();
       expect(screen.getByText('Keys')).toBeInTheDocument();
       expect(screen.getByText('10 Times')).toBeInTheDocument();

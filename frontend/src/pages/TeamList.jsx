@@ -54,6 +54,8 @@ import api, { API_ORIGIN } from '../services/api';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 
 const MINISTRY_ROLES = [
+  'Admin',
+  'Sub-Admin',
   'Worship Leader',
   'Singer',
   'Guitarist',
@@ -264,6 +266,28 @@ function TeamList() {
       setEditAdminRole('sub-admin');
     } else {
       setEditAdminRole('member');
+    }
+  };
+
+  const handleRoleSelect = (newRole) => {
+    setEditRole(newRole);
+    if (newRole === 'Admin') {
+      setEditAdminRole('admin');
+    } else if (newRole === 'Sub-Admin') {
+      if (!selectedMember?.isCreator) {
+        setEditAdminRole('sub-admin');
+      }
+    }
+  };
+
+  const handleAdminRoleSelect = (newAdminRole) => {
+    setEditAdminRole(newAdminRole);
+    if (newAdminRole === 'admin' && (editRole === 'Member' || editRole === 'Sub-Admin')) {
+      setEditRole('Admin');
+    } else if (newAdminRole === 'sub-admin' && (editRole === 'Admin' || editRole === 'Member')) {
+      setEditRole('Sub-Admin');
+    } else if (newAdminRole === 'member' && (editRole === 'Admin' || editRole === 'Sub-Admin')) {
+      setEditRole('Member');
     }
   };
 
@@ -711,7 +735,7 @@ function TeamList() {
                   labelId="edit-ministry-role-label"
                   label="Ministry Role"
                   value={editRole}
-                  onChange={(e) => setEditRole(e.target.value)}
+                  onChange={(e) => handleRoleSelect(e.target.value)}
                 >
                   {MINISTRY_ROLES.map((r) => (
                     <MenuItem key={r} value={r}>
@@ -727,7 +751,7 @@ function TeamList() {
                 </FormLabel>
                 <RadioGroup
                   value={editAdminRole}
-                  onChange={(e) => setEditAdminRole(e.target.value)}
+                  onChange={(e) => handleAdminRoleSelect(e.target.value)}
                 >
                   <FormControlLabel
                     value="member"

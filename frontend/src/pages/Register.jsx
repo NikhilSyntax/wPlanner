@@ -24,6 +24,7 @@ import { isUserApproved } from '../utils/isUserApproved';
 
 const ROLE_OPTIONS = [
   'Admin',
+  'Sub-Admin',
   'Worship Leader',
   'Singer',
   'Guitarist',

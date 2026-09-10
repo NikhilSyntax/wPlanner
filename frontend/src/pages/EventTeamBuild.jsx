@@ -21,6 +21,10 @@ import {
   ListItemText,
   Stack,
   Typography,
+  Select,
+  MenuItem,
+  FormControl,
+  Chip,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -33,6 +37,18 @@ import {
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import api from '../services/api';
 import { fetchEvents } from '../store/slices/eventSlice';
+
+const EVENT_ROLE_OPTIONS = [
+  'Worship Leader',
+  'Singer',
+  'Guitarist',
+  'Keyboardist',
+  'Drummer',
+  'Bassist',
+  'Production',
+  'Member',
+  'Other',
+];
 
 function EventTeamBuild() {
   const { id } = useParams();
@@ -203,6 +219,14 @@ function EventTeamBuild() {
 
   const removeMember = (memberId) => {
     setSelected((prev) => prev.filter((p) => p._id !== memberId));
+  };
+
+  const updateMemberRole = (memberId, newRole) => {
+    setSelected((prev) =>
+      prev.map((item) =>
+        item._id === memberId ? { ...item, role: newRole } : item
+      )
+    );
   };
 
   const handleConfirm = async () => {
@@ -471,22 +495,62 @@ function EventTeamBuild() {
                             aria-label={`Remove ${s.name}`}
                             onClick={() => removeMember(s._id)}
                             color="error"
+                            size="small"
                           >
-                            <PersonRemoveIcon />
+                            <PersonRemoveIcon fontSize="small" />
                           </IconButton>
                         ) : null
                       }
                       sx={{
                         pr: 7,
+                        py: 0.8,
                         borderBottom: '1px solid',
                         borderColor: 'divider',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 1.5,
                       }}
                     >
-                      <ListItemText
-                        primary={s.name}
-                        secondary={`Role: ${s.role}`}
-                        primaryTypographyProps={{ fontWeight: 600 }}
-                      />
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography variant="body2" fontWeight={700} noWrap>
+                          {s.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Event Role
+                        </Typography>
+                      </Box>
+
+                      {canEdit ? (
+                        <FormControl size="small" sx={{ minWidth: 145 }}>
+                          <Select
+                            value={s.role || 'Member'}
+                            onChange={(e) => updateMemberRole(s._id, e.target.value)}
+                            sx={{
+                              fontSize: '0.78rem',
+                              height: 30,
+                              borderRadius: 1.5,
+                              bgcolor: (theme) =>
+                                theme.palette.mode === 'dark'
+                                  ? 'background.paper'
+                                  : '#f8fafc',
+                            }}
+                          >
+                            {EVENT_ROLE_OPTIONS.map((r) => (
+                              <MenuItem key={r} value={r} sx={{ fontSize: '0.8rem' }}>
+                                {r}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      ) : (
+                        <Chip
+                          label={s.role || 'Member'}
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontWeight: 600, fontSize: '0.75rem' }}
+                        />
+                      )}
                     </ListItem>
                   ))}
                 </List>

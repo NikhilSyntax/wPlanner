@@ -526,6 +526,98 @@ exports.addAssignment = async (req, res) => {
   }
 };
 
+// Update an existing assignment's role for an event
+exports.updateAssignmentRole = async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const { role, notes } = req.body;
+
+    if (!role || typeof role !== "string" || !role.trim()) {
+      return res.status(400).json({ message: "Role is required" });
+    }
+
+    const event = await Event.findOne({
+      _id: id,
+      churchId: req.user.churchId,
+    });
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    const isPrivileged = !!(
+      req.user.isAdmin ||
+      req.user.isSubAdmin ||
+      req.user.role === "admin" ||
+      (event.createdBy && event.createdBy.toString() === req.user.userId.toString())
+    );
+
+    if (!isPrivileged) {
+      return res.status(403).json({
+        message: "Admin or event leader access required to change event roles",
+      });
+    }
+
+    const targetUserIdStr = userId.toString();
+    const assignmentIndex = event.assignments.findIndex((a) => {
+      const uid = a.userId?._id ? a.userId._id.toString() : a.userId?.toString();
+      const aid = a._id ? a._id.toString() : null;
+      return uid === targetUserIdStr || aid === targetUserIdStr;
+    });
+
+    if (assignmentIndex === -1) {
+      return res.status(404).json({ message: "Member is not assigned to this event" });
+    }
+
+    const matchedAssignment = event.assignments[assignmentIndex];
+    const actualUserId = matchedAssignment.userId?._id || matchedAssignment.userId;
+    const oldRole = matchedAssignment.role;
+    const newRole = role.trim();
+
+    matchedAssignment.role = newRole;
+    if (notes !== undefined) {
+      matchedAssignment.notes = notes;
+    }
+    event.updatedAt = new Date();
+    await event.save();
+
+    if (actualUserId) {
+      await Assignment.findOneAndUpdate(
+        { event: event._id, user: actualUserId },
+        {
+          role: newRole,
+          ...(notes !== undefined ? { notes } : {}),
+          updatedAt: Date.now(),
+        }
+      );
+
+      // Notify the user if role changed and user is not requester
+      if (actualUserId.toString() !== req.user.userId.toString() && oldRole !== newRole) {
+        const eventTitle = event.event?.title || "Worship Service";
+        sendNotification({
+          recipientId: actualUserId,
+          type: "assignment",
+          title: "Event Role Updated 🎵",
+          message: `Your role for "${eventTitle}" was updated to ${newRole}.`,
+          link: `/events/${event._id}`,
+          eventId: event._id,
+          actionStatus: "pending",
+          assignmentRole: newRole,
+        }).catch((err) => console.warn("Failed to notify user:", err.message));
+      }
+    }
+
+    const populated = await populateEventDetails(event._id);
+    res.json({
+      message: "Event assignment role updated successfully",
+      event: populated,
+      assignment: matchedAssignment,
+    });
+  } catch (err) {
+    console.error("Error updating assignment role:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // Replace event roster
 exports.setEventTeamFromRoster = async (req, res) => {
   try {

@@ -104,7 +104,11 @@ function Dashboard() {
       (typeof firstSong === 'string' ? firstSong : firstSong?.song?._id || firstSong?.song);
 
     if (firstSongId) {
-      navigate(`/events/${nextUpcomingEvent._id}/setlist/${firstSongId}?view=lyrics`);
+      let savedMode = 'chords';
+      try {
+        savedMode = localStorage.getItem('wplanner_setlist_view_mode') || 'chords';
+      } catch (e) {}
+      navigate(`/events/${nextUpcomingEvent._id}/setlist/${firstSongId}?view=${savedMode}`);
     } else {
       navigate(`/events/${nextUpcomingEvent._id}`);
     }

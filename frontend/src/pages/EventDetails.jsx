@@ -32,6 +32,7 @@ import {
   Avatar,
   Tooltip,
   CircularProgress,
+  Stack,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -55,9 +56,22 @@ import {
   VolunteerActivism as VolunteerActivismIcon,
   HowToReg as HowToRegIcon,
   Tv as TvIcon,
+  ManageAccounts as ManageAccountsIcon,
 } from '@mui/icons-material';
 import api, { apiUrl } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+
+const EVENT_ROLE_OPTIONS = [
+  'Worship Leader',
+  'Singer',
+  'Guitarist',
+  'Keyboardist',
+  'Drummer',
+  'Bassist',
+  'Production',
+  'Member',
+  'Other',
+];
 import { getEventDisplayTitle } from '../utils/eventTitle';
 import { isEventLocked, EVENT_LOCKED_MESSAGE } from '../utils/eventLock';
 import { mergeSetlistWithBank, mergeSongWithBank, songsByIdMap } from '../utils/songDisplay';
@@ -141,6 +155,73 @@ function EventDetails() {
   const [optInMessage, setOptInMessage] = useState('');
   const [optInError, setOptInError] = useState('');
   const [reviewingVolunteerId, setReviewingVolunteerId] = useState(null);
+
+  // ----- Admin Change Event Role State -----
+  const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+  const [selectedMemberForRole, setSelectedMemberForRole] = useState(null);
+  const [newAssignmentRole, setNewAssignmentRole] = useState('Member');
+  const [newAssignmentNotes, setNewAssignmentNotes] = useState('');
+  const [isUpdatingRole, setIsUpdatingRole] = useState(false);
+  const [roleUpdateError, setRoleUpdateError] = useState('');
+
+  const handleOpenEditRoleDialog = (member) => {
+    setSelectedMemberForRole(member);
+    setNewAssignmentRole(member.role || 'Member');
+    setNewAssignmentNotes(member.notes || '');
+    setRoleUpdateError('');
+    setRoleDialogOpen(true);
+  };
+
+  const handleCloseEditRoleDialog = () => {
+    setSelectedMemberForRole(null);
+    setRoleDialogOpen(false);
+    setIsUpdatingRole(false);
+    setRoleUpdateError('');
+  };
+
+  const handleSaveEventRole = async () => {
+    if (!selectedMemberForRole) return;
+    const memberUserId =
+      selectedMemberForRole.userId?._id ||
+      selectedMemberForRole.userId ||
+      selectedMemberForRole._id;
+    try {
+      setIsUpdatingRole(true);
+      setRoleUpdateError('');
+      const res = await api.patch(`/events/${id}/assignments/${memberUserId}/role`, {
+        role: newAssignmentRole,
+        notes: newAssignmentNotes,
+      });
+
+      setEvent(res.data.event || res.data);
+      if (res.data.event?.assignments) {
+        setTeamMembers(res.data.event.assignments);
+      } else {
+        setTeamMembers((prev) =>
+          prev.map((m) => {
+            const uid = m.userId?._id || m.userId || m._id;
+            return String(uid) === String(memberUserId)
+              ? { ...m, role: newAssignmentRole, notes: newAssignmentNotes }
+              : m;
+          })
+        );
+      }
+      handleCloseEditRoleDialog();
+      setSaveMessage({
+        type: 'success',
+        text: `Updated role to "${newAssignmentRole}" for ${
+          selectedMemberForRole.userId?.name || selectedMemberForRole.name || 'member'
+        }!`,
+      });
+      setTimeout(() => setSaveMessage(''), 4500);
+    } catch (err) {
+      setRoleUpdateError(
+        err?.response?.data?.message || 'Failed to update event role'
+      );
+    } finally {
+      setIsUpdatingRole(false);
+    }
+  };
 
   // Auto-open volunteer opt-in modal if routed from notification contribute button
   useEffect(() => {
@@ -2055,12 +2136,27 @@ function EventDetails() {
                               </Box>
                             </TableCell>
                             <TableCell sx={{ py: 1.25 }}>
-                              <Chip
-                                label={member.role || 'Member'}
-                                size="small"
-                                variant="outlined"
-                                sx={{ fontWeight: 600, fontSize: '0.75rem', height: 24 }}
-                              />
+                              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                <Chip
+                                  label={member.role || 'Member'}
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{ fontWeight: 600, fontSize: '0.75rem', height: 24 }}
+                                />
+                                {canEdit && isFullAdmin && (
+                                  <Tooltip title={`Change role for ${member.userId?.name || member.name || 'member'} in this event`}>
+                                    <IconButton
+                                      size="small"
+                                      color="primary"
+                                      onClick={() => handleOpenEditRoleDialog(member)}
+                                      sx={{ p: 0.3 }}
+                                      aria-label={`Change role for ${member.userId?.name || member.name || 'member'}`}
+                                    >
+                                      <EditIcon sx={{ fontSize: 14 }} />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                              </Box>
                             </TableCell>
                             <TableCell sx={{ py: 1.25 }}>
                               {isApproved ? (
@@ -2439,6 +2535,75 @@ function EventDetails() {
             sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700 }}
           >
             {optInSubmitting ? 'Submitting...' : 'Offer to Serve'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Change Event Role Dialog */}
+      <Dialog
+        open={roleDialogOpen}
+        onClose={handleCloseEditRoleDialog}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Change Role in Event
+        </DialogTitle>
+        <DialogContent dividers>
+          {selectedMemberForRole && (
+            <Stack spacing={2.5} sx={{ pt: 1 }}>
+              {roleUpdateError && (
+                <Alert severity="error" sx={{ py: 0.5 }}>
+                  {roleUpdateError}
+                </Alert>
+              )}
+              <Box>
+                <Typography variant="caption" color="text.secondary">
+                  Team Member
+                </Typography>
+                <Typography variant="subtitle1" fontWeight={700}>
+                  {selectedMemberForRole.userId?.name || selectedMemberForRole.name || 'Member'}
+                </Typography>
+              </Box>
+
+              <FormControl fullWidth size="small">
+                <InputLabel id="change-event-role-label">Assigned Role</InputLabel>
+                <Select
+                  labelId="change-event-role-label"
+                  label="Assigned Role"
+                  value={newAssignmentRole}
+                  onChange={(e) => setNewAssignmentRole(e.target.value)}
+                >
+                  {EVENT_ROLE_OPTIONS.map((r) => (
+                    <MenuItem key={r} value={r}>
+                      {r}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <TextField
+                label="Assignment Notes (optional)"
+                size="small"
+                multiline
+                rows={2}
+                value={newAssignmentNotes}
+                onChange={(e) => setNewAssignmentNotes(e.target.value)}
+                placeholder="e.g. Lead vocals, Acoustic guitar, Audio mixing"
+              />
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={handleCloseEditRoleDialog} disabled={isUpdatingRole}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveEventRole}
+            disabled={isUpdatingRole || !newAssignmentRole.trim()}
+          >
+            {isUpdatingRole ? 'Saving…' : 'Save Role'}
           </Button>
         </DialogActions>
       </Dialog>
