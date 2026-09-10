@@ -123,9 +123,12 @@ exports.createSong = async (req, res) => {
       return res.status(200).json(existing);
     }
 
+    const userSelectedKey =
+      key && key !== 'AUTO' && key !== 'auto' ? normalizeKey(key) : null;
+
     let finalTitle = trimmedTitle;
     let finalArtist = artist;
-    let finalKey = key ? normalizeKey(key) : null;
+    let finalKey = userSelectedKey;
     let finalBpm = bpm;
     let finalTimeSignature = normalizeTimeSignature(timeSignature);
     let finalContent = content || {};
@@ -143,22 +146,20 @@ exports.createSong = async (req, res) => {
         const importResult = await defaultSongImportService.autoImportBestMatch({
           query: trimmedTitle,
           churchId: req.user.churchId,
-          keyPreference: key,
+          keyPreference: userSelectedKey,
         });
 
         if (importResult.imported && importResult.song) {
           const imported = importResult.song;
+          const originalImportedKey = imported.key ? normalizeKey(imported.key) : 'C';
+
           // Use official song title from Ultimate Guitar if user typed a typo
           finalTitle = imported.title || trimmedTitle;
           finalArtist = finalArtist || imported.artist;
-          if (!finalKey && imported.key) {
-            finalKey = normalizeKey(imported.key);
-          }
           finalBpm = finalBpm || imported.bpm;
           if (!finalTimeSignature && imported.timeSignature) {
             finalTimeSignature = normalizeTimeSignature(imported.timeSignature);
           }
-          finalContent = imported.content || finalContent;
           finalSource = imported.source || {
             type: 'external',
             provider: 'ultimate_guitar',
@@ -171,10 +172,33 @@ exports.createSong = async (req, res) => {
           if (imported.tuning) {
             finalTuning = imported.tuning;
           }
+
+          // If user selected a specific key different from the original key, convert chords to that key
+          if (userSelectedKey && userSelectedKey !== originalImportedKey) {
+            const rawChords = imported.content?.chords || '';
+            const convertedChords = transposeChordsText(
+              rawChords,
+              originalImportedKey,
+              userSelectedKey
+            );
+            finalContent = {
+              ...(imported.content || {}),
+              chords: convertedChords,
+            };
+            finalKey = userSelectedKey;
+          } else {
+            // Keep in original key from Ultimate Guitar
+            finalContent = imported.content || finalContent;
+            finalKey = originalImportedKey;
+          }
         }
       } catch (importErr) {
         console.warn('Auto-import on song create encountered error:', importErr.message);
       }
+    }
+
+    if (!finalKey) {
+      finalKey = userSelectedKey || 'C';
     }
 
     if (timeSignature != null && timeSignature !== '' && !finalTimeSignature) {

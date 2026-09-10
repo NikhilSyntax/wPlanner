@@ -630,7 +630,125 @@ I have already come
     assert.strictEqual(jsonResult.key, 'D');
     assert.ok(jsonResult.content?.chords.includes('A/C#'), 'Chords in DB must be transposed to Key D');
 
-    console.log('\nAll 31 Ultimate Guitar Song Import, Auto-Import & Key Transposition test cases passed successfully!');
+    // -------------------------------------------------------------
+    // Test 32: Quick add song imports in original key and converts to selected key
+    // -------------------------------------------------------------
+    console.log('Test 32: Quick add song imports in original key and converts to selected key');
+    const autoImportSearchFetcher32 = async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          store: {
+            page: {
+              data: {
+                results: [
+                  {
+                    id: 5000001,
+                    song_name: 'Goodness Of God',
+                    artist_name: 'Bethel Music',
+                    type_name: 'Chords',
+                    tab_url: 'https://tabs.ultimate-guitar.com/tab/bethel-music/goodness-of-god-chords-5000001',
+                    rating: 4.9,
+                    votes: 6000,
+                  },
+                ],
+              },
+            },
+          },
+        }),
+    });
+
+    const autoImportTabFetcher32 = async () => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          store: {
+            page: {
+              data: {
+                tab: { song_name: 'Goodness Of God', artist_name: 'Bethel Music' },
+                tab_view: {
+                  meta: { tonality: 'G', capo: 0, bpm: 68 },
+                  wiki_tab: {
+                    content:
+                      '[Verse 1]\nG\nI love you Lord\n           C          G\nFor your mercy never fails me\nD/F#   Em              C          D\nAll my days',
+                  },
+                },
+              },
+            },
+          },
+        }),
+    });
+
+    // Mock search and import on defaultSongImportService
+    const origSearch = defaultSongImportService.searchSongs;
+    const origImport = defaultSongImportService.importSong;
+
+    defaultSongImportService.searchSongs = async (args) =>
+      origSearch.call(defaultSongImportService, {
+        ...args,
+        options: { fetcher: autoImportSearchFetcher32 },
+      });
+
+    defaultSongImportService.importSong = async (args) =>
+      origImport.call(defaultSongImportService, {
+        ...args,
+        options: { fetcher: autoImportTabFetcher32 },
+      });
+
+    // Test with user selecting Key 'D' when original is 'G'
+    const createReqWithKeyD = {
+      user: { churchId: testChurch._id },
+      body: {
+        title: 'Goodness of God (Transposed Quick Add)',
+        key: 'D',
+        autoImport: true,
+      },
+    };
+    let createdWithKeyD = null;
+    const createResWithKeyD = {
+      json: (data) => {
+        createdWithKeyD = data;
+      },
+      status: () => createResWithKeyD,
+    };
+
+    await songController.createSong(createReqWithKeyD, createResWithKeyD);
+    assert.ok(createdWithKeyD, 'Must create song');
+    assert.strictEqual(createdWithKeyD.key, 'D', 'Song key must be user-selected key D');
+    assert.ok(createdWithKeyD.content?.chords.includes('A/C#'), 'Chords must be converted to Key D');
+
+    // -------------------------------------------------------------
+    // Test 33: Quick add song imports and preserves original key when AUTO
+    // -------------------------------------------------------------
+    console.log('Test 33: Quick add song imports and preserves original key when AUTO');
+    const createReqWithAutoKey = {
+      user: { churchId: testChurch._id },
+      body: {
+        title: 'Goodness of God (Original Key Quick Add)',
+        key: 'AUTO',
+        autoImport: true,
+      },
+    };
+    let createdWithAuto = null;
+    const createResWithAuto = {
+      json: (data) => {
+        createdWithAuto = data;
+      },
+      status: () => createResWithAuto,
+    };
+
+    await songController.createSong(createReqWithAutoKey, createResWithAuto);
+    assert.ok(createdWithAuto, 'Must create song');
+    assert.strictEqual(createdWithAuto.key, 'G', 'Song key must be original imported key G');
+    assert.ok(createdWithAuto.content?.chords.includes('D/F#'), 'Chords must be in original Key G');
+
+    // Restore service mocks
+    defaultSongImportService.searchSongs = origSearch;
+    defaultSongImportService.importSong = origImport;
+
+    console.log('\nAll 33 Ultimate Guitar Song Import, Auto-Import & Key Transposition test cases passed successfully!');
   } finally {
     await Church.deleteMany({});
     await Song.deleteMany({});

@@ -120,7 +120,7 @@ function EventDetails() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [songs, setSongs] = useState([]);
   const [newSongTitle, setNewSongTitle] = useState('');
-  const [newSongKey, setNewSongKey] = useState('C');
+  const [newSongKey, setNewSongKey] = useState('AUTO');
   const [addSongLoading, setAddSongLoading] = useState(false);
   const [addSongError, setAddSongError] = useState('');
   const [setlist, setSetlist] = useState([]);
@@ -544,11 +544,14 @@ function EventDetails() {
       if (!songToAdd) {
         const res = await api.post('/songs', {
           title,
-          key: newSongKey,
+          key: newSongKey === 'AUTO' ? undefined : newSongKey,
           autoImport: true,
         });
         songToAdd = res.data?.song || res.data;
         isBrandNew = true;
+      } else if (newSongKey !== 'AUTO' && newSongKey !== existingInBank.key) {
+        const res = await api.put(`/songs/${existingInBank._id}`, { key: newSongKey });
+        songToAdd = res.data?.song || res.data;
       }
 
       if (!songToAdd || !songToAdd._id) {
@@ -566,7 +569,7 @@ function EventDetails() {
       });
 
       setNewSongTitle('');
-      setNewSongKey('C');
+      setNewSongKey('AUTO');
       await loadPageData(false);
       const isAutoImported = songToAdd?.source?.provider === 'ultimate_guitar';
       setSaveMessage({
@@ -1533,16 +1536,19 @@ function EventDetails() {
                         )}
                         sx={{ flex: 1, minWidth: { xs: 150, sm: 260 } }}
                       />
-                      <FormControl size="small" sx={{ minWidth: 85 }}>
+                      <FormControl size="small" sx={{ minWidth: 105 }}>
                         <InputLabel>Key</InputLabel>
                         <Select
                           value={newSongKey}
                           label="Key"
                           onChange={(e) => setNewSongKey(e.target.value)}
                         >
+                          <MenuItem value="AUTO">
+                            <em>Auto (Original)</em>
+                          </MenuItem>
                           {keyOptions.map((k) => (
                             <MenuItem key={k} value={k}>
-                              {k}
+                              Key: {k}
                             </MenuItem>
                           ))}
                         </Select>
