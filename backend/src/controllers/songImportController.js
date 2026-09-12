@@ -7,6 +7,8 @@ const { defaultSongImportService } = require('../services/songImport/SongImportS
 exports.searchSongs = async (req, res) => {
   try {
     const query = req.query.q || req.query.query;
+    const provider = req.query.provider || 'ultimate_guitar';
+    const language = req.query.language;
 
     if (!query || typeof query !== 'string' || !query.trim()) {
       return res.status(400).json({ message: 'Search query parameter (q) is required.' });
@@ -16,6 +18,8 @@ exports.searchSongs = async (req, res) => {
     const result = await defaultSongImportService.searchSongs({
       query: query.trim(),
       churchId,
+      provider,
+      language,
     });
 
     return res.status(200).json(result);
@@ -27,6 +31,31 @@ exports.searchSongs = async (req, res) => {
       err.message || 'An error occurred while searching for songs. Please try again later.';
 
     return res.status(statusCode).json({ message });
+  }
+};
+
+/**
+ * Handles fetching best matching Telugu lyrics from ChristianLyricz
+ * GET /api/songs/import/telugu?q=...&artist=...
+ */
+exports.searchTeluguLyrics = async (req, res) => {
+  try {
+    const query = req.query.q || req.query.query;
+    const artist = req.query.artist || '';
+
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      return res.status(400).json({ message: 'Search query parameter (q) is required.' });
+    }
+
+    const match = await defaultSongImportService.autoImportTeluguLyrics(query.trim(), artist.trim());
+    if (!match || !match.found) {
+      return res.status(404).json({ message: `No Telugu lyrics found for "${query}".` });
+    }
+
+    return res.status(200).json(match);
+  } catch (err) {
+    console.error('Telugu lyrics search error:', err.message);
+    return res.status(500).json({ message: 'Failed to search ChristianLyricz for Telugu lyrics.' });
   }
 };
 

@@ -49,6 +49,7 @@ export default function ImportSongModal({
   // Search State
   const [searchTitle, setSearchTitle] = useState('');
   const [searchArtist, setSearchArtist] = useState('');
+  const [searchProvider, setSearchProvider] = useState('all');
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -78,6 +79,7 @@ export default function ImportSongModal({
     setSearching(false);
     setSearchTitle('');
     setSearchArtist('');
+    setSearchProvider('all');
     setSearchResults([]);
     setHasSearched(false);
     setImportingResultId(null);
@@ -98,7 +100,7 @@ export default function ImportSongModal({
   };
 
   // -------------------------------------------------------------
-  // TAB 0: Search Ultimate Guitar
+  // TAB 0: Search External Providers (UG & ChristianLyricz)
   // -------------------------------------------------------------
   const handleSearch = async (e) => {
     if (e) e.preventDefault();
@@ -116,16 +118,16 @@ export default function ImportSongModal({
       setSearchResults([]);
 
       const res = await api.get('/songs/import/search', {
-        params: { q: query },
+        params: { q: query, provider: searchProvider },
       });
 
       const list = res.data?.results || [];
       setSearchResults(list);
     } catch (err) {
-      console.error('Ultimate Guitar search error:', err);
+      console.error('Song search error:', err);
       const msg =
         err.response?.data?.message ||
-        'Unable to search Ultimate Guitar right now. You can paste the direct tab URL or paste chords manually.';
+        'Unable to search song providers right now. You can paste the direct URL or paste chords manually.';
       setError(msg);
     } finally {
       setSearching(false);
@@ -170,13 +172,16 @@ export default function ImportSongModal({
     const cleanUrl = url.trim();
 
     if (!cleanUrl) {
-      setError('Please enter an Ultimate Guitar song URL.');
+      setError('Please enter a song URL from Ultimate Guitar or ChristianLyricz.');
       return;
     }
 
-    if (!cleanUrl.includes('ultimate-guitar.com') || !cleanUrl.includes('/tab/')) {
+    if (
+      !cleanUrl.includes('ultimate-guitar.com') &&
+      !cleanUrl.includes('christianlyricz.com')
+    ) {
       setError(
-        'Please enter a valid Ultimate Guitar chord/tab URL (e.g., https://tabs.ultimate-guitar.com/tab/...)'
+        'Please enter a valid song URL from Ultimate Guitar (https://tabs.ultimate-guitar.com/tab/...) or ChristianLyricz (https://christianlyricz.com/song/...)'
       );
       return;
     }
@@ -400,13 +405,13 @@ export default function ImportSongModal({
               <Tab
                 icon={<SearchIcon sx={{ fontSize: 18 }} />}
                 iconPosition="start"
-                label="Search Ultimate Guitar"
+                label="Search Songs & Lyrics"
                 sx={{ textTransform: 'none', fontWeight: 600 }}
               />
               <Tab
                 icon={<LinkIcon sx={{ fontSize: 18 }} />}
                 iconPosition="start"
-                label="Direct Tab URL"
+                label="Direct Song URL"
                 sx={{ textTransform: 'none', fontWeight: 600 }}
               />
               <Tab
@@ -417,7 +422,7 @@ export default function ImportSongModal({
               />
             </Tabs>
 
-            {/* TAB 0: Search Ultimate Guitar (Primary Experience) */}
+            {/* TAB 0: Search Providers (UG & ChristianLyricz) */}
             {tabIndex === 0 && (
               <Box>
                 <Box
@@ -432,16 +437,36 @@ export default function ImportSongModal({
                     borderColor: 'divider',
                   }}
                 >
-                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
-                    Search for a Song
-                  </Typography>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5} flexWrap="wrap" gap={1}>
+                    <Typography variant="subtitle2" fontWeight={700}>
+                      Search for a Song
+                    </Typography>
+                    <Stack direction="row" spacing={0.75}>
+                      {[
+                        { key: 'all', label: 'All Sources' },
+                        { key: 'ultimate_guitar', label: 'Ultimate Guitar (Chords)' },
+                        { key: 'christian_lyricz', label: 'ChristianLyricz (Telugu)' },
+                      ].map((prov) => (
+                        <Chip
+                          key={prov.key}
+                          label={prov.label}
+                          size="small"
+                          clickable
+                          color={searchProvider === prov.key ? 'primary' : 'default'}
+                          variant={searchProvider === prov.key ? 'filled' : 'outlined'}
+                          onClick={() => setSearchProvider(prov.key)}
+                          sx={{ fontWeight: 600, fontSize: '0.72rem', height: 24 }}
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
 
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems="center">
                     <TextField
                       fullWidth
                       size="small"
                       label="Song Title or Keywords"
-                      placeholder="e.g. Goodness of God, Way Maker, Amazing Grace"
+                      placeholder="e.g. Goodness of God, Anni Kaalambula, Hosanna, Way Maker"
                       value={searchTitle}
                       onChange={(e) => setSearchTitle(e.target.value)}
                       disabled={searching || importingResultId !== null}
@@ -451,7 +476,7 @@ export default function ImportSongModal({
                     <TextField
                       size="small"
                       label="Artist (optional)"
-                      placeholder="e.g. Bethel Music, Chris Tomlin"
+                      placeholder="e.g. Bethel Music, Bethaala John"
                       value={searchArtist}
                       onChange={(e) => setSearchArtist(e.target.value)}
                       disabled={searching || importingResultId !== null}
@@ -555,11 +580,20 @@ export default function ImportSongModal({
                                 <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
                                   {item.title}
                                 </Typography>
-                                <Chip
-                                  label={`Ver ${item.version}`}
-                                  size="small"
-                                  sx={{ fontWeight: 700, fontSize: '0.7rem', height: 20 }}
-                                />
+                                {item.provider === 'christian_lyricz' ? (
+                                  <Chip
+                                    label="ChristianLyricz • Telugu"
+                                    size="small"
+                                    color="secondary"
+                                    sx={{ fontWeight: 700, fontSize: '0.7rem', height: 20 }}
+                                  />
+                                ) : (
+                                  <Chip
+                                    label={`UG • Ver ${item.version || 1}`}
+                                    size="small"
+                                    sx={{ fontWeight: 700, fontSize: '0.7rem', height: 20 }}
+                                  />
+                                )}
                                 {item.tonality && (
                                   <Chip
                                     label={`Key: ${item.tonality}`}

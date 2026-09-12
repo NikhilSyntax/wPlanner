@@ -8,11 +8,17 @@ const requireApproved = require('../middleware/requireApproved');
 router.use(authMiddleware.verifyToken);
 router.use(requireApproved);
 
-// Search songs from external provider (e.g. Ultimate Guitar)
+// Search songs from external provider (e.g. Ultimate Guitar, ChristianLyricz)
 router.get('/import/search', songImportController.searchSongs);
 
-// Import song from external provider (e.g. Ultimate Guitar)
+// Search or auto-fetch Telugu lyrics from ChristianLyricz
+router.get('/import/telugu', songImportController.searchTeluguLyrics);
+
+// Import song from external provider (e.g. Ultimate Guitar, ChristianLyricz)
 router.post('/import', songImportController.importSong);
+
+// Import Telugu lyrics from ChristianLyricz for an existing song
+router.post('/:id/import-telugu', authMiddleware.roleRestriction(['team_leader', 'admin']), songController.importTeluguLyrics);
 
 // Parse raw pasted chord/lyric text (manual fallback)
 router.post('/parse-raw', songImportController.parseRaw);

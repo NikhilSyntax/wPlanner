@@ -1,6 +1,8 @@
 const Song = require('../../models/Song');
 const { UltimateGuitarProvider } = require('./UltimateGuitarProvider');
 const { UltimateGuitarParser } = require('./UltimateGuitarParser');
+const { ChristianLyriczProvider } = require('./ChristianLyriczProvider');
+const { calculateTypoSimilarity } = require('../../utils/typoSimilarity');
 
 function escapeRegex(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -12,7 +14,9 @@ function escapeRegex(string) {
  */
 class SongImportService {
   constructor() {
-    this.providers = [new UltimateGuitarProvider()];
+    this.ugProvider = new UltimateGuitarProvider();
+    this.clProvider = new ChristianLyriczProvider();
+    this.providers = [this.ugProvider, this.clProvider];
   }
 
   /**
@@ -53,7 +57,7 @@ class SongImportService {
 
     if (!provider) {
       const err = new Error(
-        'Unsupported URL. Only Ultimate Guitar tab/chord URLs (https://tabs.ultimate-guitar.com/tab/...) are currently supported.'
+        'Unsupported URL. Supported providers include Ultimate Guitar (https://tabs.ultimate-guitar.com/...) and ChristianLyricz (https://christianlyricz.com/...)'
       );
       err.statusCode = 400;
       throw err;
@@ -153,24 +157,37 @@ class SongImportService {
    * @param {object} params
    * @param {string} params.query - Search query (title / artist)
    * @param {string|ObjectId} [params.churchId] - Church ID for duplicate checks
+   * @param {string} [params.provider] - 'ultimate_guitar', 'christian_lyricz', or 'all'
+   * @param {string} [params.language] - Language filter (e.g. 'telugu')
    * @param {object} [params.options] - Optional mock fetcher / timeouts
    * @returns {Promise<object>} Search results with duplicate flags
    */
-  async searchSongs({ query, churchId, options = {} }) {
+  async searchSongs({ query, churchId, provider = 'ultimate_guitar', language, options = {} }) {
     if (!query || typeof query !== 'string' || !query.trim()) {
       const err = new Error('Search query is required.');
       err.statusCode = 400;
       throw err;
     }
 
-    const provider = this.providers[0];
-    if (!provider || typeof provider.search !== 'function') {
+    let targetProvider = this.ugProvider;
+    if (provider === 'christian_lyricz' || language === 'telugu' || /[\u0C00-\u0C7F]/.test(query)) {
+      targetProvider = this.clProvider;
+    }
+
+    let rawResults = [];
+    if (provider === 'all') {
+      const [ugRes, clRes] = await Promise.all([
+        this.ugProvider.search(query, options).catch(() => []),
+        this.clProvider.search(query, { language, ...options }).catch(() => []),
+      ]);
+      rawResults = [...ugRes, ...clRes];
+    } else if (targetProvider && typeof targetProvider.search === 'function') {
+      rawResults = await targetProvider.search(query, { language, ...options });
+    } else {
       const err = new Error('No search provider available.');
       err.statusCode = 500;
       throw err;
     }
-
-    const rawResults = await provider.search(query, options);
 
     // Cross-reference with church song library for duplicate matching
     let librarySongs = [];
@@ -229,6 +246,31 @@ class SongImportService {
       count: results.length,
       results,
     };
+  }
+
+  /**
+   * Automatically searches and imports Telugu lyrics from ChristianLyricz.
+   *
+   * @param {string} songTitle - Song title
+   * @param {string} [artist] - Optional artist
+   * @param {object} [options]
+   * @returns {Promise<object|null>}
+   */
+  async autoImportTeluguLyrics(songTitle, artist = '', options = {}) {
+    if (!this.clProvider) return null;
+    return this.clProvider.findBestTeluguMatch(songTitle, artist, options);
+  }
+
+  /**
+   * Search specifically for Telugu Christian songs on ChristianLyricz.
+   *
+   * @param {string} query
+   * @param {object} [options]
+   * @returns {Promise<Array<object>>}
+   */
+  async searchTeluguSongs(query, options = {}) {
+    if (!this.clProvider) return [];
+    return this.clProvider.search(query, { language: 'telugu', ...options });
   }
 
   /**
@@ -344,69 +386,6 @@ class SongImportService {
   }
 }
 
-function normalizeStr(s) {
-  return (s || '')
-    .toLowerCase()
-    .replace(/[^\w\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function levenshteinDistance(s1, s2) {
-  const m = s1.length;
-  const n = s2.length;
-  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
-      if (i > 1 && j > 1 && s1[i - 1] === s2[j - 2] && s1[i - 2] === s2[j - 1]) {
-        dp[i][j] = Math.min(dp[i][j], dp[i - 2][j - 2] + 1);
-      }
-    }
-  }
-  return dp[m][n];
-}
-
-function getBigrams(str) {
-  const s = ` ${str} `;
-  const bigrams = new Set();
-  for (let i = 0; i < s.length - 1; i++) {
-    bigrams.add(s.substring(i, i + 2));
-  }
-  return bigrams;
-}
-
-function diceCoefficient(s1, s2) {
-  if (s1 === s2) return 1;
-  if (!s1 || !s2) return 0;
-  const b1 = getBigrams(s1);
-  const b2 = getBigrams(s2);
-  let intersection = 0;
-  for (const item of b1) {
-    if (b2.has(item)) intersection++;
-  }
-  return (2 * intersection) / (b1.size + b2.size);
-}
-
-function calculateTypoSimilarity(query, target) {
-  const q = normalizeStr(query);
-  const t = normalizeStr(target);
-  if (!q || !t) return 0;
-  if (q === t) return 1;
-  if (t.includes(q) || q.includes(t)) {
-    const minLen = Math.min(q.length, t.length);
-    const maxLen = Math.max(q.length, t.length);
-    return Math.max(0.8, minLen / maxLen);
-  }
-  const maxLen = Math.max(q.length, t.length);
-  const editSim = 1 - levenshteinDistance(q, t) / maxLen;
-  const diceSim = diceCoefficient(q, t);
-  return Math.max(editSim, diceSim);
-}
-
 const defaultSongImportService = new SongImportService();
 
 module.exports = {
@@ -414,3 +393,5 @@ module.exports = {
   defaultSongImportService,
   calculateTypoSimilarity,
 };
+
+

@@ -779,6 +779,37 @@ function ChordSheetViewer({
     window.print();
   };
 
+  const [fetchingTelugu, setFetchingTelugu] = useState(false);
+
+  const handleAutoFetchTeluguLyrics = async () => {
+    const q = title || '';
+    if (!q.trim()) {
+      setLangError('Song title is required to search ChristianLyricz.');
+      return;
+    }
+    try {
+      setFetchingTelugu(true);
+      setLangError('');
+      const res = await api.get('/songs/import/telugu', {
+        params: { q: q.trim(), artist: artist || '' },
+      });
+      if (res.data?.lyrics) {
+        setLangLyrics(res.data.lyrics);
+        setSelectedPreset('Telugu');
+        setToastMessage(`Fetched Telugu lyrics for "${res.data.teluguTitle || q}" from ChristianLyricz!`);
+      } else {
+        setLangError(`No Telugu lyrics found on ChristianLyricz matching "${q}".`);
+      }
+    } catch (err) {
+      console.error('Auto-fetch Telugu lyrics error:', err);
+      setLangError(
+        err?.response?.data?.message || `No Telugu lyrics found on ChristianLyricz matching "${q}".`
+      );
+    } finally {
+      setFetchingTelugu(false);
+    }
+  };
+
   const handleOpenAddLangModal = (existingLang = null) => {
     if (existingLang) {
       const found = regionalList.find(
@@ -1718,6 +1749,29 @@ function ChordSheetViewer({
                 ))}
               </Select>
             </FormControl>
+
+            {selectedPreset === 'Telugu' && (
+              <Button
+                size="small"
+                variant="outlined"
+                color="primary"
+                startIcon={<ImportIcon sx={{ fontSize: 16 }} />}
+                onClick={handleAutoFetchTeluguLyrics}
+                disabled={fetchingTelugu}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.8rem',
+                  borderRadius: 2,
+                  py: 0.75,
+                  bgcolor: 'rgba(37, 99, 235, 0.04)',
+                }}
+              >
+                {fetchingTelugu
+                  ? 'Fetching from ChristianLyricz...'
+                  : 'Auto-Fetch Telugu from ChristianLyricz'}
+              </Button>
+            )}
 
             {selectedPreset === 'Custom' && (
               <TextField

@@ -207,6 +207,33 @@ exports.createSong = async (req, res) => {
       });
     }
 
+    let finalRegionalLyrics = Array.isArray(req.body.regionalLyrics)
+      ? [...req.body.regionalLyrics]
+      : [];
+
+    // Automatically check ChristianLyricz for Telugu lyrics if not already provided and autoImport is enabled
+    const hasTelugu = finalRegionalLyrics.some((r) => r.language?.toLowerCase() === 'telugu');
+    if (autoImport !== false && !hasTelugu) {
+      try {
+        const teluguMatch = await defaultSongImportService.autoImportTeluguLyrics(
+          finalTitle,
+          finalArtist
+        );
+        if (teluguMatch && teluguMatch.found && teluguMatch.lyrics) {
+          finalRegionalLyrics.push({
+            language: 'Telugu',
+            name: teluguMatch.teluguTitle || 'Telugu',
+            content: {
+              lyrics: teluguMatch.lyrics,
+              chords: teluguMatch.chords || teluguMatch.lyrics,
+            },
+          });
+        }
+      } catch (teluguErr) {
+        console.warn('Auto-import Telugu lyrics encountered error:', teluguErr.message);
+      }
+    }
+
     const song = new Song({
       churchId: req.user.churchId,
       title: finalTitle,
@@ -219,6 +246,7 @@ exports.createSong = async (req, res) => {
       genre: genre || [],
       tags: tags || [],
       content: finalContent,
+      regionalLyrics: finalRegionalLyrics,
       source: finalSource,
       capo: finalCapo,
       tuning: finalTuning,
@@ -566,4 +594,60 @@ exports.deleteUserSongPreference = async (req, res) => {
     res.status(500).json({ message: 'Failed to reset personal key preference' });
   }
 };
+
+// Fetch and attach Telugu lyrics from ChristianLyricz for an existing song
+exports.importTeluguLyrics = async (req, res) => {
+  try {
+    if (!req.user?.churchId) {
+      return res.status(404).json({ message: 'Song not found' });
+    }
+    const song = await Song.findOne({
+      _id: req.params.id,
+      churchId: req.user.churchId,
+    });
+    if (!song) return res.status(404).json({ message: 'Song not found' });
+
+    const query = req.body.query || req.body.title || song.title;
+    const artist = req.body.artist || song.artist || '';
+
+    const teluguMatch = await defaultSongImportService.autoImportTeluguLyrics(query, artist);
+    if (!teluguMatch || !teluguMatch.found || !teluguMatch.lyrics) {
+      return res.status(404).json({
+        message: `No Telugu lyrics found on ChristianLyricz matching "${query}".`,
+      });
+    }
+
+    const existing = Array.isArray(song.regionalLyrics) ? [...song.regionalLyrics] : [];
+    const idx = existing.findIndex((r) => r.language?.toLowerCase() === 'telugu');
+    const entry = {
+      language: 'Telugu',
+      name: teluguMatch.teluguTitle || 'Telugu',
+      content: {
+        lyrics: teluguMatch.lyrics,
+        chords: teluguMatch.chords || teluguMatch.lyrics,
+      },
+    };
+
+    if (idx >= 0) {
+      existing[idx] = entry;
+    } else {
+      existing.push(entry);
+    }
+
+    song.regionalLyrics = existing;
+    await song.save();
+
+    const [enriched] = await enrichSongsUsage([song.toObject()]);
+    return res.status(200).json({
+      success: true,
+      message: `Telugu lyrics for "${teluguMatch.teluguTitle || song.title}" imported successfully from ChristianLyricz!`,
+      song: enriched,
+      teluguMatch,
+    });
+  } catch (err) {
+    console.error('Import Telugu lyrics error:', err);
+    return res.status(500).json({ message: 'Failed to import Telugu lyrics.' });
+  }
+};
+
 

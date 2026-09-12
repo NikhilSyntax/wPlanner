@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const DEFAULT_CORS_ORIGINS = [
   'http://localhost:5173',
+  'https://wplanneru.pages.dev',
   'https://wplanner-frontend-36kt.onrender.com',
 ];
 
