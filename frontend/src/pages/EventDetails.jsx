@@ -57,9 +57,11 @@ import {
   HowToReg as HowToRegIcon,
   Tv as TvIcon,
   ManageAccounts as ManageAccountsIcon,
+  Print as PrintIcon,
 } from '@mui/icons-material';
 import api, { apiUrl } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import PrintSetlistModal from '../components/events/PrintSetlistModal';
 
 const EVENT_ROLE_OPTIONS = [
   'Worship Leader',
@@ -138,6 +140,7 @@ function EventDetails() {
   const [addSongLoading, setAddSongLoading] = useState(false);
   const [addSongError, setAddSongError] = useState('');
   const [setlist, setSetlist] = useState([]);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [reminderLoading, setReminderLoading] = useState(false);
   const [reminderMessage, setReminderMessage] = useState('');
   // ----- edit mode for title/description -----
@@ -1161,20 +1164,35 @@ function EventDetails() {
                   </Typography>
                 </Box>
                 {setlist.length > 0 && (
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<TvIcon />}
-                    onClick={() => navigate(`/live/operator/${id}`)}
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      fontWeight: 700,
-                      boxShadow: '0 4px 14px rgba(56, 189, 248, 0.25)',
-                    }}
-                  >
-                    Present Live (TV)
-                  </Button>
+                  <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      startIcon={<PrintIcon />}
+                      onClick={() => setPrintModalOpen(true)}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Print Set List
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      startIcon={<TvIcon />}
+                      onClick={() => navigate(`/live/operator/${id}`)}
+                      sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        boxShadow: '0 4px 14px rgba(56, 189, 248, 0.25)',
+                      }}
+                    >
+                      Present Live (TV)
+                    </Button>
+                  </Box>
                 )}
               </Box>
 
@@ -2627,6 +2645,15 @@ function EventDetails() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Print Set List Modal */}
+      <PrintSetlistModal
+        open={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        event={eventInfo}
+        setlist={setlist}
+        bankSongs={songs}
+      />
     </Box>
   );
 }

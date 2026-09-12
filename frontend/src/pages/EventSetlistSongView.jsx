@@ -35,11 +35,13 @@ import {
   OpenInNew as OpenInNewIcon,
   Tv as TvIcon,
   CloudDownload as ImportIcon,
+  Print as PrintIcon,
 } from '@mui/icons-material';
 import api from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ChordSheetViewer from '../components/common/ChordSheetViewer';
 import ImportSongModal from '../components/songs/ImportSongModal';
+import PrintSetlistModal from '../components/events/PrintSetlistModal';
 
 const KEY_OPTIONS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const TIME_SIG_OPTIONS = ['2/4', '3/4', '4/4', '5/4', '6/8', '7/8'];
@@ -93,6 +95,8 @@ function EventSetlistSongView() {
   const [toastMessage, setToastMessage] = useState('');
   // Import Modal State
   const [importModalOpen, setImportModalOpen] = useState(false);
+  // Print Setlist Modal State
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     title: '',
     artist: '',
@@ -264,7 +268,24 @@ function EventSetlistSongView() {
           </Box>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            size="small"
+            variant="outlined"
+            color="primary"
+            startIcon={<PrintIcon fontSize="small" />}
+            onClick={() => setPrintModalOpen(true)}
+            sx={{
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              height: 30,
+              textTransform: 'none',
+              borderRadius: 2,
+            }}
+          >
+            Print Set List
+          </Button>
+
           <Button
             size="small"
             variant="contained"
@@ -704,6 +725,14 @@ function EventSetlistSongView() {
           setSong(updatedSong);
           setToastMessage(`Song "${updatedSong.title}" updated successfully with imported lyrics & chords!`);
         }}
+      />
+
+      {/* Print Set List Modal */}
+      <PrintSetlistModal
+        open={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        event={{ _id: id, title: eventTitle }}
+        setlist={setlist}
       />
     </Box>
   );

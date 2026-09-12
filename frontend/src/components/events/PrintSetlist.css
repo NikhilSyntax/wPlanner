@@ -1,0 +1,395 @@
+/* ==========================================================================
+   PrintSetlist.css - High-quality 2-Column Split View & Print Stylesheet
+   ========================================================================== */
+
+/* Container & Preview styles */
+.print-setlist-preview-container {
+  background-color: #f8fafc;
+  padding: 1.25rem;
+  border-radius: 12px;
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+}
+
+.print-setlist-sheet {
+  background-color: #ffffff;
+  color: #0f172a;
+  padding: 1.75rem 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
+  position: relative;
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+/* Document Header (Event Summary) */
+.print-event-header {
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 0.75rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.print-event-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.print-event-meta {
+  font-size: 0.85rem;
+  color: #475569;
+  font-weight: 500;
+}
+
+/* Song Card */
+.print-song-card {
+  margin-bottom: 2rem;
+  break-inside: auto;
+}
+
+.print-song-card:last-child {
+  margin-bottom: 0;
+}
+
+.print-song-card.page-break-after {
+  page-break-after: always;
+  break-after: page;
+}
+
+.print-song-header {
+  border-bottom: 1.5px solid #cbd5e1;
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.print-song-title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.print-song-number {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #2563eb;
+}
+
+.print-song-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.print-song-artist {
+  font-size: 0.825rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.print-song-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.print-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid #cbd5e1;
+  background-color: #f8fafc;
+  color: #1e293b;
+}
+
+.print-badge-key {
+  background-color: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  font-size: 0.8rem;
+}
+
+/* Split View: 2 Columns Layout */
+.print-song-body-2col {
+  column-count: 2;
+  column-gap: 2.25rem;
+  column-rule: 1px solid #e2e8f0;
+}
+
+@media (max-width: 768px) {
+  .print-song-body-2col {
+    column-count: 1;
+  }
+}
+
+.print-song-body-1col {
+  column-count: 1;
+}
+
+/* Sections */
+.print-section-block {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  margin-bottom: 0.75rem;
+  display: block;
+}
+
+.print-section-header {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #1e293b;
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+  margin-bottom: 0.35rem;
+  display: inline-block;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.print-section-header.chorus {
+  border-left: 3px solid #2563eb;
+  background-color: #eff6ff;
+  color: #1e40af;
+}
+
+.print-section-header.bridge {
+  border-left: 3px solid #d97706;
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.print-section-header.verse {
+  border-left: 3px solid #475569;
+}
+
+/* Paired Lines & Monospace alignment */
+.print-paired-line {
+  margin-bottom: 0.35rem;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.print-chord-line {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace !important;
+  font-weight: 700;
+  color: #1d4ed8;
+  white-space: pre !important;
+  letter-spacing: 0px !important;
+  font-size: inherit;
+  margin: 0;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.print-lyric-line {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace !important;
+  font-weight: 500;
+  color: #0f172a;
+  white-space: pre !important;
+  letter-spacing: 0px !important;
+  font-size: inherit;
+  margin: 0;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+/* Lyrics-only formatting */
+.print-mode-lyrics .print-lyric-line {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+  font-size: inherit;
+  line-height: 1.55;
+  white-space: pre-wrap !important;
+  word-break: break-word;
+}
+
+.print-mode-lyrics .print-paired-line {
+  margin-bottom: 0.25rem;
+}
+
+/* Font size presets tuned for A4 Portrait 2-Column Split View */
+.print-font-small {
+  font-size: 8.5pt;
+}
+
+.print-font-medium {
+  font-size: 9.5pt;
+}
+
+.print-font-large {
+  font-size: 11pt;
+}
+
+.print-font-xlarge {
+  font-size: 12.5pt;
+}
+
+/* ==========================================================================
+   @media print - High-Fidelity PDF and Sheet Music Print Output
+   ========================================================================== */
+/* Explicit A4 Portrait Page Size Rule */
+@page {
+  size: A4 portrait;
+  margin: 10mm 12mm 10mm 12mm;
+}
+
+@media print {
+  html, body {
+    width: 210mm !important;
+    max-width: 210mm !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide app navigation, background, dialog headers and actions */
+  body > #root,
+  .MuiBackdrop-root,
+  .MuiDialogTitle-root,
+  .MuiDialogActions-root,
+  .print-options-panel,
+  .print-no-print {
+    display: none !important;
+  }
+
+  /* Reset MUI Dialog to normal flow */
+  .MuiDialog-root {
+    position: static !important;
+    z-index: auto !important;
+    display: block !important;
+  }
+
+  .MuiDialog-container {
+    display: block !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .MuiDialog-paper {
+    max-width: 210mm !important;
+    max-height: none !important;
+    height: auto !important;
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+  }
+
+  .MuiDialogContent-root {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 10mm 12mm;
+  }
+
+  .print-setlist-preview-container {
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .print-setlist-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .print-song-card.page-break-after {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .print-section-block {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .print-song-header {
+    border-bottom: 1.5pt solid #000000 !important;
+  }
+
+  .print-chord-line {
+    color: #000000 !important;
+    font-weight: 800 !important;
+  }
+
+  .print-lyric-line {
+    color: #000000 !important;
+    font-weight: 600 !important;
+  }
+
+  .print-song-number {
+    color: #000000 !important;
+  }
+
+  .print-badge-key {
+    border: 1pt solid #000000 !important;
+    color: #000000 !important;
+    background: transparent !important;
+    font-weight: 800 !important;
+  }
+
+  .print-section-header {
+    border: 1pt solid #444444 !important;
+    background: #f1f5f9 !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-section-header.chorus {
+    border-left: 3pt solid #000000 !important;
+  }
+
+  .print-section-header.bridge {
+    border-left: 3pt solid #000000 !important;
+  }
+
+  /* Force 2 columns with generous column gap in physical print */
+  .print-song-body-2col {
+    column-count: 2 !important;
+    column-gap: 2rem !important;
+    column-rule: 0.5pt solid #cbd5e1 !important;
+  }
+}
