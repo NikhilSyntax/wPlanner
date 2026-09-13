@@ -52,6 +52,8 @@ function EventSetlistSongView() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const viewQuery = searchParams.get('view');
+  const stageQuery = searchParams.get('stage');
+
   // Track current view mode ('chords' or 'lyrics') with persistence
   const [viewMode, setViewMode] = useState(() => {
     if (viewQuery === 'lyrics') return 'lyrics';
@@ -61,6 +63,11 @@ function EventSetlistSongView() {
       if (saved === 'lyrics' || saved === 'chords') return saved;
     } catch (e) {}
     return 'chords';
+  });
+
+  // Track fullscreen stage mode synced with URL query (?stage=1)
+  const [isFullscreenStage, setIsFullscreenStage] = useState(() => {
+    return stageQuery === '1' || stageQuery === 'true';
   });
 
   // Keep viewMode synced if URL query explicitly changes
@@ -73,13 +80,35 @@ function EventSetlistSongView() {
     }
   }, [viewQuery]);
 
+  // Keep isFullscreenStage synced if URL query explicitly changes
+  useEffect(() => {
+    setIsFullscreenStage(stageQuery === '1' || stageQuery === 'true');
+  }, [stageQuery]);
+
   const handleViewModeChange = (newMode) => {
     const normalized = newMode === 'lyrics' ? 'lyrics' : 'chords';
     setViewMode(normalized);
     try {
       localStorage.setItem('wplanner_setlist_view_mode', normalized);
     } catch (e) {}
-    setSearchParams({ view: normalized }, { replace: true });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('view', normalized);
+      return next;
+    }, { replace: true });
+  };
+
+  const handleFullscreenChange = (nextFs) => {
+    setIsFullscreenStage(nextFs);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (nextFs) {
+        next.set('stage', '1');
+      } else {
+        next.delete('stage');
+      }
+      return next;
+    }, { replace: true });
   };
 
   const [loading, setLoading] = useState(true);
@@ -146,12 +175,14 @@ function EventSetlistSongView() {
 
   const goNextSong = () => {
     if (!nextSong?._id) return;
-    navigate(`/events/${id}/setlist/${nextSong._id}?view=${viewMode}`);
+    const stageParam = isFullscreenStage ? '&stage=1' : '';
+    navigate(`/events/${id}/setlist/${nextSong._id}?view=${viewMode}${stageParam}`);
   };
 
   const goPrevSong = () => {
     if (!prevSong?._id) return;
-    navigate(`/events/${id}/setlist/${prevSong._id}?view=${viewMode}`);
+    const stageParam = isFullscreenStage ? '&stage=1' : '';
+    navigate(`/events/${id}/setlist/${prevSong._id}?view=${viewMode}${stageParam}`);
   };
 
   const handleOpenEditModal = () => {
@@ -506,6 +537,14 @@ function EventSetlistSongView() {
         initialShowChords={viewMode !== 'lyrics'}
         onViewModeChange={handleViewModeChange}
         onEdit={handleOpenEditModal}
+        onPrevSong={goPrevSong}
+        onNextSong={goNextSong}
+        prevSong={prevSong}
+        nextSong={nextSong}
+        currentIndex={currentIndex}
+        totalSongs={setlist.length}
+        isFullscreen={isFullscreenStage}
+        onFullscreenChange={handleFullscreenChange}
       />
 
       {/* Edit Lyrics & Chords Modal Dialog */}

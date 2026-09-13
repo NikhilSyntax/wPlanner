@@ -54,6 +54,8 @@ import {
   CloudDownload as ImportIcon,
   BookmarkAdded as BookmarkAddedIcon,
   Bookmark as BookmarkIcon,
+  NavigateNext as NextIcon,
+  NavigateBefore as PrevIcon,
 } from '@mui/icons-material';
 import api from '../../services/api';
 import './ChordSheetViewer.css';
@@ -455,6 +457,16 @@ function ChordSheetViewer({
   onToggleShowChords,
   onEdit,
   onImport,
+  // Setlist Navigation Props
+  onPrevSong,
+  onNextSong,
+  prevSong,
+  nextSong,
+  currentIndex,
+  totalSongs,
+  isFullscreen: controlledFullscreen,
+  onFullscreenChange,
+  initialFullscreen = false,
 }) {
   const [showChords, setShowChords] = useState(initialShowChords);
 
@@ -492,7 +504,26 @@ function ChordSheetViewer({
   const [highlightStyle, setHighlightStyle] = useState('pill');
   const [fontSize, setFontSize] = useState(15);
   const [twoColumns, setTwoColumns] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Controlled vs Uncontrolled Fullscreen Stage Mode
+  const [internalFullscreen, setInternalFullscreen] = useState(
+    initialFullscreen || false
+  );
+  const isControlledFullscreen = controlledFullscreen !== undefined;
+  const isFullscreen = isControlledFullscreen
+    ? controlledFullscreen
+    : internalFullscreen;
+
+  const handleToggleFullscreen = (nextVal) => {
+    const targetVal =
+      typeof nextVal === 'boolean' ? nextVal : !isFullscreen;
+    if (onFullscreenChange) {
+      onFullscreenChange(targetVal);
+    }
+    if (!isControlledFullscreen) {
+      setInternalFullscreen(targetVal);
+    }
+  };
 
   const [isScrolling, setIsScrolling] = useState(false);
   const [scrollSpeed, setScrollSpeed] = useState(1);
@@ -634,12 +665,55 @@ function ChordSheetViewer({
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape' && isFullscreen) {
-        setIsFullscreen(false);
+        handleToggleFullscreen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFullscreen]);
+  }, [isFullscreen, isControlledFullscreen, onFullscreenChange]);
+
+  // Stage Mode Setlist Keyboard Shortcuts (Foot pedals / page turners / arrow keys)
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const handleStageKeyboard = (e) => {
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (
+        activeTag === 'input' ||
+        activeTag === 'textarea' ||
+        activeTag === 'select' ||
+        document.activeElement?.isContentEditable
+      ) {
+        return;
+      }
+
+      // Prev song: PageUp, Alt+ArrowLeft, or 'p' key
+      if (
+        e.key === 'PageUp' ||
+        (e.key === 'ArrowLeft' && e.altKey) ||
+        (e.key === 'p' && !e.ctrlKey && !e.metaKey && !e.altKey)
+      ) {
+        if (prevSong && onPrevSong) {
+          e.preventDefault();
+          onPrevSong();
+        }
+      }
+      // Next song: PageDown, Alt+ArrowRight, or 'n' key
+      else if (
+        e.key === 'PageDown' ||
+        (e.key === 'ArrowRight' && e.altKey) ||
+        (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey)
+      ) {
+        if (nextSong && onNextSong) {
+          e.preventDefault();
+          onNextSong();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleStageKeyboard);
+    return () => window.removeEventListener('keydown', handleStageKeyboard);
+  }, [isFullscreen, prevSong, nextSong, onPrevSong, onNextSong]);
 
   const handleTransposeStep = (delta) => {
     setTranspose((prev) => {
@@ -1047,7 +1121,7 @@ function ChordSheetViewer({
       {isFullscreen && (
         <Paper elevation={4} className="cs-fullscreen-bar">
           <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
-            <Typography variant="subtitle2" fontWeight={800} noWrap sx={{ maxWidth: 220 }}>
+            <Typography variant="subtitle2" fontWeight={800} noWrap sx={{ maxWidth: { xs: 140, sm: 220 } }}>
               {title || 'Chord Sheet'}{' '}
               {isSplitMode
                 ? `(Split: English + ${selectedSplitLanguage})`
@@ -1083,6 +1157,102 @@ function ChordSheetViewer({
             )}
           </Box>
 
+          {/* Setlist Navigation Controls (Prev / Song Counter / Next) in Fullscreen */}
+          {(onPrevSong || onNextSong || (totalSongs && totalSongs > 0)) && (
+            <Box
+              className="cs-stage-nav-group"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: { xs: 0.5, sm: 1 },
+                bgcolor: 'rgba(0, 0, 0, 0.06)',
+                p: { xs: '2px 4px', sm: '3px 8px' },
+                borderRadius: 2,
+                border: '1px solid',
+                borderColor: 'divider',
+              }}
+            >
+              <Tooltip title={prevSong ? `Previous Song: ${prevSong.title || 'Untitled'}` : 'First song in setlist'}>
+                <span>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<PrevIcon />}
+                    onClick={onPrevSong}
+                    disabled={!prevSong || !onPrevSong}
+                    className="cs-stage-prev-btn"
+                    sx={{
+                      height: 28,
+                      minWidth: { xs: 32, sm: 76 },
+                      px: { xs: 0.75, sm: 1.5 },
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      fontSize: '0.78rem',
+                      borderRadius: 1.5,
+                      color: 'var(--cs-text-main)',
+                      borderColor: 'var(--cs-border)',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        bgcolor: 'rgba(37, 99, 235, 0.08)',
+                      },
+                      '&.Mui-disabled': {
+                        opacity: 0.35,
+                      },
+                    }}
+                  >
+                    <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                      Prev
+                    </Box>
+                  </Button>
+                </span>
+              </Tooltip>
+
+              {totalSongs > 0 && (
+                <Chip
+                  label={`${(currentIndex !== undefined && currentIndex >= 0 ? currentIndex + 1 : 1)} / ${totalSongs}`}
+                  size="small"
+                  color="primary"
+                  sx={{
+                    fontWeight: 800,
+                    fontSize: '0.75rem',
+                    height: 24,
+                    px: 0.5,
+                  }}
+                />
+              )}
+
+              <Tooltip title={nextSong ? `Next Song: ${nextSong.title || 'Untitled'}` : 'Last song in setlist'}>
+                <span>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    endIcon={<NextIcon />}
+                    onClick={onNextSong}
+                    disabled={!nextSong || !onNextSong}
+                    className="cs-stage-next-btn"
+                    sx={{
+                      height: 28,
+                      minWidth: { xs: 32, sm: 76 },
+                      px: { xs: 0.75, sm: 1.5 },
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      fontSize: '0.78rem',
+                      borderRadius: 1.5,
+                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)',
+                      '&.Mui-disabled': {
+                        opacity: 0.35,
+                      },
+                    }}
+                  >
+                    <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                      Next
+                    </Box>
+                  </Button>
+                </span>
+              </Tooltip>
+            </Box>
+          )}
+
           <Box display="flex" alignItems="center" gap={1}>
             <IconButton
               size="small"
@@ -1103,7 +1273,7 @@ function ChordSheetViewer({
               variant="contained"
               color="primary"
               startIcon={<FullscreenExitIcon />}
-              onClick={() => setIsFullscreen(false)}
+              onClick={() => handleToggleFullscreen(false)}
               sx={{ textTransform: 'none', borderRadius: 1.5, fontWeight: 700 }}
             >
               Exit Fullscreen
@@ -1540,7 +1710,7 @@ function ChordSheetViewer({
               <Tooltip title="Fullscreen Stage Mode">
                 <IconButton
                   size="small"
-                  onClick={() => setIsFullscreen(true)}
+                  onClick={() => handleToggleFullscreen(true)}
                   sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, height: 30, width: 30 }}
                 >
                   <FullscreenIcon sx={{ fontSize: 16 }} />
@@ -1886,6 +2056,41 @@ function ChordSheetViewer({
           </Stack>
         </Box>
       </Box>
+
+      {/* ================= Fullscreen Floating Edge Navigation ================= */}
+      {isFullscreen && (onPrevSong || onNextSong || (totalSongs && totalSongs > 0)) && (
+        <>
+          {prevSong && onPrevSong && (
+            <Box className="cs-stage-floating-nav cs-stage-floating-prev">
+              <Tooltip title={`Previous: ${prevSong.title || 'Previous Song'}`} placement="right">
+                <IconButton
+                  onClick={onPrevSong}
+                  className="cs-stage-nav-bubble"
+                  size="large"
+                  aria-label="Previous song in setlist"
+                >
+                  <PrevIcon fontSize="medium" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )}
+
+          {nextSong && onNextSong && (
+            <Box className="cs-stage-floating-nav cs-stage-floating-next">
+              <Tooltip title={`Next: ${nextSong.title || 'Next Song'}`} placement="left">
+                <IconButton
+                  onClick={onNextSong}
+                  className="cs-stage-nav-bubble"
+                  size="large"
+                  aria-label="Next song in setlist"
+                >
+                  <NextIcon fontSize="medium" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )}
+        </>
+      )}
 
       {/* Action Feedback Toast */}
       <Snackbar
