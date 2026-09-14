@@ -36,12 +36,14 @@ import {
   Tv as TvIcon,
   CloudDownload as ImportIcon,
   Print as PrintIcon,
+  QueueMusic as QueueMusicIcon,
 } from '@mui/icons-material';
 import api from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import ChordSheetViewer from '../components/common/ChordSheetViewer';
 import ImportSongModal from '../components/songs/ImportSongModal';
 import PrintSetlistModal from '../components/events/PrintSetlistModal';
+import SongQuickNavModal from '../components/common/SongQuickNavModal';
 
 const KEY_OPTIONS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const TIME_SIG_OPTIONS = ['2/4', '3/4', '4/4', '5/4', '6/8', '7/8'];
@@ -126,6 +128,8 @@ function EventSetlistSongView() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   // Print Setlist Modal State
   const [printModalOpen, setPrintModalOpen] = useState(false);
+  // Quick Song Navigation Modal State
+  const [quickNavOpen, setQuickNavOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     title: '',
     artist: '',
@@ -183,6 +187,12 @@ function EventSetlistSongView() {
     if (!prevSong?._id) return;
     const stageParam = isFullscreenStage ? '&stage=1' : '';
     navigate(`/events/${id}/setlist/${prevSong._id}?view=${viewMode}${stageParam}`);
+  };
+
+  const handleSelectSongFromList = (targetSong) => {
+    if (!targetSong?._id) return;
+    const stageParam = isFullscreenStage ? '&stage=1' : '';
+    navigate(`/events/${id}/setlist/${targetSong._id}?view=${viewMode}${stageParam}`);
   };
 
   const handleOpenEditModal = () => {
@@ -335,13 +345,33 @@ function EventSetlistSongView() {
           </Button>
 
           {setlist.length > 0 && (
-            <Chip
-              label={`Song ${currentIndex + 1} of ${setlist.length}`}
-              size="small"
-              color="primary"
-              variant="outlined"
-              sx={{ fontWeight: 700, fontSize: '0.75rem', height: 26, flexShrink: 0 }}
-            />
+            <Tooltip title="Tap to view all setlist songs & quickly jump">
+              <Chip
+                icon={<QueueMusicIcon sx={{ fontSize: '15px !important' }} />}
+                label={`Song ${currentIndex + 1} of ${setlist.length}`}
+                size="small"
+                color="primary"
+                variant="outlined"
+                onClick={() => setQuickNavOpen(true)}
+                sx={{
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  height: 28,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    bgcolor: 'primary.main',
+                    color: 'primary.contrastText',
+                    transform: 'translateY(-1px)',
+                    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)',
+                    '& .MuiChip-icon': {
+                      color: 'inherit',
+                    },
+                  },
+                }}
+              />
+            </Tooltip>
           )}
         </Box>
       </Box>
@@ -482,6 +512,33 @@ function EventSetlistSongView() {
               >
                 {nextSong ? 'Next' : 'Last'}
               </Button>
+
+              {setlist.length > 1 && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<QueueMusicIcon sx={{ fontSize: 16 }} />}
+                  onClick={() => setQuickNavOpen(true)}
+                  sx={{
+                    textTransform: 'none',
+                    borderRadius: 1.75,
+                    fontWeight: 700,
+                    fontSize: '0.8rem',
+                    py: 0.5,
+                    px: 1.25,
+                    color: 'primary.main',
+                    borderColor: 'primary.light',
+                    bgcolor: (th) =>
+                      th.palette.mode === 'dark' ? 'rgba(37, 99, 235, 0.12)' : 'rgba(37, 99, 235, 0.06)',
+                    '&:hover': {
+                      bgcolor: 'primary.main',
+                      color: 'primary.contrastText',
+                    },
+                  }}
+                >
+                  All Songs ({setlist.length})
+                </Button>
+              )}
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
@@ -543,6 +600,7 @@ function EventSetlistSongView() {
         nextSong={nextSong}
         currentIndex={currentIndex}
         totalSongs={setlist.length}
+        onOpenSongList={() => setQuickNavOpen(true)}
         isFullscreen={isFullscreenStage}
         onFullscreenChange={handleFullscreenChange}
       />
@@ -772,6 +830,49 @@ function EventSetlistSongView() {
         onClose={() => setPrintModalOpen(false)}
         event={{ _id: id, title: eventTitle }}
         setlist={setlist}
+      />
+
+      {/* Mobile Floating Quick Jump Button */}
+      {setlist.length > 1 && (
+        <Box
+          sx={{
+            position: 'fixed',
+            bottom: { xs: 20, sm: 26 },
+            right: { xs: 16, sm: 24 },
+            zIndex: 1200,
+            display: { xs: 'block', md: 'none' },
+          }}
+        >
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => setQuickNavOpen(true)}
+            startIcon={<QueueMusicIcon />}
+            sx={{
+              borderRadius: 6,
+              px: 2,
+              py: 0.9,
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              textTransform: 'none',
+              boxShadow: '0 6px 20px rgba(37, 99, 235, 0.45)',
+              backdropFilter: 'blur(10px)',
+            }}
+          >
+            Songs ({currentIndex + 1}/{setlist.length})
+          </Button>
+        </Box>
+      )}
+
+      {/* Mobile-Friendly Quick Song Navigation Popup */}
+      <SongQuickNavModal
+        open={quickNavOpen}
+        onClose={() => setQuickNavOpen(false)}
+        songs={setlist}
+        currentSongId={songId}
+        onSelectSong={handleSelectSongFromList}
+        title="Setlist Songs"
+        subtitle={eventTitle ? `Setlist for ${eventTitle}` : 'Tap any song to jump to its chords & lyrics'}
       />
     </Box>
   );

@@ -464,6 +464,7 @@ function ChordSheetViewer({
   nextSong,
   currentIndex,
   totalSongs,
+  onOpenSongList,
   isFullscreen: controlledFullscreen,
   onFullscreenChange,
   initialFullscreen = false,
@@ -1208,17 +1209,34 @@ function ChordSheetViewer({
               </Tooltip>
 
               {totalSongs > 0 && (
-                <Chip
-                  label={`${(currentIndex !== undefined && currentIndex >= 0 ? currentIndex + 1 : 1)} / ${totalSongs}`}
-                  size="small"
-                  color="primary"
-                  sx={{
-                    fontWeight: 800,
-                    fontSize: '0.75rem',
-                    height: 24,
-                    px: 0.5,
-                  }}
-                />
+                <Tooltip
+                  title={
+                    onOpenSongList
+                      ? 'Tap to view all songs & quickly jump'
+                      : `Song ${(currentIndex !== undefined && currentIndex >= 0 ? currentIndex + 1 : 1)} of ${totalSongs}`
+                  }
+                >
+                  <Chip
+                    label={`${(currentIndex !== undefined && currentIndex >= 0 ? currentIndex + 1 : 1)} / ${totalSongs}`}
+                    size="small"
+                    color="primary"
+                    onClick={onOpenSongList}
+                    sx={{
+                      fontWeight: 800,
+                      fontSize: '0.75rem',
+                      height: 24,
+                      px: 0.5,
+                      cursor: onOpenSongList ? 'pointer' : 'default',
+                      transition: 'all 0.15s ease-in-out',
+                      '&:hover': onOpenSongList
+                        ? {
+                            transform: 'scale(1.08)',
+                            boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)',
+                          }
+                        : undefined,
+                    }}
+                  />
+                </Tooltip>
               )}
 
               <Tooltip title={nextSong ? `Next Song: ${nextSong.title || 'Untitled'}` : 'Last song in setlist'}>
@@ -1711,6 +1729,7 @@ function ChordSheetViewer({
                 <IconButton
                   size="small"
                   onClick={() => handleToggleFullscreen(true)}
+                  aria-label="Fullscreen Stage Mode"
                   sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, height: 30, width: 30 }}
                 >
                   <FullscreenIcon sx={{ fontSize: 16 }} />

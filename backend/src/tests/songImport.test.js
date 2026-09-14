@@ -601,9 +601,9 @@ I have already come
     assert.ok(transposedToD.includes('Bm'), 'Em should transpose to Bm');
 
     // -------------------------------------------------------------
-    // Test 31: Update song key transposes content.chords in database
+    // Test 31: Update song key updates key for display without mutating content.chords in database
     // -------------------------------------------------------------
-    console.log('Test 31: Update song key transposes content.chords in database');
+    console.log('Test 31: Update song key updates key for display without mutating content.chords in database');
     const songToTranspose = await Song.create({
       churchId: testChurch._id,
       title: 'Key Transpose Test Song',
@@ -628,12 +628,12 @@ I have already come
     await songController.updateSong(mockReq, mockRes);
     assert.ok(jsonResult, 'Must return updated song');
     assert.strictEqual(jsonResult.key, 'D');
-    assert.ok(jsonResult.content?.chords.includes('A/C#'), 'Chords in DB must be transposed to Key D');
+    assert.strictEqual(jsonResult.content?.chords, originalChordsG, 'Chords in DB must remain untouched when key is updated');
 
     // -------------------------------------------------------------
-    // Test 32: Quick add song imports in original key and converts to selected key
+    // Test 32: Quick add song imports with original chords and sets selected key for display
     // -------------------------------------------------------------
-    console.log('Test 32: Quick add song imports in original key and converts to selected key');
+    console.log('Test 32: Quick add song imports with original chords and sets selected key for display');
     const autoImportSearchFetcher32 = async () => ({
       ok: true,
       status: 200,
@@ -717,7 +717,7 @@ I have already come
     await songController.createSong(createReqWithKeyD, createResWithKeyD);
     assert.ok(createdWithKeyD, 'Must create song');
     assert.strictEqual(createdWithKeyD.key, 'D', 'Song key must be user-selected key D');
-    assert.ok(createdWithKeyD.content?.chords.includes('A/C#'), 'Chords must be converted to Key D');
+    assert.ok(createdWithKeyD.content?.chords.includes('D/F#'), 'Chords must remain in original chords without alteration');
 
     // -------------------------------------------------------------
     // Test 33: Quick add song imports and preserves original key when AUTO

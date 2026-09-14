@@ -718,7 +718,7 @@ function EventDetails() {
       }
       setSaveMessage({
         type: 'success',
-        text: `Transposed chords to Key ${newKey}!`,
+        text: `Key updated to Key ${newKey}!`,
       });
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (err) {

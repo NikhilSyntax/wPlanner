@@ -173,24 +173,9 @@ exports.createSong = async (req, res) => {
             finalTuning = imported.tuning;
           }
 
-          // If user selected a specific key different from the original key, convert chords to that key
-          if (userSelectedKey && userSelectedKey !== originalImportedKey) {
-            const rawChords = imported.content?.chords || '';
-            const convertedChords = transposeChordsText(
-              rawChords,
-              originalImportedKey,
-              userSelectedKey
-            );
-            finalContent = {
-              ...(imported.content || {}),
-              chords: convertedChords,
-            };
-            finalKey = userSelectedKey;
-          } else {
-            // Keep in original key from Ultimate Guitar
-            finalContent = imported.content || finalContent;
-            finalKey = originalImportedKey;
-          }
+          // Keep imported chords content untouched; set finalKey for performance display
+          finalContent = imported.content || finalContent;
+          finalKey = userSelectedKey || originalImportedKey;
         }
       } catch (importErr) {
         console.warn('Auto-import on song create encountered error:', importErr.message);
@@ -283,39 +268,6 @@ exports.updateSong = async (req, res) => {
         return res.status(400).json({ message: 'Invalid key' });
       }
       updates.key = normalizedNewKey;
-
-      // Automatically transpose chord charts when the key changes
-      const oldKey = existingSong.key || 'C';
-      if (oldKey !== normalizedNewKey) {
-        const currentChords =
-          updates.content?.chords !== undefined
-            ? updates.content.chords
-            : existingSong.content?.chords;
-
-        if (currentChords) {
-          const transposedChords = transposeChordsText(currentChords, oldKey, normalizedNewKey);
-          updates.content = {
-            ...(existingSong.content ? existingSong.content.toObject?.() || existingSong.content : {}),
-            ...(updates.content || {}),
-            chords: transposedChords,
-          };
-        }
-
-        // Also transpose regional lyrics chords if present
-        if (existingSong.regionalLyrics && existingSong.regionalLyrics.length > 0 && !updates.regionalLyrics) {
-          updates.regionalLyrics = existingSong.regionalLyrics.map((reg) => {
-            const regChords = reg.content?.chords;
-            if (!regChords) return reg;
-            return {
-              ...(reg.toObject?.() || reg),
-              content: {
-                ...(reg.content?.toObject?.() || reg.content || {}),
-                chords: transposeChordsText(regChords, oldKey, normalizedNewKey),
-              },
-            };
-          });
-        }
-      }
     }
 
     if (updates.timeSignature !== undefined) {

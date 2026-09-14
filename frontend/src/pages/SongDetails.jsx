@@ -46,6 +46,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner';
 import ChordSheetViewer from '../components/common/ChordSheetViewer';
 import { useAuth } from '../hooks/useAuth';
 import ImportSongModal from '../components/songs/ImportSongModal';
+import SongQuickNavModal from '../components/common/SongQuickNavModal';
 
 function SongDetails() {
   const { id } = useParams();
@@ -75,9 +76,13 @@ function SongDetails() {
   const [savingLastUsed, setSavingLastUsed] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [importModalOpen, setImportModalOpen] = useState(false);
+  // Quick Song Navigation Modal State
+  const [quickNavOpen, setQuickNavOpen] = useState(false);
+  const [allSongs, setAllSongs] = useState([]);
 
   useEffect(() => {
     fetchSong();
+    fetchAllSongs();
   }, [id]);
 
   const fetchSong = async () => {
@@ -91,6 +96,16 @@ function SongDetails() {
       setError(err?.response?.data?.message || 'Failed to load song details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAllSongs = async () => {
+    try {
+      const res = await api.get('/songs');
+      const list = Array.isArray(res.data) ? res.data : res.data?.songs || [];
+      setAllSongs(list);
+    } catch (err) {
+      console.warn('Failed to load songs list for quick nav:', err);
     }
   };
 
@@ -198,15 +213,30 @@ function SongDetails() {
     <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1050, mx: 'auto' }}>
       {/* Top Navigation */}
       <Box sx={{ mb: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/songs')}
-          variant="outlined"
-          size="small"
-          sx={{ borderRadius: 2 }}
-        >
-          Back to Songs
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate('/songs')}
+            variant="outlined"
+            size="small"
+            sx={{ borderRadius: 2 }}
+          >
+            Back to Songs
+          </Button>
+
+          {allSongs.length > 1 && (
+            <Button
+              startIcon={<QueueMusicIcon />}
+              onClick={() => setQuickNavOpen(true)}
+              variant="outlined"
+              color="primary"
+              size="small"
+              sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+            >
+              All Songs ({allSongs.length})
+            </Button>
+          )}
+        </Box>
 
         <Stack direction="row" spacing={1}>
           {isAdmin && (
@@ -419,6 +449,7 @@ function SongDetails() {
           artist={song?.artist}
           bpm={song?.bpm}
           timeSignature={song?.timeSignature}
+          onOpenSongList={() => setQuickNavOpen(true)}
           onEdit={() => navigate(`/songs/${id}/edit`)}
           onImport={() => setImportModalOpen(true)}
         />
@@ -691,6 +722,49 @@ function SongDetails() {
           setSong(updatedSong);
           setToastMessage(`Song "${updatedSong.title}" updated successfully with imported lyrics & chords!`);
         }}
+      />
+
+      {/* Mobile Floating Quick Jump Button */}
+      {allSongs.length > 1 && (
+        <Box
+          sx={{
+            position: 'fixed',
+            bottom: { xs: 20, sm: 26 },
+            right: { xs: 16, sm: 24 },
+            zIndex: 1200,
+            display: { xs: 'block', md: 'none' },
+          }}
+        >
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => setQuickNavOpen(true)}
+            startIcon={<QueueMusicIcon />}
+            sx={{
+              borderRadius: 6,
+              px: 2,
+              py: 0.9,
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              textTransform: 'none',
+              boxShadow: '0 6px 20px rgba(37, 99, 235, 0.45)',
+              backdropFilter: 'blur(10px)',
+            }}
+          >
+            All Songs ({allSongs.length})
+          </Button>
+        </Box>
+      )}
+
+      {/* Mobile-Friendly Quick Song Navigation Popup */}
+      <SongQuickNavModal
+        open={quickNavOpen}
+        onClose={() => setQuickNavOpen(false)}
+        songs={allSongs}
+        currentSongId={id}
+        onSelectSong={(selected) => navigate(`/songs/${selected._id}`)}
+        title="Church Song Bank"
+        subtitle="Tap any song to jump to its lyrics & chords"
       />
     </Box>
   );

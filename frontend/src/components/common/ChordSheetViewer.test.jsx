@@ -183,7 +183,7 @@ describe('ChordSheetViewer Setlist Navigation in Fullscreen Stage Mode', () => {
     );
 
     // Click "Fullscreen Stage Mode" button in normal toolbar
-    const stageBtn = screen.getByTitle('Fullscreen Stage Mode');
+    const stageBtn = screen.getByLabelText('Fullscreen Stage Mode');
     fireEvent.click(stageBtn);
     expect(onFullscreenChangeMock).toHaveBeenCalledWith(true);
   });
