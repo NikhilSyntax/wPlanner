@@ -17,7 +17,7 @@ const SETLIST_SONG_FIELDS = "title artist key timeSignature";
 async function populateEventDetails(eventId) {
   return Event.findById(eventId)
     .populate("team", "team.name members")
-    .populate("assignments.userId", "name email role isAdmin")
+    .populate("assignments.userId", "name email role isAdmin profilePhotoUrl")
     .populate("setlist", SETLIST_SONG_FIELDS);
 }
 
@@ -42,7 +42,7 @@ exports.getEvents = async (req, res) => {
     const events = await Event.find(filter)
       .populate("team", "team.name members")
       .populate("setlist", SETLIST_SONG_FIELDS)
-      .populate("assignments.userId", "name email role isAdmin")
+      .populate("assignments.userId", "name email role isAdmin profilePhotoUrl")
       .sort({ "schedule.start": 1 });
 
     const withTitles = events.map((doc) => {
@@ -319,7 +319,7 @@ exports.updateEvent = async (req, res) => {
       { new: true, runValidators: true },
     )
       .populate("team", "team.name")
-      .populate("assignments.userId", "name email role")
+      .populate("assignments.userId", "name email role isAdmin profilePhotoUrl")
       .populate("setlist", SETLIST_SONG_FIELDS);
 
     if (!updated) return res.status(404).json({ message: "Event not found" });
@@ -530,7 +530,7 @@ exports.addAssignment = async (req, res) => {
 exports.updateAssignmentRole = async (req, res) => {
   try {
     const { id, userId } = req.params;
-    const { role, notes } = req.body;
+    const { role, notes, status } = req.body;
 
     if (!role || typeof role !== "string" || !role.trim()) {
       return res.status(400).json({ message: "Role is required" });
@@ -577,6 +577,9 @@ exports.updateAssignmentRole = async (req, res) => {
     if (notes !== undefined) {
       matchedAssignment.notes = notes;
     }
+    if (status && ['accepted', 'declined', 'assigned', 'pending'].includes(status)) {
+      matchedAssignment.status = status;
+    }
     event.updatedAt = new Date();
     await event.save();
 
@@ -586,6 +589,7 @@ exports.updateAssignmentRole = async (req, res) => {
         {
           role: newRole,
           ...(notes !== undefined ? { notes } : {}),
+          ...(status ? { status } : {}),
           updatedAt: Date.now(),
         }
       );
@@ -664,14 +668,14 @@ exports.setEventTeamFromRoster = async (req, res) => {
         user: userId,
         role,
         assignedBy: req.user.userId,
-        status: "assigned",
+        status: "accepted",
       });
       await assignment.save();
 
       event.assignments.push({
         userId,
         role,
-        status: "assigned",
+        status: "accepted",
         notes: row.notes || undefined,
       });
     }
@@ -697,7 +701,7 @@ exports.setEventTeamFromRoster = async (req, res) => {
     }
 
     const populated = await Event.findById(event._id)
-      .populate("assignments.userId", "name email role")
+      .populate("assignments.userId", "name email role isAdmin profilePhotoUrl")
       .populate("team", "team.name")
       .lean();
 

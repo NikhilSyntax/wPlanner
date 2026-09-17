@@ -124,31 +124,33 @@ function DataTable({
 
   return (
     <Paper
+      elevation={0}
       sx={{
         width: '100%',
         overflow: 'hidden',
-        borderRadius: 3,
-        boxShadow:
-          '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
       }}
     >
       {/* Header */}
       {(title || searchable) && (
         <Box
           sx={{
-            p: { xs: 1.5, sm: '12px 20px' },
-            borderBottom: 1,
+            p: { xs: 1.25, sm: '10px 16px' },
+            borderBottom: '1px solid',
             borderColor: 'divider',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             flexWrap: 'wrap',
-            gap: 1.5,
+            gap: 1.25,
           }}
         >
           <Box sx={{ minWidth: 0, flex: 1 }}>
             {typeof title === 'string' ? (
-              <Typography variant="h6" fontWeight={700}>
+              <Typography variant="subtitle1" fontWeight={700} sx={{ letterSpacing: '-0.01em' }}>
                 {title}
               </Typography>
             ) : (
@@ -164,13 +166,13 @@ function DataTable({
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <SearchIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
                   </InputAdornment>
                 ),
               }}
               sx={{
-                minWidth: { xs: '100%', sm: 220 },
-                '& .MuiInputBase-root': { height: 34, borderRadius: 2 },
+                minWidth: { xs: '100%', sm: 200 },
+                '& .MuiInputBase-root': { height: 32, fontSize: '0.8125rem' },
               }}
             />
           )}
@@ -179,22 +181,38 @@ function DataTable({
 
       {/* Table */}
       <TableContainer>
-        <Table>
+        <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: 'grey.50' }}>
+            <TableRow>
               {columns.map((column) => (
                 <TableCell
                   key={column.field || column.id}
                   sx={{
                     fontWeight: 600,
+                    fontSize: '0.6875rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
                     color: 'text.secondary',
-                    borderBottom: 'none',
+                    bgcolor: (th) => th.palette.mode === 'dark' ? '#0c0c0c' : '#f8fafc',
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                    py: 1,
                   }}
                 >
                   {column.headerName || column.label}
                 </TableCell>
               ))}
-              {actions && <TableCell sx={{ borderBottom: 'none' }} />}
+              {actions && (
+                <TableCell
+                  sx={{
+                    bgcolor: (th) => th.palette.mode === 'dark' ? '#0c0c0c' : '#f8fafc',
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                    width: 48,
+                    py: 1,
+                  }}
+                />
+              )}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -202,10 +220,10 @@ function DataTable({
               <TableRow>
                 <TableCell
                   colSpan={columns.length + (actions ? 1 : 0)}
-                  sx={{ textAlign: 'center', py: 6 }}
+                  sx={{ textAlign: 'center', py: 5, borderBottom: 'none' }}
                 >
                   {emptyMessage || (
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8125rem' }}>
                       No data available
                     </Typography>
                   )}
@@ -220,23 +238,38 @@ function DataTable({
                   sx={{
                     ...(onRowClick && { cursor: 'pointer' }),
                     '&:hover': {
-                      bgcolor: onRowClick ? 'action.hover' : 'grey.50',
+                      bgcolor: 'action.hover',
                     },
-                    transition: 'background-color 0.2s ease',
+                    transition: 'background-color 100ms ease',
                   }}
                 >
                   {columns.map((column) => (
-                    <TableCell key={column.field || column.id} sx={{ borderBottom: 'none' }}>
+                    <TableCell
+                      key={column.field || column.id}
+                      sx={{
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
+                        py: 1.1,
+                      }}
+                    >
                       {renderCellValue(row, column)}
                     </TableCell>
                   ))}
                   {actions && (
-                    <TableCell sx={{ borderBottom: 'none' }}>
+                    <TableCell
+                      sx={{
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
+                        py: 1.1,
+                        textAlign: 'right',
+                      }}
+                    >
                       <IconButton
                         size="small"
                         onClick={(event) => handleMenuClick(event, row)}
+                        sx={{ p: 0.5 }}
                       >
-                        <MoreVertIcon />
+                        <MoreVertIcon sx={{ fontSize: 18 }} />
                       </IconButton>
                     </TableCell>
                   )}

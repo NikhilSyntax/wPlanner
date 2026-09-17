@@ -701,51 +701,53 @@ function EventsList() {
   if (loading) return <LoadingSpinner />;
 
   return (
-    <Box className="fade-in" sx={{ pb: 6 }}>
+    <Box sx={{ pb: 5 }}>
       {/* Header Banner */}
       <Box
         sx={{
-          mb: 3,
+          mb: 2.5,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: { xs: 'flex-start', sm: 'center' },
           flexDirection: { xs: 'column', sm: 'row' },
-          gap: 2,
+          gap: 1.5,
         }}
       >
         <Box>
-          <Typography variant="h4" fontWeight={700} sx={{ letterSpacing: '-0.02em' }}>
+          <Typography variant="h5" fontWeight={700} sx={{ letterSpacing: '-0.02em' }}>
             Events Calendar
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8125rem', mt: 0.25 }}>
             Coordinate services, rehearsals, worship rosters, and setlists.
           </Typography>
         </Box>
 
         <Button
           variant="contained"
+          size="small"
           component={Link}
           to="/events/new"
-          startIcon={<AddIcon />}
-          sx={{ borderRadius: 2 }}
+          startIcon={<AddIcon sx={{ fontSize: 16 }} />}
         >
           New Event Plan
         </Button>
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 2.5 }}>
           {typeof error === 'object' ? error.message || JSON.stringify(error) : error}
         </Alert>
       )}
 
       {/* Filters Toolbar */}
       <Paper
-        variant="outlined"
+        elevation={0}
         sx={{
-          p: 2,
-          mb: 3,
-          borderRadius: 2.5,
+          p: 1.5,
+          mb: 2.5,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
           bgcolor: 'background.paper',
           display: 'flex',
           alignItems: 'center',

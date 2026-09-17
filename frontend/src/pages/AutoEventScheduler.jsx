@@ -149,16 +149,17 @@ function ScheduleCard({ schedule, onEdit, onToggle, onDelete, canManage }) {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 0 }}>
             <Box
               sx={{
-                width: 40, height: 40, borderRadius: 2, display: 'flex',
-                alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                background: isActive
-                  ? 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)'
-                  : 'action.disabledBackground',
-                bgcolor: isActive ? undefined : 'action.hover',
-                boxShadow: isActive ? '0 4px 12px rgba(37, 99, 235, 0.3)' : 'none',
+                width: 36,
+                height: 36,
+                borderRadius: 1.5,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                bgcolor: isActive ? 'primary.main' : 'action.hover',
               }}
             >
-              <EventRepeatIcon sx={{ fontSize: 20, color: isActive ? '#fff' : 'text.disabled' }} />
+              <EventRepeatIcon sx={{ fontSize: 18, color: isActive ? '#fff' : 'text.disabled' }} />
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography
@@ -439,13 +440,17 @@ export default function AutoEventScheduler() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box
             sx={{
-              width: 44, height: 44, borderRadius: 2.5, display: 'flex',
-              alignItems: 'center', justifyContent: 'center',
-              background: 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)',
-              boxShadow: '0 4px 16px rgba(37, 99, 235, 0.35)',
+              width: 38,
+              height: 38,
+              borderRadius: 2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: isDark ? 'rgba(37, 99, 235, 0.15)' : 'rgba(37, 99, 235, 0.1)',
+              border: `1px solid ${isDark ? 'rgba(59, 130, 246, 0.25)' : 'rgba(37, 99, 235, 0.2)'}`,
             }}
           >
-            <AutoModeIcon sx={{ color: '#fff', fontSize: 24 }} />
+            <AutoModeIcon sx={{ color: 'primary.main', fontSize: 22 }} />
           </Box>
           <Box>
             <Typography variant="h5" sx={{ fontWeight: 800, color: 'text.primary', lineHeight: 1.2 }}>
@@ -557,12 +562,7 @@ export default function AutoEventScheduler() {
         fullScreen={isMobile}
         PaperProps={{
           sx: {
-            borderRadius: isMobile ? 0 : 3,
-            bgcolor: '#ffffff',
-            color: '#0f172a',
-            backgroundImage: 'none',
-            boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
-            border: '1px solid #e2e8f0',
+            borderRadius: isMobile ? 0 : 2.5,
           },
         }}
       >
@@ -574,24 +574,26 @@ export default function AutoEventScheduler() {
             pb: 1.5,
             pt: 2.5,
             px: 3,
-            borderBottom: '1px solid #f1f5f9',
+            borderBottom: 1,
+            borderColor: 'divider',
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
             <Box
               sx={{
-                width: 36,
-                height: 36,
-                borderRadius: 2,
-                bgcolor: 'rgba(37, 99, 235, 0.1)',
+                width: 34,
+                height: 34,
+                borderRadius: 1.5,
+                bgcolor: isDark ? 'rgba(37, 99, 235, 0.15)' : 'rgba(37, 99, 235, 0.1)',
+                border: `1px solid ${isDark ? 'rgba(59, 130, 246, 0.25)' : 'rgba(37, 99, 235, 0.2)'}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <EventRepeatIcon sx={{ color: '#2563eb', fontSize: 20 }} />
+              <EventRepeatIcon sx={{ color: 'primary.main', fontSize: 18 }} />
             </Box>
-            <Typography variant="h6" sx={{ fontWeight: 700, color: '#0f172a', fontSize: '1.125rem' }}>
+            <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.05rem' }}>
               {editingId ? 'Edit Schedule' : 'Create Auto Event'}
             </Typography>
           </Box>
@@ -599,17 +601,17 @@ export default function AutoEventScheduler() {
             size="small"
             onClick={() => setDialogOpen(false)}
             sx={{
-              color: '#64748b',
-              '&:hover': { color: '#0f172a', bgcolor: '#f1f5f9' },
+              color: 'text.secondary',
+              '&:hover': { color: 'text.primary' },
             }}
           >
             <CloseIcon fontSize="small" />
           </IconButton>
         </DialogTitle>
 
-        <DialogContent sx={{ pt: 3, px: 3, pb: 1, bgcolor: '#ffffff' }}>
+        <DialogContent sx={{ pt: 3, px: 3, pb: 1 }}>
           {formError && (
-            <Alert severity="error" sx={{ mb: 2.5, borderRadius: 2 }}>
+            <Alert severity="error" sx={{ mb: 2.5, borderRadius: 1.5 }}>
               {formError}
             </Alert>
           )}
@@ -622,19 +624,7 @@ export default function AutoEventScheduler() {
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="Sunday Worship"
-            sx={{
-              mb: 2.5,
-              '& .MuiOutlinedInput-root': {
-                bgcolor: '#ffffff',
-                color: '#0f172a',
-                borderRadius: 2,
-                '& fieldset': { borderColor: '#cbd5e1' },
-                '&:hover fieldset': { borderColor: '#94a3b8' },
-                '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-              },
-              '& .MuiInputLabel-root': { color: '#475569' },
-              '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
-            }}
+            sx={{ mb: 2.5 }}
           />
 
           {/* Description */}
@@ -646,62 +636,18 @@ export default function AutoEventScheduler() {
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             placeholder="Weekly worship service"
-            sx={{
-              mb: 2.5,
-              '& .MuiOutlinedInput-root': {
-                bgcolor: '#ffffff',
-                color: '#0f172a',
-                borderRadius: 2,
-                '& fieldset': { borderColor: '#cbd5e1' },
-                '&:hover fieldset': { borderColor: '#94a3b8' },
-                '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-              },
-              '& .MuiInputLabel-root': { color: '#475569' },
-              '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
-            }}
+            sx={{ mb: 2.5 }}
           />
 
-          <Divider sx={{ mb: 2.5, borderColor: '#f1f5f9' }} />
+          <Divider sx={{ mb: 2.5 }} />
 
           {/* Frequency */}
-          <FormControl
-            fullWidth
-            sx={{
-              mb: 2.5,
-              '& .MuiOutlinedInput-root': {
-                bgcolor: '#ffffff',
-                color: '#0f172a',
-                borderRadius: 2,
-                '& fieldset': { borderColor: '#cbd5e1' },
-                '&:hover fieldset': { borderColor: '#94a3b8' },
-                '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-              },
-              '& .MuiInputLabel-root': { color: '#475569' },
-              '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
-              '& .MuiSelect-icon': { color: '#64748b' },
-            }}
-          >
+          <FormControl fullWidth sx={{ mb: 2.5 }}>
             <InputLabel>Repeat</InputLabel>
             <Select
               value={form.frequency}
               label="Repeat"
               onChange={(e) => setForm({ ...form, frequency: e.target.value })}
-              MenuProps={{
-                PaperProps: {
-                  sx: {
-                    bgcolor: '#ffffff',
-                    color: '#0f172a',
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
-                    border: '1px solid #e2e8f0',
-                    '& .MuiMenuItem-root': {
-                      fontSize: '0.875rem',
-                      color: '#0f172a',
-                      '&:hover': { bgcolor: '#f1f5f9' },
-                      '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
-                    },
-                  },
-                },
-              }}
             >
               <MenuItem value="weekly">Weekly</MenuItem>
               <MenuItem value="monthly">Monthly</MenuItem>
@@ -714,7 +660,7 @@ export default function AutoEventScheduler() {
               <Typography
                 variant="caption"
                 sx={{
-                  color: '#475569',
+                  color: 'text.secondary',
                   fontWeight: 700,
                   fontSize: '0.75rem',
                   textTransform: 'uppercase',
@@ -734,10 +680,11 @@ export default function AutoEventScheduler() {
                   flexWrap: 'wrap',
                   gap: 0.8,
                   '& .MuiToggleButton-root': {
-                    borderRadius: '10px !important',
-                    border: '1px solid #cbd5e1 !important',
-                    bgcolor: '#f8fafc',
-                    color: '#475569',
+                    borderRadius: '6px !important',
+                    border: '1px solid',
+                    borderColor: isDark ? 'rgba(255, 255, 255, 0.12) !important' : 'divider !important',
+                    bgcolor: isDark ? '#141414' : '#f8fafc',
+                    color: 'text.secondary',
                     fontSize: '0.8125rem',
                     fontWeight: 600,
                     px: 1.8,
@@ -747,13 +694,12 @@ export default function AutoEventScheduler() {
                     minWidth: 48,
                     transition: 'all 0.15s ease',
                     '&.Mui-selected': {
-                      bgcolor: '#2563eb !important',
+                      bgcolor: 'primary.main !important',
                       color: '#ffffff !important',
-                      borderColor: '#2563eb !important',
-                      boxShadow: '0 2px 8px rgba(37, 99, 235, 0.35)',
+                      borderColor: 'primary.main !important',
                       fontWeight: 700,
                     },
-                    '&:hover': { bgcolor: '#f1f5f9', borderColor: '#94a3b8' },
+                    '&:hover': { bgcolor: isDark ? '#222222' : '#f1f5f9' },
                   },
                 }}
               >
@@ -766,44 +712,12 @@ export default function AutoEventScheduler() {
 
           {form.frequency === 'monthly' && (
             <Box sx={{ display: 'flex', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
-              <FormControl
-                sx={{
-                  flex: 1,
-                  minWidth: 140,
-                  '& .MuiOutlinedInput-root': {
-                    bgcolor: '#ffffff',
-                    color: '#0f172a',
-                    borderRadius: 2,
-                    '& fieldset': { borderColor: '#cbd5e1' },
-                    '&:hover fieldset': { borderColor: '#94a3b8' },
-                    '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-                  },
-                  '& .MuiInputLabel-root': { color: '#475569' },
-                  '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
-                  '& .MuiSelect-icon': { color: '#64748b' },
-                }}
-              >
+              <FormControl sx={{ flex: 1, minWidth: 140 }}>
                 <InputLabel>Week</InputLabel>
                 <Select
                   value={form.weekOfMonth}
                   label="Week"
                   onChange={(e) => setForm({ ...form, weekOfMonth: e.target.value })}
-                  MenuProps={{
-                    PaperProps: {
-                      sx: {
-                        bgcolor: '#ffffff',
-                        color: '#0f172a',
-                        boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
-                        border: '1px solid #e2e8f0',
-                        '& .MuiMenuItem-root': {
-                          fontSize: '0.875rem',
-                          color: '#0f172a',
-                          '&:hover': { bgcolor: '#f1f5f9' },
-                          '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
-                        },
-                      },
-                    },
-                  }}
                 >
                   <MenuItem value={1}>1st</MenuItem>
                   <MenuItem value={2}>2nd</MenuItem>
@@ -812,44 +726,12 @@ export default function AutoEventScheduler() {
                   <MenuItem value={5}>Last</MenuItem>
                 </Select>
               </FormControl>
-              <FormControl
-                sx={{
-                  flex: 1,
-                  minWidth: 140,
-                  '& .MuiOutlinedInput-root': {
-                    bgcolor: '#ffffff',
-                    color: '#0f172a',
-                    borderRadius: 2,
-                    '& fieldset': { borderColor: '#cbd5e1' },
-                    '&:hover fieldset': { borderColor: '#94a3b8' },
-                    '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-                  },
-                  '& .MuiInputLabel-root': { color: '#475569' },
-                  '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
-                  '& .MuiSelect-icon': { color: '#64748b' },
-                }}
-              >
+              <FormControl sx={{ flex: 1, minWidth: 140 }}>
                 <InputLabel>Day</InputLabel>
                 <Select
                   value={form.dayOfWeek}
                   label="Day"
                   onChange={(e) => setForm({ ...form, dayOfWeek: e.target.value })}
-                  MenuProps={{
-                    PaperProps: {
-                      sx: {
-                        bgcolor: '#ffffff',
-                        color: '#0f172a',
-                        boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
-                        border: '1px solid #e2e8f0',
-                        '& .MuiMenuItem-root': {
-                          fontSize: '0.875rem',
-                          color: '#0f172a',
-                          '&:hover': { bgcolor: '#f1f5f9' },
-                          '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
-                        },
-                      },
-                    },
-                  }}
                 >
                   {DAY_NAMES.map((day, i) => (
                     <MenuItem key={i} value={i}>{day}</MenuItem>
@@ -868,18 +750,6 @@ export default function AutoEventScheduler() {
               value={form.startTime}
               onChange={(e) => setForm({ ...form, startTime: e.target.value })}
               InputLabelProps={{ shrink: true }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  bgcolor: '#ffffff',
-                  color: '#0f172a',
-                  borderRadius: 2,
-                  '& fieldset': { borderColor: '#cbd5e1' },
-                  '&:hover fieldset': { borderColor: '#94a3b8' },
-                  '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-                },
-                '& .MuiInputLabel-root': { color: '#475569' },
-                '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
-              }}
             />
             <TextField
               label="End Time"
@@ -888,105 +758,29 @@ export default function AutoEventScheduler() {
               value={form.endTime}
               onChange={(e) => setForm({ ...form, endTime: e.target.value })}
               InputLabelProps={{ shrink: true }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  bgcolor: '#ffffff',
-                  color: '#0f172a',
-                  borderRadius: 2,
-                  '& fieldset': { borderColor: '#cbd5e1' },
-                  '&:hover fieldset': { borderColor: '#94a3b8' },
-                  '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-                },
-                '& .MuiInputLabel-root': { color: '#475569' },
-                '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
-              }}
             />
           </Box>
 
           {/* Event Type + Timezone */}
           <Box sx={{ display: 'flex', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
-            <FormControl
-              sx={{
-                flex: 1,
-                minWidth: 140,
-                '& .MuiOutlinedInput-root': {
-                  bgcolor: '#ffffff',
-                  color: '#0f172a',
-                  borderRadius: 2,
-                  '& fieldset': { borderColor: '#cbd5e1' },
-                  '&:hover fieldset': { borderColor: '#94a3b8' },
-                  '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-                },
-                '& .MuiInputLabel-root': { color: '#475569' },
-                '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
-                '& .MuiSelect-icon': { color: '#64748b' },
-              }}
-            >
+            <FormControl sx={{ flex: 1, minWidth: 140 }}>
               <InputLabel>Event Type</InputLabel>
               <Select
                 value={form.eventType}
                 label="Event Type"
                 onChange={(e) => setForm({ ...form, eventType: e.target.value })}
-                MenuProps={{
-                  PaperProps: {
-                    sx: {
-                      bgcolor: '#ffffff',
-                      color: '#0f172a',
-                      boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
-                      border: '1px solid #e2e8f0',
-                      '& .MuiMenuItem-root': {
-                        fontSize: '0.875rem',
-                        color: '#0f172a',
-                        '&:hover': { bgcolor: '#f1f5f9' },
-                        '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
-                      },
-                    },
-                  },
-                }}
               >
                 {EVENT_TYPES.map((t) => (
                   <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
                 ))}
               </Select>
             </FormControl>
-            <FormControl
-              sx={{
-                flex: 1,
-                minWidth: 140,
-                '& .MuiOutlinedInput-root': {
-                  bgcolor: '#ffffff',
-                  color: '#0f172a',
-                  borderRadius: 2,
-                  '& fieldset': { borderColor: '#cbd5e1' },
-                  '&:hover fieldset': { borderColor: '#94a3b8' },
-                  '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-                },
-                '& .MuiInputLabel-root': { color: '#475569' },
-                '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
-                '& .MuiSelect-icon': { color: '#64748b' },
-              }}
-            >
+            <FormControl sx={{ flex: 1, minWidth: 140 }}>
               <InputLabel>Timezone</InputLabel>
               <Select
                 value={form.timezone}
                 label="Timezone"
                 onChange={(e) => setForm({ ...form, timezone: e.target.value })}
-                MenuProps={{
-                  PaperProps: {
-                    sx: {
-                      bgcolor: '#ffffff',
-                      color: '#0f172a',
-                      boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
-                      border: '1px solid #e2e8f0',
-                      '& .MuiMenuItem-root': {
-                        fontSize: '0.875rem',
-                        color: '#0f172a',
-                        '&:hover': { bgcolor: '#f1f5f9' },
-                        '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
-                      },
-                    },
-                  },
-                }}
               >
                 {TIMEZONES.map((tz) => (
                   <MenuItem key={tz.value} value={tz.value}>{tz.label}</MenuItem>
@@ -995,47 +789,15 @@ export default function AutoEventScheduler() {
             </FormControl>
           </Box>
 
-          <Divider sx={{ mb: 2.5, borderColor: '#f1f5f9' }} />
+          <Divider sx={{ mb: 2.5 }} />
 
           {/* Creation Offset */}
-          <FormControl
-            fullWidth
-            sx={{
-              mb: 2.5,
-              '& .MuiOutlinedInput-root': {
-                bgcolor: '#ffffff',
-                color: '#0f172a',
-                borderRadius: 2,
-                '& fieldset': { borderColor: '#cbd5e1' },
-                '&:hover fieldset': { borderColor: '#94a3b8' },
-                '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-              },
-              '& .MuiInputLabel-root': { color: '#475569' },
-              '& .MuiInputLabel-root.Mui-focused': { color: '#2563eb' },
-              '& .MuiSelect-icon': { color: '#64748b' },
-            }}
-          >
+          <FormControl fullWidth sx={{ mb: 2.5 }}>
             <InputLabel>Create Event</InputLabel>
             <Select
               value={form.creationOffsetDays}
               label="Create Event"
               onChange={(e) => setForm({ ...form, creationOffsetDays: e.target.value })}
-              MenuProps={{
-                PaperProps: {
-                  sx: {
-                    bgcolor: '#ffffff',
-                    color: '#0f172a',
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
-                    border: '1px solid #e2e8f0',
-                    '& .MuiMenuItem-root': {
-                      fontSize: '0.875rem',
-                      color: '#0f172a',
-                      '&:hover': { bgcolor: '#f1f5f9' },
-                      '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
-                    },
-                  },
-                },
-              }}
             >
               {OFFSET_OPTIONS.map((o) => (
                 <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
@@ -1050,7 +812,7 @@ export default function AutoEventScheduler() {
                 <Typography
                   variant="caption"
                   sx={{
-                    color: '#475569',
+                    color: 'text.secondary',
                     fontWeight: 700,
                     fontSize: '0.75rem',
                     textTransform: 'uppercase',
@@ -1060,7 +822,7 @@ export default function AutoEventScheduler() {
                 >
                   Advance Reminders
                 </Typography>
-                <Typography variant="caption" sx={{ color: '#64748b', fontSize: '0.75rem' }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
                   Automatic notifications sent in advance of the service
                 </Typography>
               </Box>
@@ -1070,15 +832,12 @@ export default function AutoEventScheduler() {
                 startIcon={<AddIcon sx={{ fontSize: '15px !important' }} />}
                 onClick={handleAddReminder}
                 sx={{
-                  borderRadius: 2,
+                  borderRadius: 1.5,
                   textTransform: 'none',
                   fontWeight: 600,
                   fontSize: '0.75rem',
                   py: 0.4,
                   px: 1.25,
-                  borderColor: '#cbd5e1',
-                  color: '#2563eb',
-                  '&:hover': { borderColor: '#2563eb', bgcolor: 'rgba(37, 99, 235, 0.04)' },
                 }}
               >
                 Add Reminder
@@ -1092,11 +851,10 @@ export default function AutoEventScheduler() {
                   p: 2,
                   textAlign: 'center',
                   borderRadius: 2,
-                  borderColor: '#e2e8f0',
-                  bgcolor: '#f8fafc',
+                  bgcolor: isDark ? '#0c0c0c' : '#f8fafc',
                 }}
               >
-                <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mb: 1 }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
                   No advance reminders configured for this schedule.
                 </Typography>
                 <Button
@@ -1104,7 +862,7 @@ export default function AutoEventScheduler() {
                   variant="text"
                   startIcon={<AddIcon sx={{ fontSize: 14 }} />}
                   onClick={handleAddReminder}
-                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem', color: '#2563eb' }}
+                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem' }}
                 >
                   Add First Reminder
                 </Button>
@@ -1121,13 +879,12 @@ export default function AutoEventScheduler() {
                       sx={{
                         p: 1,
                         px: 1.5,
-                        borderRadius: 2,
+                        borderRadius: 1.5,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         gap: 1.5,
-                        bgcolor: '#ffffff',
-                        borderColor: r.enabled ? '#cbd5e1' : '#e2e8f0',
+                        bgcolor: isDark ? '#0c0c0c' : '#ffffff',
                         opacity: r.enabled ? 1 : 0.65,
                         transition: 'all 0.15s ease',
                         flexWrap: 'wrap',
@@ -1138,11 +895,7 @@ export default function AutoEventScheduler() {
                           checked={r.enabled}
                           onChange={() => handleReminderToggle(idx)}
                           size="small"
-                          sx={{
-                            p: 0.5,
-                            color: '#94a3b8',
-                            '&.Mui-checked': { color: '#2563eb' },
-                          }}
+                          sx={{ p: 0.5 }}
                         />
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <TextField
@@ -1156,16 +909,6 @@ export default function AutoEventScheduler() {
                               max: unit === 'hours' ? 72 : 30,
                               style: { width: 44, textAlign: 'center', padding: '4px 6px', fontWeight: 700, fontSize: '0.85rem' },
                             }}
-                            sx={{
-                              '& .MuiOutlinedInput-root': {
-                                bgcolor: '#ffffff',
-                                color: '#0f172a',
-                                borderRadius: 1.5,
-                                '& fieldset': { borderColor: '#cbd5e1' },
-                                '&:hover fieldset': { borderColor: '#94a3b8' },
-                                '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-                              },
-                            }}
                           />
                           <Select
                             size="small"
@@ -1176,34 +919,12 @@ export default function AutoEventScheduler() {
                               height: 32,
                               fontSize: '0.85rem',
                               fontWeight: 600,
-                              color: '#0f172a',
-                              bgcolor: '#ffffff',
-                              borderRadius: 1.5,
-                              '& fieldset': { borderColor: '#cbd5e1' },
-                              '&:hover fieldset': { borderColor: '#94a3b8' },
-                              '&.Mui-focused fieldset': { borderColor: '#2563eb' },
-                            }}
-                            MenuProps={{
-                              PaperProps: {
-                                sx: {
-                                  bgcolor: '#ffffff',
-                                  color: '#0f172a',
-                                  boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
-                                  border: '1px solid #e2e8f0',
-                                  '& .MuiMenuItem-root': {
-                                    fontSize: '0.85rem',
-                                    color: '#0f172a',
-                                    '&:hover': { bgcolor: '#f1f5f9' },
-                                    '&.Mui-selected': { bgcolor: '#e0e7ff', color: '#1d4ed8', fontWeight: 600 },
-                                  },
-                                },
-                              },
                             }}
                           >
                             <MenuItem value="hours">hour{val > 1 ? 's' : ''}</MenuItem>
                             <MenuItem value="days">day{val > 1 ? 's' : ''}</MenuItem>
                           </Select>
-                          <Typography variant="body2" sx={{ color: '#475569', fontWeight: 500, fontSize: '0.85rem' }}>
+                          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, fontSize: '0.85rem' }}>
                             before service
                           </Typography>
                         </Box>
@@ -1214,8 +935,8 @@ export default function AutoEventScheduler() {
                           size="small"
                           onClick={() => handleRemoveReminder(idx)}
                           sx={{
-                            color: '#94a3b8',
-                            '&:hover': { color: '#ef4444', bgcolor: 'rgba(239, 68, 68, 0.08)' },
+                            color: 'text.secondary',
+                            '&:hover': { color: 'error.main' },
                           }}
                         >
                           <DeleteIcon sx={{ fontSize: 17 }} />
@@ -1234,19 +955,19 @@ export default function AutoEventScheduler() {
             px: 3,
             py: 2,
             gap: 1.5,
-            bgcolor: '#f8fafc',
-            borderTop: '1px solid #f1f5f9',
+            bgcolor: isDark ? '#0c0c0c' : '#f8fafc',
+            borderTop: 1,
+            borderColor: 'divider',
           }}
         >
           <Button
             onClick={() => setDialogOpen(false)}
+            variant="outlined"
             sx={{
               textTransform: 'none',
               fontWeight: 600,
-              color: '#64748b',
-              borderRadius: 2,
+              borderRadius: 1.5,
               px: 2.5,
-              '&:hover': { bgcolor: '#e2e8f0', color: '#0f172a' },
             }}
           >
             Cancel
@@ -1257,16 +978,9 @@ export default function AutoEventScheduler() {
             disabled={loading}
             sx={{
               textTransform: 'none',
-              fontWeight: 700,
-              borderRadius: 2,
-              background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-              color: '#ffffff',
-              boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
-              px: 3.5,
-              py: 1,
-              '&:hover': {
-                background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)',
-              },
+              fontWeight: 600,
+              borderRadius: 1.5,
+              px: 3,
             }}
           >
             {editingId ? 'Save Changes' : 'Create Schedule'}
@@ -1280,31 +994,26 @@ export default function AutoEventScheduler() {
         onClose={() => setDeleteConfirm(null)}
         PaperProps={{
           sx: {
-            borderRadius: 3,
-            bgcolor: '#ffffff',
-            color: '#0f172a',
-            backgroundImage: 'none',
-            border: '1px solid #e2e8f0',
-            boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+            borderRadius: 2.5,
           },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 700, color: '#0f172a', pt: 2.5, px: 3 }}>
+        <DialogTitle sx={{ fontWeight: 700, pt: 2.5, px: 3 }}>
           Delete Schedule?
         </DialogTitle>
         <DialogContent sx={{ px: 3 }}>
-          <Typography variant="body2" sx={{ color: '#475569' }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             This will permanently delete this recurring schedule. Events that have already been generated will not be affected.
           </Typography>
         </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2, bgcolor: '#f8fafc', borderTop: '1px solid #f1f5f9' }}>
+        <DialogActions sx={{ px: 3, py: 2, bgcolor: isDark ? '#0c0c0c' : '#f8fafc', borderTop: 1, borderColor: 'divider' }}>
           <Button
             onClick={() => setDeleteConfirm(null)}
+            variant="outlined"
             sx={{
               textTransform: 'none',
-              color: '#64748b',
               fontWeight: 600,
-              '&:hover': { bgcolor: '#e2e8f0', color: '#0f172a' },
+              borderRadius: 1.5,
             }}
           >
             Cancel
@@ -1315,8 +1024,8 @@ export default function AutoEventScheduler() {
             onClick={() => handleDelete(deleteConfirm)}
             sx={{
               textTransform: 'none',
-              fontWeight: 700,
-              borderRadius: 2,
+              fontWeight: 600,
+              borderRadius: 1.5,
               px: 2.5,
             }}
           >

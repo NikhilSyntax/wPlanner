@@ -501,7 +501,17 @@ function ChordSheetViewer({
   }, []);
 
   const [transpose, setTranspose] = useState(initialTranspose);
-  const [themeMode, setThemeMode] = useState('light');
+  const [themeMode, setThemeMode] = useState(() => {
+    try {
+      return (
+        localStorage.getItem('wplanner_chordsheet_theme') ||
+        localStorage.getItem('themeMode') ||
+        'dark'
+      );
+    } catch (e) {
+      return 'dark';
+    }
+  });
   const [highlightStyle, setHighlightStyle] = useState('pill');
   const [fontSize, setFontSize] = useState(15);
   const [twoColumns, setTwoColumns] = useState(false);
@@ -636,29 +646,41 @@ function ChordSheetViewer({
     return found?.content?.chords || found?.content?.lyrics || '';
   }, [selectedSplitLanguage, regionalList]);
 
-  // Handle autoscroll
+  // Ultra-smooth, musician-friendly slow autoscroll using requestAnimationFrame
   useEffect(() => {
-    if (isScrolling) {
-      scrollIntervalRef.current = setInterval(() => {
+    if (!isScrolling) return;
+
+    let animId;
+    let lastTime = performance.now();
+    let accumulated = 0;
+
+    const scrollLoop = (currentTime) => {
+      const deltaMs = currentTime - lastTime;
+      lastTime = currentTime;
+
+      // Base speed: 3.5 pixels per second at 1x speed (slow, relaxed reading pace)
+      // At 0.25x: ~0.9 px/s, 0.5x: ~1.75 px/s, 1x: ~3.5 px/s
+      const pixelsPerSec = Math.max(0.4, scrollSpeed * 3.5);
+      accumulated += (pixelsPerSec * deltaMs) / 1000;
+
+      if (accumulated >= 1) {
+        const px = Math.floor(accumulated);
+        accumulated -= px;
+
         if (isFullscreen && viewerContainerRef.current) {
-          viewerContainerRef.current.scrollBy({
-            top: scrollSpeed * 1.5,
-            left: 0,
-            behavior: 'smooth',
-          });
+          viewerContainerRef.current.scrollTop += px;
         } else {
-          window.scrollBy({
-            top: scrollSpeed * 1.5,
-            left: 0,
-            behavior: 'smooth',
-          });
+          window.scrollBy({ top: px, left: 0, behavior: 'auto' });
         }
-      }, 50);
-    } else {
-      if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
-    }
+      }
+
+      animId = requestAnimationFrame(scrollLoop);
+    };
+
+    animId = requestAnimationFrame(scrollLoop);
+
     return () => {
-      if (scrollIntervalRef.current) clearInterval(scrollIntervalRef.current);
+      if (animId) cancelAnimationFrame(animId);
     };
   }, [isScrolling, scrollSpeed, isFullscreen]);
 
@@ -1280,7 +1302,7 @@ function ChordSheetViewer({
                 if (onViewModeChange) onViewModeChange(nextVal ? 'chords' : 'lyrics');
                 if (onToggleShowChords) onToggleShowChords(nextVal);
               }}
-              sx={{ color: showChords ? '#38bdf8' : 'inherit' }}
+              sx={{ color: showChords ? '#ff4d28' : 'inherit' }}
               title={showChords ? 'Hide Chords (Lyrics Only)' : 'Show Chords'}
             >
               {showChords ? <QueueMusicIcon fontSize="small" /> : <LyricsIcon fontSize="small" />}
@@ -1597,14 +1619,21 @@ function ChordSheetViewer({
                 size="small"
                 value={themeMode}
                 exclusive
-                onChange={(e, val) => val && setThemeMode(val)}
+                onChange={(e, val) => {
+                  if (val) {
+                    setThemeMode(val);
+                    try {
+                      localStorage.setItem('wplanner_chordsheet_theme', val);
+                    } catch (err) {}
+                  }
+                }}
                 sx={{ height: 30 }}
               >
+                <ToggleButton value="dark" title="Stage Dark (Obsidian)" sx={{ px: 1 }}>
+                  <DarkModeIcon sx={{ fontSize: 15 }} />
+                </ToggleButton>
                 <ToggleButton value="light" title="Studio Light" sx={{ px: 1 }}>
                   <LightModeIcon sx={{ fontSize: 15 }} />
-                </ToggleButton>
-                <ToggleButton value="dark" title="Stage Dark" sx={{ px: 1 }}>
-                  <DarkModeIcon sx={{ fontSize: 15 }} />
                 </ToggleButton>
                 <ToggleButton value="sepia" title="Warm Sepia" sx={{ px: 1 }}>
                   <ThemeIcon sx={{ fontSize: 15 }} />
@@ -1857,8 +1886,8 @@ function ChordSheetViewer({
 
             {/* Right Column: Regional Language (e.g. Telugu) */}
             <Grid item xs={12} md={6} sx={{ borderLeft: { md: '1px solid' }, borderColor: { md: 'divider' } }}>
-              <Box sx={{ pb: 1, mb: 1.5, borderBottom: '2px solid', borderColor: '#38bdf8', display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="subtitle2" fontWeight={800} sx={{ color: '#0284c7' }}>
+              <Box sx={{ pb: 1, mb: 1.5, borderBottom: '2px solid', borderColor: '#ff4d28', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="subtitle2" fontWeight={800} sx={{ color: '#ff4d28' }}>
                   {(selectedSplitLanguage || 'Regional Language').toUpperCase()}
                 </Typography>
               </Box>
@@ -2038,7 +2067,7 @@ function ChordSheetViewer({
           <IconButton
             size="small"
             onClick={() => setIsScrolling(!isScrolling)}
-            sx={{ color: isScrolling ? '#38bdf8' : '#ffffff' }}
+            sx={{ color: isScrolling ? '#ff4d28' : '#ffffff' }}
           >
             {isScrolling ? <PauseIcon /> : <PlayIcon />}
           </IconButton>
@@ -2052,7 +2081,7 @@ function ChordSheetViewer({
           </Typography>
 
           <Stack direction="row" spacing={0.5} alignItems="center">
-            {[0.5, 1, 1.5, 2].map((spd) => (
+            {[0.5, 0.75, 1, 1.5, 2].map((spd) => (
               <Button
                 key={spd}
                 size="small"
@@ -2063,8 +2092,12 @@ function ChordSheetViewer({
                   px: 0.6,
                   py: 0.2,
                   fontSize: '0.68rem',
+                  fontWeight: 700,
                   color: scrollSpeed === spd ? '#ffffff' : 'rgba(255,255,255,0.7)',
-                  bgcolor: scrollSpeed === spd ? 'primary.main' : 'transparent',
+                  bgcolor: scrollSpeed === spd ? '#ff4d28 !important' : 'transparent',
+                  '&:hover': {
+                    bgcolor: scrollSpeed === spd ? '#e63e18 !important' : 'rgba(255,255,255,0.08)',
+                  },
                   borderRadius: 1,
                   height: 22,
                 }}

@@ -6,6 +6,11 @@ import { MemoryRouter } from 'react-router-dom';
 import authReducer from '../store/slices/authSlice';
 import Dashboard from './Dashboard';
 
+jest.mock('../services/api', () => ({
+  get: jest.fn().mockResolvedValue({ data: [] }),
+  post: jest.fn().mockResolvedValue({ data: {} }),
+}));
+
 const createTestStore = () => {
   return configureStore({
     reducer: {

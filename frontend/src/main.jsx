@@ -21,8 +21,13 @@ registerServiceWorker();
 axios.defaults.baseURL = API_ORIGIN;
 
 function ThemeWrapper() {
-  const themeMode = useSelector((state) => state.ui.themeMode);
-  const theme = themeMode === 'dark' ? darkTheme : lightTheme;
+  const themeMode = useSelector((state) => state.ui.themeMode) || 'dark';
+  const theme = themeMode === 'light' ? lightTheme : darkTheme;
+
+  React.useEffect(() => {
+    document.documentElement.setAttribute('data-theme', themeMode);
+    document.body.setAttribute('data-theme', themeMode);
+  }, [themeMode]);
 
   return (
     <ThemeProvider theme={theme}>

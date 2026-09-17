@@ -58,6 +58,11 @@ import {
   Tv as TvIcon,
   ManageAccounts as ManageAccountsIcon,
   Print as PrintIcon,
+  Undo as UndoIcon,
+  Mic as MicIcon,
+  Piano as PianoIcon,
+  Headphones as HeadphonesIcon,
+  GraphicEq as GraphicEqIcon,
 } from '@mui/icons-material';
 import api, { apiUrl } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -94,6 +99,26 @@ const statusColors = {
   in_progress: 'warning',
   completed: 'success',
   cancelled: 'error',
+};
+
+const getInstrumentIcon = (role) => {
+  const r = String(role || '').toLowerCase().trim();
+  const sx = { fontSize: 13 };
+  if (['singer', 'vocalist', 'vocals', 'worship leader', 'lead vocals', 'backing vocals'].some(k => r.includes(k)))
+    return <MicIcon sx={{ ...sx, color: '#e91e63' }} />;
+  if (['guitarist', 'guitar'].some(k => r.includes(k)))
+    return <MusicIcon sx={{ ...sx, color: '#ff9800' }} />;
+  if (['keyboardist', 'keyboard', 'piano', 'synth'].some(k => r.includes(k)))
+    return <PianoIcon sx={{ ...sx, color: '#9c27b0' }} />;
+  if (['drummer', 'drums', 'percussion'].some(k => r.includes(k)))
+    return <GraphicEqIcon sx={{ ...sx, color: '#2196f3' }} />;
+  if (['bassist', 'bass'].some(k => r.includes(k)))
+    return <MusicIcon sx={{ ...sx, color: '#4caf50' }} />;
+  if (['production', 'audio', 'sound', 'mixer'].some(k => r.includes(k)))
+    return <HeadphonesIcon sx={{ ...sx, color: '#607d8b' }} />;
+  if (['media', 'slides', 'visual'].some(k => r.includes(k)))
+    return <TvIcon sx={{ ...sx, color: '#795548' }} />;
+  return <MusicIcon sx={{ ...sx, color: '#9e9e9e' }} />;
 };
 
 function SongTitleWithTimeSignature({ title, timeSignature, prefix = '' }) {
@@ -134,6 +159,7 @@ function EventDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [unconfirmDialogOpen, setUnconfirmDialogOpen] = useState(false);
   const [songs, setSongs] = useState([]);
   const [newSongTitle, setNewSongTitle] = useState('');
   const [newSongKey, setNewSongKey] = useState('AUTO');
@@ -149,6 +175,15 @@ function EventDetails() {
   const [descDraft, setDescDraft] = useState(event?.description || '');
   const [saveMessage, setSaveMessage] = useState('');
   const [memberUpdatingId, setMemberUpdatingId] = useState(null);
+  const [revealedMemberIds, setRevealedMemberIds] = useState(new Set());
+  const toggleMemberReveal = (memberId) => {
+    setRevealedMemberIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(memberId)) next.delete(memberId);
+      else next.add(memberId);
+      return next;
+    });
+  };
 
   // ----- Volunteer Opt-In ("Available to Serve") State -----
   const [optInDialogOpen, setOptInDialogOpen] = useState(false);
@@ -345,6 +380,52 @@ function EventDetails() {
     }
   };
 
+  const handleAdminApprove = async (member) => {
+    const memberUserId = member.userId?._id || member.userId || member._id;
+    try {
+      setTeamMembers((prev) =>
+        prev.map((m) => {
+          const uid = m.userId?._id || m.userId || m._id;
+          return String(uid) === String(memberUserId) ? { ...m, status: 'accepted' } : m;
+        })
+      );
+      await api.patch(`/events/${id}/assignments/${memberUserId}/role`, {
+        role: member.role || 'Member',
+        status: 'accepted',
+      });
+      setSaveMessage({ type: 'success', text: `${member.userId?.name || 'Member'} approved!` });
+      setTimeout(() => setSaveMessage(''), 2500);
+      await loadPageData(false);
+    } catch (err) {
+      console.error('Failed to approve member:', err);
+      setError(err?.response?.data?.message || 'Failed to approve member');
+      await loadPageData(false);
+    }
+  };
+
+  const handleAdminRemove = async (member) => {
+    const memberUserId = member.userId?._id || member.userId || member._id;
+    try {
+      setTeamMembers((prev) =>
+        prev.filter((m) => {
+          const uid = m.userId?._id || m.userId || m._id;
+          return String(uid) !== String(memberUserId);
+        })
+      );
+      await api.patch(`/events/${id}/assignments/${memberUserId}/role`, {
+        role: member.role || 'Member',
+        status: 'declined',
+      });
+      setSaveMessage({ type: 'info', text: `${member.userId?.name || 'Member'} removed from team.` });
+      setTimeout(() => setSaveMessage(''), 2500);
+      await loadPageData(false);
+    } catch (err) {
+      console.error('Failed to remove member:', err);
+      setError(err?.response?.data?.message || 'Failed to remove member');
+      await loadPageData(false);
+    }
+  };
+
   const addSongTitleInputRef = useRef(null);
   const setlistCardRef = useRef(null);
 
@@ -455,6 +536,7 @@ function EventDetails() {
       body.setlist = setlist.map((s) => s._id);
     }
     await api.put(`/events/${id}`, body);
+    setEvent((prev) => (prev ? { ...prev, event: { ...prev.event, status } } : prev));
     setSaveMessage({ type: 'success', text: successText });
     setTimeout(() => {
       fetchEvent();
@@ -528,6 +610,8 @@ function EventDetails() {
 
   const activeTeamMembers = teamMembers.filter((m) => {
     if (m.status === 'opt_in_pending') return false;
+    const rawSt = m.status ? String(m.status).toLowerCase() : 'pending';
+    if (rawSt === 'declined' || rawSt === 'rejected' || rawSt === 'not_available') return false;
     const userObj = m.userId || m.user || m.member || {};
     const r = String(userObj.role || m.role || '').toLowerCase().trim();
     if (userObj.isAdmin || r === 'admin') return false;
@@ -766,10 +850,7 @@ function EventDetails() {
           mb: 2.5,
           p: { xs: 2, sm: '14px 20px' },
           borderRadius: 3,
-          bgcolor: (theme) =>
-            theme.palette.mode === 'dark'
-              ? 'rgba(30, 41, 59, 0.4)'
-              : 'background.paper',
+          bgcolor: 'background.paper',
           border: '1px solid',
           borderColor: 'divider',
           display: 'flex',
@@ -925,176 +1006,30 @@ function EventDetails() {
                 </Typography>
               </Box>
             )}
-          </Box>
-        </Box>
 
-        {/* Right Side: Action Buttons */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.25,
-            flexWrap: 'wrap',
-            pt: { xs: 1.5, md: 0 },
-            borderTop: { xs: '1px solid', md: 'none' },
-            borderColor: { xs: 'divider', md: 'transparent' },
-            justifyContent: { xs: 'flex-start', sm: 'flex-start', md: 'flex-end' },
-          }}
-        >
-          {/* Volunteer Self-Opt-In Buttons */}
-          {canOptIn && !userOptInAssignment && (
-            <Button
-              variant="contained"
-              color="secondary"
-              size="small"
-              startIcon={<VolunteerActivismIcon sx={{ fontSize: 16 }} />}
-              onClick={() => setOptInDialogOpen(true)}
+            {/* Event Description in Top Tab */}
+            <Box
               sx={{
-                borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '0.8125rem',
-                height: 34,
-                px: 2,
-                boxShadow: '0 2px 8px rgba(147, 51, 234, 0.25)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 0.75,
+                mt: 1,
               }}
             >
-              Volunteer to Serve
-            </Button>
-          )}
-
-          {userOptInAssignment && (
-            <>
-              <Chip
-                icon={<HowToRegIcon sx={{ fontSize: '14px !important' }} />}
-                label={`Opted In (${userOptInAssignment.role || 'Volunteer'})`}
-                color="secondary"
-                variant="outlined"
-                sx={{ fontWeight: 600, fontSize: '0.78rem', height: 32 }}
-              />
-              <Button
-                variant="outlined"
-                color="error"
-                size="small"
-                onClick={handleWithdrawOptIn}
-                disabled={optInSubmitting}
+              <EventIcon sx={{ fontSize: 16, color: 'text.secondary', mt: 0.25, flexShrink: 0 }} />
+              <Typography
+                variant="body2"
+                color="text.secondary"
                 sx={{
-                  borderRadius: 2,
-                  textTransform: 'none',
-                  fontWeight: 600,
                   fontSize: '0.8125rem',
-                  height: 34,
-                  px: 1.5,
+                  lineHeight: 1.45,
+                  fontStyle: eventInfo.description ? 'normal' : 'italic',
                 }}
               >
-                Withdraw Offer
-              </Button>
-            </>
-          )}
-
-          {canEdit && (
-            <>
-              {isFullAdmin && (
-                <>
-                  {eventInfo.status === 'draft' && (
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      size="small"
-                      startIcon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
-                      onClick={handleConfirmEvent}
-                      sx={{
-                        borderRadius: 2,
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '0.8125rem',
-                        height: 34,
-                        px: 2,
-                        boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
-                      }}
-                    >
-                      Confirm Event
-                    </Button>
-                  )}
-
-                  {eventInfo.status === 'published' && (
-                    <>
-                      <Button
-                        variant="outlined"
-                        color="warning"
-                        size="small"
-                        onClick={handleUnconfirmEvent}
-                        sx={{
-                          borderRadius: 2,
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          fontSize: '0.8125rem',
-                          height: 34,
-                          px: 1.75,
-                        }}
-                      >
-                        Unconfirm Event
-                      </Button>
-                      <Button
-                        variant="contained"
-                        color="success"
-                        size="small"
-                        startIcon={<CheckCircleIcon sx={{ fontSize: 16 }} />}
-                        onClick={handleMarkCompleted}
-                        sx={{
-                          borderRadius: 2,
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          fontSize: '0.8125rem',
-                          height: 34,
-                          px: 2,
-                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
-                        }}
-                      >
-                        Mark Completed
-                      </Button>
-                    </>
-                  )}
-
-                  {eventInfo.status === 'completed' && (
-                    <Button
-                      variant="outlined"
-                      color="warning"
-                      size="small"
-                      onClick={handleUndoCompleted}
-                      sx={{
-                        borderRadius: 2,
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '0.8125rem',
-                        height: 34,
-                        px: 2,
-                      }}
-                    >
-                      Undo Completed
-                    </Button>
-                  )}
-                </>
-              )}
-
-              <Button
-                variant="outlined"
-                color="error"
-                size="small"
-                onClick={() => setDeleteDialogOpen(true)}
-                sx={{
-                  borderRadius: 2,
-                  textTransform: 'none',
-                  fontWeight: 600,
-                  fontSize: '0.8125rem',
-                  height: 34,
-                  px: 2,
-                }}
-              >
-                Delete
-              </Button>
-            </>
-          )}
+                {eventInfo.description || 'No description provided.'}
+              </Typography>
+            </Box>
+          </Box>
         </Box>
       </Paper>
 
@@ -1110,42 +1045,353 @@ function EventDetails() {
         </Alert>
       )}
 
-      <Grid container spacing={3}>
-        {/* Main Content */}
-        <Grid item xs={12} lg={8}>
-          {/* Event Description (Compact) */}
-          <Card sx={{ borderRadius: 2.5, mb: 2.5 }}>
+      {/* Horizontal Event Actions Toolbar */}
+      <Card
+            sx={{
+              borderRadius: 2.5,
+              mb: 2.5,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
             <CardContent
               sx={{
-                p: '12px 16px !important',
+                p: '10px 14px !important',
                 display: 'flex',
-                alignItems: 'flex-start',
-                gap: 1.5,
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 1,
               }}
             >
-              <EventIcon color="primary" sx={{ fontSize: 20, mt: 0.2, flexShrink: 0 }} />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                 <Typography
                   variant="caption"
                   color="text.secondary"
                   fontWeight={700}
                   textTransform="uppercase"
-                  letterSpacing="0.04em"
-                  sx={{ display: 'block', mb: 0.25, fontSize: '0.7rem' }}
+                  letterSpacing="0.06em"
+                  sx={{ fontSize: '0.7rem', mr: 0.5, display: { xs: 'none', sm: 'inline-block' } }}
                 >
-                  Description
+                  Actions:
                 </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.primary"
-                  sx={{ lineHeight: 1.5, fontSize: '0.875rem' }}
-                >
-                  {eventInfo.description || 'No description provided.'}
-                </Typography>
+
+                {canEdit && (
+                  <Tooltip title="Edit Event" arrow>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => navigate(`/events/${id}/edit`)}
+                      sx={{
+                        borderRadius: 1.75,
+                        py: 0.5,
+                        px: { xs: 0.85, sm: 1.25 },
+                        minWidth: { xs: 32, sm: 'auto' },
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        textTransform: 'none',
+                        height: 30,
+                      }}
+                    >
+                      <EditIcon sx={{ fontSize: 16 }} />
+                      <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.6 }}>
+                        Edit Event
+                      </Box>
+                    </Button>
+                  </Tooltip>
+                )}
+
+                {isFullAdmin && event.event?.status === 'draft' && (
+                  <Tooltip title="Confirm Event" arrow>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      size="small"
+                      onClick={handleConfirmEvent}
+                      sx={{
+                        borderRadius: 1.75,
+                        py: 0.5,
+                        px: { xs: 0.85, sm: 1.25 },
+                        minWidth: { xs: 32, sm: 'auto' },
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        textTransform: 'none',
+                        height: 30,
+                      }}
+                    >
+                      <CheckCircleIcon sx={{ fontSize: 16 }} />
+                      <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.6 }}>
+                        Confirm Event
+                      </Box>
+                    </Button>
+                  </Tooltip>
+                )}
+
+                {isFullAdmin && event.event?.status === 'published' && (
+                  <>
+                    <Tooltip title="Unconfirm Event" arrow>
+                      <Button
+                        variant="outlined"
+                        color="warning"
+                        size="small"
+                        onClick={() => setUnconfirmDialogOpen(true)}
+                        sx={{
+                          borderRadius: 1.75,
+                          py: 0.5,
+                          px: { xs: 0.85, sm: 1.25 },
+                          minWidth: { xs: 32, sm: 'auto' },
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          textTransform: 'none',
+                          height: 30,
+                        }}
+                      >
+                        <UndoIcon sx={{ fontSize: 16 }} />
+                        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.6 }}>
+                          Unconfirm Event
+                        </Box>
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="Mark Completed" arrow>
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        onClick={handleMarkCompleted}
+                        sx={{
+                          borderRadius: 1.75,
+                          py: 0.5,
+                          px: { xs: 0.85, sm: 1.25 },
+                          minWidth: { xs: 32, sm: 'auto' },
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          textTransform: 'none',
+                          height: 30,
+                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
+                        }}
+                      >
+                        <CheckCircleIcon sx={{ fontSize: 16 }} />
+                        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.6 }}>
+                          Mark Completed
+                        </Box>
+                      </Button>
+                    </Tooltip>
+                  </>
+                )}
+
+                {isFullAdmin && event.event?.status === 'completed' && (
+                  <Tooltip title="Undo Completed" arrow>
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      size="small"
+                      onClick={handleUndoCompleted}
+                      sx={{
+                        borderRadius: 1.75,
+                        py: 0.5,
+                        px: { xs: 0.85, sm: 1.25 },
+                        minWidth: { xs: 32, sm: 'auto' },
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        textTransform: 'none',
+                        height: 30,
+                      }}
+                    >
+                      <UndoIcon sx={{ fontSize: 16 }} />
+                      <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.6 }}>
+                        Undo Completed
+                      </Box>
+                    </Button>
+                  </Tooltip>
+                )}
+
+                {canOptIn && !userOptInAssignment && (
+                  <Tooltip title="Volunteer to Serve" arrow>
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      size="small"
+                      onClick={() => setOptInDialogOpen(true)}
+                      sx={{
+                        borderRadius: 1.75,
+                        py: 0.5,
+                        px: { xs: 0.85, sm: 1.25 },
+                        minWidth: { xs: 32, sm: 'auto' },
+                        fontSize: '0.78rem',
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        height: 30,
+                        boxShadow: '0 2px 8px rgba(147, 51, 234, 0.25)',
+                      }}
+                    >
+                      <VolunteerActivismIcon sx={{ fontSize: 16 }} />
+                      <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.6 }}>
+                        Volunteer to Serve
+                      </Box>
+                    </Button>
+                  </Tooltip>
+                )}
+
+                {userOptInAssignment && (
+                  <Tooltip title="Withdraw Volunteer Offer" arrow>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      onClick={handleWithdrawOptIn}
+                      disabled={optInSubmitting}
+                      sx={{
+                        borderRadius: 1.75,
+                        py: 0.5,
+                        px: { xs: 0.85, sm: 1.25 },
+                        minWidth: { xs: 32, sm: 'auto' },
+                        fontSize: '0.78rem',
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        height: 30,
+                      }}
+                    >
+                      <CloseIcon sx={{ fontSize: 16 }} />
+                      <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.6 }}>
+                        Withdraw Offer
+                      </Box>
+                    </Button>
+                  </Tooltip>
+                )}
+
+                <Tooltip title={canEdit ? 'Edit Team' : 'View Team'} arrow>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => navigate(`/events/${id}/team`)}
+                    sx={{
+                      borderRadius: 1.75,
+                      py: 0.5,
+                      px: { xs: 0.85, sm: 1.25 },
+                      minWidth: { xs: 32, sm: 'auto' },
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      height: 30,
+                    }}
+                  >
+                    <GroupIcon sx={{ fontSize: 16 }} />
+                    <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.6 }}>
+                      {canEdit ? 'Edit Team' : 'View Team'}
+                    </Box>
+                  </Button>
+                </Tooltip>
+
+                <Tooltip title="Open Chat" arrow>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => navigate(`/events/${id}/chat`)}
+                    sx={{
+                      borderRadius: 1.75,
+                      py: 0.5,
+                      px: { xs: 0.85, sm: 1.25 },
+                      minWidth: { xs: 32, sm: 'auto' },
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      height: 30,
+                    }}
+                  >
+                    <ChatIcon sx={{ fontSize: 16 }} />
+                    <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.6 }}>
+                      Open Chat
+                    </Box>
+                  </Button>
+                </Tooltip>
+
+                {canEdit && (
+                  <Tooltip title={reminderLoading ? 'Sending Reminder...' : 'Send Reminder'} arrow>
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      size="small"
+                      onClick={async () => {
+                        try {
+                          setReminderLoading(true);
+                          setReminderMessage('');
+                          const token = localStorage.getItem('accessToken');
+                          const res = await fetch(apiUrl(`/api/events/${id}/send-reminder`), {
+                            method: 'POST',
+                            headers: { Authorization: `Bearer ${token}` },
+                          });
+                          const data = await res.json();
+                          if (res.ok) {
+                            setReminderMessage(data.message || 'Reminder sent!');
+                            setTimeout(() => setReminderMessage(''), 4000);
+                          } else {
+                            alert(data.message || 'Failed to send reminder');
+                          }
+                        } catch (err) {
+                          alert(err.message || 'Failed to send reminder');
+                        } finally {
+                          setReminderLoading(false);
+                        }
+                      }}
+                      disabled={reminderLoading}
+                      sx={{
+                        borderRadius: 1.75,
+                        py: 0.5,
+                        px: { xs: 0.85, sm: 1.25 },
+                        minWidth: { xs: 32, sm: 'auto' },
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        textTransform: 'none',
+                        height: 30,
+                      }}
+                    >
+                      <NotificationsActiveIcon sx={{ fontSize: 16 }} />
+                      <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.6 }}>
+                        {reminderLoading ? 'Sending...' : 'Send Reminder'}
+                      </Box>
+                    </Button>
+                  </Tooltip>
+                )}
+
+                {reminderMessage && (
+                  <Alert severity="success" sx={{ py: 0, px: 1, fontSize: '0.75rem', height: 30, alignItems: 'center' }}>
+                    {reminderMessage}
+                  </Alert>
+                )}
               </Box>
+
+              {isFullAdmin && (
+                <Tooltip title="Delete Event" arrow>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    onClick={() => setDeleteDialogOpen(true)}
+                    sx={{
+                      borderRadius: 1.75,
+                      py: 0.5,
+                      px: { xs: 0.85, sm: 1.25 },
+                      minWidth: { xs: 32, sm: 'auto' },
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      height: 30,
+                    }}
+                  >
+                    <DeleteIcon sx={{ fontSize: 16 }} />
+                    <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' }, ml: 0.6 }}>
+                      Delete Event
+                    </Box>
+                  </Button>
+                </Tooltip>
+              )}
             </CardContent>
           </Card>
 
+      {/* Main Content: Songs & Setlist (~70%) on Left, Team Members (~30%) on Right */}
+      <Grid container spacing={2.5}>
+        {/* Left Column: Songs & Setlist (70%) */}
+        <Grid item xs={12} md={8} lg={8.4}>
           {/* Songs / Setlist */}
           <Card ref={setlistCardRef} sx={{ borderRadius: 3, mb: 3 }}>
             <CardContent sx={{ p: 3 }}>
@@ -1814,7 +2060,10 @@ function EventDetails() {
               </Box>
             </CardContent>
           </Card>
+        </Grid>
 
+        {/* Right Column: Team Members & Roster (30%) */}
+        <Grid item xs={12} md={4} lg={3.6}>
           {optInMessage && (
             <Alert severity="success" sx={{ mb: 2.5 }} onClose={() => setOptInMessage('')}>
               {optInMessage}
@@ -2071,410 +2320,215 @@ function EventDetails() {
           {/* Team Members */}
           <Card sx={{ borderRadius: 3 }}>
             <CardContent sx={{ p: 3 }}>
-              <Box display="flex" alignItems="center" justifyContent="space-between" mb={3} flexWrap="wrap" gap={1}>
-                <Box display="flex" alignItems="center" gap={2}>
-                  <GroupIcon color="primary" />
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Team Members ({activeTeamMembers.length})
-                  </Typography>
-                </Box>
+              <Box display="flex" alignItems="center" gap={1.5} mb={2.5} flexWrap="wrap">
+                <GroupIcon color="primary" />
+                <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.05rem' }}>
+                  Know Your Team!
+                </Typography>
+                <Chip
+                  label={activeTeamMembers.length}
+                  size="small"
+                  color="primary"
+                  sx={{ height: 22, fontSize: '0.72rem', fontWeight: 700, minWidth: 28 }}
+                />
                 {canEdit && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<EditIcon />}
-                    onClick={() => navigate(`/events/${id}/team`)}
-                    sx={{ borderRadius: 1.5, textTransform: 'none', fontSize: '0.8125rem' }}
-                  >
-                    Manage Roster
-                  </Button>
+                  <Tooltip title="Manage Roster" arrow>
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      onClick={() => navigate(`/events/${id}/team`)}
+                      sx={{
+                        width: 28,
+                        height: 28,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1.5,
+                      }}
+                    >
+                      <EditIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                  </Tooltip>
                 )}
               </Box>
 
               {activeTeamMembers.length > 0 ? (
-                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                  <Table size="small">
-                    <TableHead sx={{ bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : '#f8fafc' }}>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', py: 1.25 }}>Person</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', py: 1.25 }}>Role</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', py: 1.25 }}>Status</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: '0.8125rem', py: 1.25, textAlign: 'right' }}>Response Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {activeTeamMembers.map((member, idx) => {
-                        const rawStatus = member.status ? String(member.status).toLowerCase() : 'pending';
-                        const isApproved = rawStatus === 'accepted' || rawStatus === 'confirmed' || rawStatus === 'approved';
-                        const isDeclined = rawStatus === 'declined' || rawStatus === 'rejected' || rawStatus === 'not_available';
-                        const currentUserId = user?.id || user?._id;
-                        const memberUserId = member.userId?._id ? String(member.userId._id) : String(member.userId || member._id || '');
-                        const isSelf = Boolean(currentUserId && memberUserId && String(memberUserId) === String(currentUserId));
-                        const isUpdating = memberUpdatingId === memberUserId;
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'flex-start' }}>
+                  {activeTeamMembers.map((member, idx) => {
+                    const rawStatus = member.status ? String(member.status).toLowerCase() : 'pending';
+                    const isApproved = rawStatus === 'accepted' || rawStatus === 'confirmed' || rawStatus === 'approved';
+                    const memberName = member.userId?.name || member.name || 'Unknown';
+                    const memberUserId = member.userId?._id ? String(member.userId._id) : String(member.userId || member._id || '');
+                    const profilePhoto = member.userId?.profilePhotoUrl;
+                    const isRevealed = revealedMemberIds.has(memberUserId);
+                    const currentUid = user?.id || user?._id;
+                    const isSelf = Boolean(currentUid && memberUserId && String(memberUserId) === String(currentUid));
 
-                        return (
-                          <TableRow key={idx} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
-                            <TableCell sx={{ py: 1.25 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                                <Avatar
-                                  sx={{
-                                    width: 32,
-                                    height: 32,
-                                    fontSize: '0.8rem',
-                                    fontWeight: 700,
-                                    bgcolor: isApproved
-                                      ? '#10b981'
-                                      : isDeclined
-                                      ? '#ef4444'
-                                      : 'primary.main',
-                                  }}
-                                >
-                                  {(member.userId?.name || member.name || 'U').charAt(0).toUpperCase()}
-                                </Avatar>
-                                <Box>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                                    <Typography variant="body2" fontWeight={600} sx={{ lineHeight: 1.2 }}>
-                                      {member.userId?.name || member.name || member.userId?.email || 'Unknown'}
-                                    </Typography>
-                                    {isSelf && (
-                                      <Chip
-                                        label="You"
-                                        size="small"
-                                        color="primary"
-                                        sx={{ height: 18, fontSize: '0.65rem', fontWeight: 700, px: 0.3 }}
-                                      />
-                                    )}
-                                  </Box>
-                                  {member.userId?.email && member.userId?.name && (
-                                    <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.72rem', mt: 0.2 }}>
-                                      {member.userId.email}
-                                    </Typography>
-                                  )}
-                                </Box>
-                              </Box>
-                            </TableCell>
-                            <TableCell sx={{ py: 1.25 }}>
-                              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                                <Chip
-                                  label={member.role || 'Member'}
-                                  size="small"
-                                  variant="outlined"
-                                  sx={{ fontWeight: 600, fontSize: '0.75rem', height: 24 }}
-                                />
-                                {canEdit && isFullAdmin && (
-                                  <Tooltip title={`Change role for ${member.userId?.name || member.name || 'member'} in this event`}>
-                                    <IconButton
-                                      size="small"
-                                      color="primary"
-                                      onClick={() => handleOpenEditRoleDialog(member)}
-                                      sx={{ p: 0.3 }}
-                                      aria-label={`Change role for ${member.userId?.name || member.name || 'member'}`}
-                                    >
-                                      <EditIcon sx={{ fontSize: 14 }} />
-                                    </IconButton>
-                                  </Tooltip>
-                                )}
-                              </Box>
-                            </TableCell>
-                            <TableCell sx={{ py: 1.25 }}>
-                              {isApproved ? (
-                                <Chip
-                                  icon={<CheckCircleIcon sx={{ fontSize: '13px !important', color: '#15803d !important' }} />}
-                                  label="Approved"
-                                  size="small"
-                                  color="success"
-                                  sx={{
-                                    fontWeight: 700,
-                                    fontSize: '0.72rem',
-                                    height: 24,
-                                    bgcolor: 'rgba(34, 197, 94, 0.15)',
+                    return (
+                      <Box
+                        key={idx}
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 0.5,
+                          minWidth: 74,
+                          maxWidth: 90,
+                          py: 1,
+                          px: 0.5,
+                          borderRadius: 2,
+                          transition: 'background-color 0.2s ease',
+                          '&:hover': { bgcolor: 'action.hover' },
+                        }}
+                      >
+                        {/* Avatar with instrument badge */}
+                        <Tooltip title={isRevealed ? '' : 'Click to reveal name'} arrow>
+                          <Box
+                            sx={{ position: 'relative', cursor: 'pointer' }}
+                            onClick={() => toggleMemberReveal(memberUserId)}
+                          >
+                            <Avatar
+                              src={profilePhoto || undefined}
+                              sx={{
+                                width: 50,
+                                height: 50,
+                                fontSize: '1.1rem',
+                                fontWeight: 700,
+                                bgcolor: isApproved ? '#10b981' : 'primary.main',
+                                border: isApproved ? '3px solid #10b981' : '2.5px solid',
+                                borderColor: isApproved
+                                  ? '#10b981'
+                                  : isSelf
+                                  ? 'rgba(99, 102, 241, 0.5)'
+                                  : 'rgba(99, 102, 241, 0.25)',
+                                boxShadow: isApproved ? '0 0 0 2px rgba(16, 185, 129, 0.25)' : 'none',
+                                transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                                '&:hover': {
+                                  transform: 'scale(1.12)',
+                                  boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+                                },
+                              }}
+                            >
+                              {memberName.charAt(0).toUpperCase()}
+                            </Avatar>
+                            {/* Instrument badge */}
+                            <Box
+                              sx={{
+                                position: 'absolute',
+                                bottom: -2,
+                                right: -4,
+                                bgcolor: 'background.paper',
+                                borderRadius: '50%',
+                                width: 22,
+                                height: 22,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                                border: '1.5px solid',
+                                borderColor: 'divider',
+                              }}
+                            >
+                              {getInstrumentIcon(member.role)}
+                            </Box>
+                          </Box>
+                        </Tooltip>
+
+                        {/* Name - smooth reveal on click */}
+                        <Box
+                          sx={{
+                            overflow: 'hidden',
+                            maxHeight: isRevealed ? 44 : 0,
+                            opacity: isRevealed ? 1 : 0,
+                            transition: 'max-height 0.3s ease, opacity 0.25s ease',
+                            mt: isRevealed ? 0.25 : 0,
+                          }}
+                        >
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              fontWeight: 600,
+                              fontSize: '0.68rem',
+                              textAlign: 'center',
+                              lineHeight: 1.2,
+                              display: 'block',
+                              maxWidth: 92,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {(memberName.split(' ')[0])}{isSelf ? ' (You)' : ` (${member.role || 'Member'})`}
+                          </Typography>
+                        </Box>
+
+                        {/* Admin: tick & cross / Non-admin: status chip */}
+                        {isFullAdmin ? (
+                          <Box display="flex" gap={0.25} mt={0.25}>
+                            <Tooltip title="Approve" arrow>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleAdminApprove(member)}
+                                sx={{
+                                  width: 24,
+                                  height: 24,
+                                  bgcolor: isApproved ? 'rgba(16, 185, 129, 0.18)' : 'transparent',
+                                  color: '#10b981',
+                                  border: isApproved ? '1.5px solid rgba(16, 185, 129, 0.4)' : '1px solid transparent',
+                                  '&:hover': { bgcolor: 'rgba(16, 185, 129, 0.22)' },
+                                }}
+                              >
+                                <CheckIcon sx={{ fontSize: 15 }} />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Remove from team" arrow>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleAdminRemove(member)}
+                                sx={{
+                                  width: 24,
+                                  height: 24,
+                                  color: '#ef4444',
+                                  '&:hover': { bgcolor: 'rgba(239, 68, 68, 0.12)' },
+                                }}
+                              >
+                                <CloseIcon sx={{ fontSize: 15 }} />
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        ) : (
+                          <Chip
+                            label={isApproved ? 'Approved' : 'Pending'}
+                            size="small"
+                            sx={{
+                              height: 20,
+                              fontSize: '0.6rem',
+                              fontWeight: 700,
+                              mt: 0.25,
+                              ...(isApproved
+                                ? {
+                                    bgcolor: 'rgba(16, 185, 129, 0.12)',
                                     color: '#15803d',
-                                    border: '1px solid rgba(34, 197, 94, 0.35)',
-                                  }}
-                                />
-                              ) : isDeclined ? (
-                                <Chip
-                                  icon={<CancelIcon sx={{ fontSize: '13px !important', color: '#b91c1c !important' }} />}
-                                  label="Not Available"
-                                  size="small"
-                                  color="error"
-                                  sx={{
-                                    fontWeight: 700,
-                                    fontSize: '0.72rem',
-                                    height: 24,
-                                    bgcolor: 'rgba(239, 68, 68, 0.15)',
-                                    color: '#b91c1c',
-                                    border: '1px solid rgba(239, 68, 68, 0.35)',
-                                  }}
-                                />
-                              ) : (
-                                <Chip
-                                  label="Pending"
-                                  size="small"
-                                  sx={{
-                                    fontWeight: 600,
-                                    fontSize: '0.72rem',
-                                    height: 24,
+                                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                                  }
+                                : {
                                     bgcolor: 'action.hover',
                                     color: 'text.secondary',
-                                  }}
-                                />
-                              )}
-                            </TableCell>
-                            <TableCell sx={{ py: 1.25, textAlign: 'right' }}>
-                              {isSelf ? (
-                                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, justifyContent: 'flex-end' }}>
-                                  <Tooltip title="Approve (Mark as Approved in Green)">
-                                    <Button
-                                      size="small"
-                                      variant={isApproved ? "contained" : "outlined"}
-                                      color="success"
-                                      startIcon={
-                                        isUpdating ? (
-                                          <CircularProgress size={12} color="inherit" />
-                                        ) : (
-                                          <CheckIcon sx={{ fontSize: 13 }} />
-                                        )
-                                      }
-                                      onClick={() => handleMemberStatusUpdate(member, 'accepted')}
-                                      disabled={isUpdating}
-                                      sx={{
-                                        textTransform: 'none',
-                                        fontWeight: 700,
-                                        fontSize: '0.72rem',
-                                        py: 0.3,
-                                        px: 1,
-                                        borderRadius: 1.5,
-                                        minWidth: 'auto',
-                                        boxShadow: isApproved ? '0 2px 6px rgba(34, 197, 94, 0.3)' : 'none',
-                                      }}
-                                    >
-                                      Approve
-                                    </Button>
-                                  </Tooltip>
-                                  <Tooltip title="Mark as Not Available in Red">
-                                    <Button
-                                      size="small"
-                                      variant={isDeclined ? "contained" : "outlined"}
-                                      color="error"
-                                      startIcon={<CloseIcon sx={{ fontSize: 13 }} />}
-                                      onClick={() => handleMemberStatusUpdate(member, 'declined')}
-                                      disabled={isUpdating}
-                                      sx={{
-                                        textTransform: 'none',
-                                        fontWeight: 700,
-                                        fontSize: '0.72rem',
-                                        py: 0.3,
-                                        px: 1,
-                                        borderRadius: 1.5,
-                                        minWidth: 'auto',
-                                      }}
-                                    >
-                                      Not Available
-                                    </Button>
-                                  </Tooltip>
-                                </Box>
-                              ) : (
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ fontStyle: 'italic', fontSize: '0.75rem' }}
-                                >
-                                  {isApproved
-                                    ? 'Confirmed by member'
-                                    : isDeclined
-                                    ? 'Declined by member'
-                                    : 'Awaiting member response'}
-                                </Typography>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+                                  }),
+                            }}
+                          />
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Box>
               ) : (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ py: 2 }}
-                >
-                  No team members yet. Click "Manage Roster" to add people.
-                </Typography>
+                <Box sx={{ py: 3, textAlign: 'center' }}>
+                  <GroupIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    No team members yet. Click "Manage Roster" to add people.
+                  </Typography>
+                </Box>
               )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Sidebar */}
-        <Grid item xs={12} lg={4}>
-          {/* Actions */}
-          <Card sx={{ borderRadius: 3 }}>
-            <CardContent sx={{ p: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                Actions
-              </Typography>
-              <Box display="flex" flexDirection="column" gap={2}>
-                {canEdit && (
-                  <Button
-                    variant="contained"
-                    startIcon={<EditIcon />}
-                    onClick={() => navigate(`/events/${id}/edit`)}
-                    fullWidth
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Edit Event
-                  </Button>
-                )}
-                {isFullAdmin && event.event?.status === 'draft' && (
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<CheckCircleIcon />}
-                    onClick={handleConfirmEvent}
-                    fullWidth
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Confirm Event
-                  </Button>
-                )}
-                {isFullAdmin && event.event?.status === 'published' && (
-                  <>
-                    <Button
-                      variant="outlined"
-                      color="warning"
-                      onClick={handleUnconfirmEvent}
-                      fullWidth
-                      sx={{ borderRadius: 2 }}
-                    >
-                      Unconfirm Event
-                    </Button>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      startIcon={<CheckCircleIcon />}
-                      onClick={handleMarkCompleted}
-                      fullWidth
-                      sx={{ borderRadius: 2, boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)' }}
-                    >
-                      Mark Completed
-                    </Button>
-                  </>
-                )}
-                {isFullAdmin && event.event?.status === 'completed' && (
-                  <Button
-                    variant="outlined"
-                    color="warning"
-                    onClick={handleUndoCompleted}
-                    fullWidth
-                    sx={{ borderRadius: 2, textTransform: 'none' }}
-                  >
-                    Undo Completed
-                  </Button>
-                )}
-                {canOptIn && !userOptInAssignment && (
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    startIcon={<VolunteerActivismIcon />}
-                    onClick={() => setOptInDialogOpen(true)}
-                    fullWidth
-                    sx={{
-                      borderRadius: 2,
-                      textTransform: 'none',
-                      fontWeight: 700,
-                      boxShadow: '0 2px 8px rgba(147, 51, 234, 0.25)',
-                    }}
-                  >
-                    Volunteer to Serve
-                  </Button>
-                )}
-                {userOptInAssignment && (
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    onClick={handleWithdrawOptIn}
-                    disabled={optInSubmitting}
-                    fullWidth
-                    sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
-                  >
-                    Withdraw Volunteer Offer
-                  </Button>
-                )}
-                <Button
-                  variant="outlined"
-                  startIcon={<GroupIcon />}
-                  onClick={() => navigate(`/events/${id}/team`)}
-                  fullWidth
-                  sx={{ borderRadius: 2 }}
-                >
-                  {canEdit ? 'Edit Team' : 'View Team'}
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<ChatIcon />}
-                  onClick={() => navigate(`/events/${id}/chat`)}
-                  fullWidth
-                  sx={{ borderRadius: 2 }}
-                >
-                  Open Chat
-                </Button>
-                {canEdit && (
-                  <Button
-                    variant="outlined"
-                    color="primary"
-                    startIcon={<NotificationsActiveIcon />}
-                    onClick={async () => {
-                      try {
-                        setReminderLoading(true);
-                        setReminderMessage('');
-                        const token = localStorage.getItem('accessToken');
-                        const res = await fetch(apiUrl(`/api/events/${id}/send-reminder`), {
-                          method: 'POST',
-                          headers: { Authorization: `Bearer ${token}` },
-                        });
-                        const data = await res.json();
-                        if (res.ok) {
-                          setReminderMessage(data.message || 'Reminder sent!');
-                          setTimeout(() => setReminderMessage(''), 4000);
-                        } else {
-                          alert(data.message || 'Failed to send reminder');
-                        }
-                      } catch (err) {
-                        alert(err.message || 'Failed to send reminder');
-                      } finally {
-                        setReminderLoading(false);
-                      }
-                    }}
-                    disabled={reminderLoading}
-                    fullWidth
-                    sx={{ borderRadius: 2, textTransform: 'none' }}
-                  >
-                    {reminderLoading ? 'Sending Reminder...' : 'Send Reminder'}
-                  </Button>
-                )}
-                {reminderMessage && (
-                  <Alert severity="success" sx={{ py: 0.5, fontSize: '0.78rem' }}>
-                    {reminderMessage}
-                  </Alert>
-                )}
-                {isFullAdmin && (
-                  <>
-                    <Divider sx={{ my: 1 }} />
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      startIcon={<DeleteIcon />}
-                      onClick={() => setDeleteDialogOpen(true)}
-                      fullWidth
-                      sx={{ borderRadius: 2 }}
-                    >
-                      Delete Event
-                    </Button>
-                  </>
-                )}
-              </Box>
             </CardContent>
           </Card>
         </Grid>
@@ -2642,6 +2696,44 @@ function EventDetails() {
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleDelete} color="error" variant="contained">
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Unconfirm Event Confirmation Dialog */}
+      <Dialog
+        open={unconfirmDialogOpen}
+        onClose={() => setUnconfirmDialogOpen(false)}
+        PaperProps={{ sx: { borderRadius: 3, maxWidth: 420 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <UndoIcon color="warning" sx={{ fontSize: 22 }} />
+          Unconfirm Event?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Are you sure you want to unconfirm{' '}
+            <strong>{getEventDisplayTitle(event)}</strong>? This will return the event to draft
+            status and notify members that it is no longer confirmed.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button
+            onClick={() => setUnconfirmDialogOpen(false)}
+            sx={{ textTransform: 'none', borderRadius: 1.5 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={async () => {
+              setUnconfirmDialogOpen(false);
+              await handleUnconfirmEvent();
+            }}
+            color="warning"
+            variant="contained"
+            sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 1.5 }}
+          >
+            Unconfirm Event
           </Button>
         </DialogActions>
       </Dialog>

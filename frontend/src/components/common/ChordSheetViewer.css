@@ -3,23 +3,23 @@
    ========================================================================== */
 
 /* Root theme variables */
-/* Root theme variables & defaults */
+/* Root theme variables & defaults (Dark Obsidian & Orange Coral by default) */
 .chord-sheet-container {
   --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  --cs-bg: #ffffff;
-  --cs-paper-bg: #f8fafc;
-  --cs-border: #e2e8f0;
-  --cs-text-main: #0f172a;
-  --cs-text-muted: #64748b;
-  --cs-section-bg: #f1f5f9;
-  --cs-section-text: #1e293b;
-  --cs-section-border: #cbd5e1;
-  --cs-chord-pill-bg: #eff6ff;
-  --cs-chord-pill-text: #1d4ed8;
-  --cs-chord-pill-border: #3b82f6;
-  --cs-chord-hover-bg: #dbeafe;
+  --cs-bg: #000000;
+  --cs-paper-bg: #0e0e0e;
+  --cs-border: rgba(255, 255, 255, 0.08);
+  --cs-text-main: #f4f4f5;
+  --cs-text-muted: #a1a1aa;
+  --cs-section-bg: #141414;
+  --cs-section-text: #ff4d28;
+  --cs-section-border: rgba(255, 255, 255, 0.12);
+  --cs-chord-pill-bg: rgba(255, 77, 40, 0.16);
+  --cs-chord-pill-text: #ff6f4f;
+  --cs-chord-pill-border: rgba(255, 77, 40, 0.5);
+  --cs-chord-hover-bg: rgba(255, 77, 40, 0.3);
   transition: var(--transition-smooth);
   position: relative;
 }
@@ -27,35 +27,35 @@
 /* Theme: Studio Light */
 .chord-sheet-theme-light,
 .theme-light {
-  --cs-bg: #ffffff;
-  --cs-paper-bg: #f8fafc;
+  --cs-bg: #f8fafc;
+  --cs-paper-bg: #ffffff;
   --cs-border: #e2e8f0;
   --cs-text-main: #0f172a;
   --cs-text-muted: #64748b;
   --cs-section-bg: #f1f5f9;
-  --cs-section-text: #1e293b;
+  --cs-section-text: #ff4d28;
   --cs-section-border: #cbd5e1;
-  --cs-chord-pill-bg: #eff6ff;
-  --cs-chord-pill-text: #1d4ed8;
-  --cs-chord-pill-border: #3b82f6;
-  --cs-chord-hover-bg: #dbeafe;
+  --cs-chord-pill-bg: rgba(255, 77, 40, 0.12);
+  --cs-chord-pill-text: #ff4d28;
+  --cs-chord-pill-border: rgba(255, 77, 40, 0.4);
+  --cs-chord-hover-bg: rgba(255, 77, 40, 0.22);
 }
 
-/* Theme: Stage Dark */
+/* Theme: Stage Dark (Pure Pitch Black & Obsidian) */
 .chord-sheet-theme-dark,
 .theme-dark {
-  --cs-bg: #090d16;
-  --cs-paper-bg: #0f172a;
-  --cs-border: #1e293b;
-  --cs-text-main: #f8fafc;
-  --cs-text-muted: #94a3b8;
-  --cs-section-bg: #1e293b;
-  --cs-section-text: #38bdf8;
-  --cs-section-border: #334155;
-  --cs-chord-pill-bg: rgba(59, 130, 246, 0.22);
-  --cs-chord-pill-text: #93c5fd;
-  --cs-chord-pill-border: #60a5fa;
-  --cs-chord-hover-bg: rgba(59, 130, 246, 0.38);
+  --cs-bg: #000000;
+  --cs-paper-bg: #0e0e0e;
+  --cs-border: rgba(255, 255, 255, 0.08);
+  --cs-text-main: #f4f4f5;
+  --cs-text-muted: #a1a1aa;
+  --cs-section-bg: #141414;
+  --cs-section-text: #ff4d28;
+  --cs-section-border: rgba(255, 255, 255, 0.12);
+  --cs-chord-pill-bg: rgba(255, 77, 40, 0.16);
+  --cs-chord-pill-text: #ff6f4f;
+  --cs-chord-pill-border: rgba(255, 77, 40, 0.55);
+  --cs-chord-hover-bg: rgba(255, 77, 40, 0.3);
 }
 
 /* Theme: Warm Sepia */
@@ -223,8 +223,9 @@
 
 /* Specific section color accents */
 .cs-section-chorus {
-  border-left: 3px solid #2563eb;
-  background-color: rgba(37, 99, 235, 0.08);
+  border-left: 3px solid #ff4d28;
+  background-color: rgba(255, 77, 40, 0.1);
+  color: #ff4d28;
 }
 .cs-section-bridge {
   border-left: 3px solid #f59e0b;
@@ -234,12 +235,12 @@
   border-left: 3px solid #64748b;
 }
 .cs-section-intro, .cs-section-outro, .cs-section-tag {
-  border-left: 3px solid #8b5cf6;
+  border-left: 3px solid #ff4d28;
 }
 
 /* ================= Chord Highlight Styles ================= */
 
-/* Style: Modern Pill (Default)
+/* Style: Modern Pill (Default - Vibrant Sunset Coral / Orange Theme)
    Uses font-size: inherit, font-family: inherit, letter-spacing: 0px,
    and exact negative margin (-4px) compensating for padding (3px) + border (1px)
    so the chord's inline advance in monospace matches 1ch per character with 0 drift. */
@@ -258,14 +259,14 @@
   line-height: 1.35;
   transition: var(--transition-smooth);
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 1px 4px rgba(255, 77, 40, 0.25);
 }
 
 .chord-badge-pill:hover {
   background-color: var(--cs-chord-hover-bg);
-  border-color: #1d4ed8;
+  border-color: #ff4d28;
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 2px 8px rgba(255, 77, 40, 0.4);
 }
 
 /* Style: Bold Text Color Only */
@@ -281,14 +282,15 @@
 
 .chord-badge-bold:hover {
   text-decoration: underline;
+  color: #ff4d28;
 }
 
-/* Style: Vibrant Stage Glow (Cyan Glow) */
+/* Style: Vibrant Stage Glow (Sunset Coral Glow) */
 .chord-badge-glow {
   display: inline-block;
-  background: rgba(6, 182, 212, 0.08);
-  color: #0e7490;
-  border: 1.5px solid rgba(6, 182, 212, 0.38);
+  background: rgba(255, 77, 40, 0.12);
+  color: #ff4d28;
+  border: 1.5px solid rgba(255, 77, 40, 0.45);
   padding: 0px 4px;
   margin: 0 -5.5px;
   border-radius: 5px;
@@ -296,25 +298,25 @@
   font-size: 1em !important;
   font-weight: 800;
   letter-spacing: 0px !important;
-  box-shadow: 0 0 8px rgba(6, 182, 212, 0.18), 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 0 10px rgba(255, 77, 40, 0.28), 0 1px 2px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   transition: var(--transition-smooth);
 }
 
 .chord-badge-glow:hover {
-  background: rgba(6, 182, 212, 0.16);
-  border-color: #0891b2;
-  box-shadow: 0 0 12px rgba(6, 182, 212, 0.32);
+  background: rgba(255, 77, 40, 0.22);
+  border-color: #ff4d28;
+  box-shadow: 0 0 14px rgba(255, 77, 40, 0.45);
   transform: translateY(-1px);
 }
 
 .chord-sheet-theme-dark .chord-badge-glow,
 .theme-dark .chord-badge-glow {
-  background: rgba(6, 182, 212, 0.15);
-  color: #38bdf8;
-  border-color: rgba(56, 189, 248, 0.5);
-  text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+  background: rgba(255, 77, 40, 0.18);
+  color: #ff6f4f;
+  border-color: rgba(255, 77, 40, 0.6);
+  text-shadow: 0 0 8px rgba(255, 77, 40, 0.5);
+  box-shadow: 0 0 14px rgba(255, 77, 40, 0.3);
 }
 
 /* Style: Off / Neutral */
@@ -360,11 +362,11 @@
   gap: 8px;
   padding: 6px 14px;
   border-radius: 9999px;
-  background: rgba(15, 23, 42, 0.92);
+  background: rgba(14, 14, 14, 0.94);
   color: #ffffff;
-  backdrop-filter: blur(12px);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   transition: var(--transition-smooth);
 }
 
@@ -441,9 +443,9 @@
 }
 
 .cs-stage-nav-bubble:hover {
-  background: #2563eb !important;
+  background: #ff4d28 !important;
   transform: scale(1.12) !important;
-  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.45) !important;
+  box-shadow: 0 10px 28px rgba(255, 77, 40, 0.45) !important;
 }
 
 .cs-stage-nav-bubble:active {

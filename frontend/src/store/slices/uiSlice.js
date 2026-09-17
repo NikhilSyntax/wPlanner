@@ -5,7 +5,7 @@ const uiSlice = createSlice({
   initialState: {
     loading: false,
     notifications: [],
-    themeMode: localStorage.getItem('themeMode') || 'light',
+    themeMode: localStorage.getItem('themeMode') || 'dark',
   },
   reducers: {
     setLoading: (state, action) => {

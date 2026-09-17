@@ -58,24 +58,23 @@ function Header({ onMenuClick }) {
       position="fixed"
       elevation={0}
       sx={{
-        width: { md: `calc(100% - 270px)` },
-        ml: { md: '270px' },
+        width: { md: `calc(100% - 260px)` },
+        ml: { md: '260px' },
         bgcolor: 'background.paper',
         color: 'text.primary',
-        backdropFilter: 'blur(16px)',
         borderBottom: '1px solid',
         borderColor: 'divider',
       }}
     >
-      <Toolbar sx={{ minHeight: { xs: 58, sm: 64 }, px: { xs: 2, sm: 3 } }}>
+      <Toolbar sx={{ minHeight: { xs: 52, sm: 56 }, px: { xs: 2, sm: 2.5 } }}>
         <IconButton
           color="inherit"
           aria-label="open drawer"
           edge="start"
           onClick={onMenuClick}
-          sx={{ mr: 2, display: { md: 'none' } }}
+          sx={{ mr: 1.5, display: { md: 'none' } }}
         >
-          <MenuIcon />
+          <MenuIcon sx={{ fontSize: 20 }} />
         </IconButton>
 
         {/* Page Title & Breadcrumb Indicator */}
@@ -85,9 +84,10 @@ function Header({ onMenuClick }) {
             noWrap
             component="div"
             sx={{
-              fontWeight: 700,
-              fontSize: { xs: '1rem', sm: '1.125rem' },
-              letterSpacing: '-0.02em',
+              fontWeight: 800,
+              fontSize: { xs: '0.875rem', sm: '0.9375rem' },
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
               color: 'text.primary',
             }}
           >
@@ -96,20 +96,19 @@ function Header({ onMenuClick }) {
         </Box>
 
         {/* Actions Toolbar */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
           {/* Quick Create Event CTA Button */}
           {location.pathname !== '/events/new' && (
             <Button
               variant="contained"
               size="small"
-              startIcon={<AddIcon />}
+              startIcon={<AddIcon sx={{ fontSize: 16 }} />}
               onClick={() => navigate('/events/new')}
               sx={{
                 display: { xs: 'none', sm: 'inline-flex' },
-                fontSize: '0.8125rem',
-                py: 0.8,
-                px: 1.8,
-                borderRadius: 2,
+                fontSize: '0.75rem',
+                py: 0.6,
+                px: 1.4,
               }}
             >
               New Event
@@ -126,23 +125,28 @@ function Header({ onMenuClick }) {
               sx={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 1,
+                gap: 0.85,
                 cursor: 'pointer',
-                p: 0.5,
-                borderRadius: 2,
-                transition: 'all 0.15s ease',
+                p: 0.4,
+                px: 0.75,
+                borderRadius: 1.5,
+                border: '1px solid',
+                borderColor: 'divider',
+                transition: 'background-color 100ms ease, border-color 100ms ease',
                 '&:hover': {
                   bgcolor: 'action.hover',
+                  borderColor: 'text.secondary',
                 },
               }}
             >
               <Avatar
                 sx={{
-                  width: 34,
-                  height: 34,
-                  fontSize: '0.85rem',
-                  fontWeight: 700,
-                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                  width: 26,
+                  height: 26,
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  bgcolor: 'primary.main',
+                  color: '#ffffff',
                 }}
                 src={resolveMediaUrl(user?.profilePhotoUrl)}
                 alt={user?.name}
@@ -153,10 +157,10 @@ function Header({ onMenuClick }) {
                 <Typography
                   variant="subtitle2"
                   sx={{
-                    lineHeight: 1.2,
-                    fontSize: '0.8125rem',
+                    lineHeight: 1.15,
+                    fontSize: '0.75rem',
                     fontWeight: 600,
-                    maxWidth: 130,
+                    maxWidth: 120,
                   }}
                   noWrap
                 >
@@ -165,7 +169,7 @@ function Header({ onMenuClick }) {
                 <Typography
                   variant="caption"
                   color="text.secondary"
-                  sx={{ display: 'block', fontSize: '0.6875rem', lineHeight: 1 }}
+                  sx={{ display: 'block', fontSize: '0.65rem', lineHeight: 1 }}
                   noWrap
                 >
                   {user?.isAdmin ? 'Admin' : user?.isSubAdmin ? 'Sub-Admin' : user?.role || 'Member'}

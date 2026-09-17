@@ -633,7 +633,7 @@ export default function LiveOperator() {
         height: '100vh',
         maxHeight: '100vh',
         overflow: 'hidden',
-        bgcolor: (theme) => (theme.palette.mode === 'dark' ? '#0c0e14' : '#f8fafc'),
+        bgcolor: (theme) => (theme.palette.mode === 'dark' ? '#000000' : '#f8fafc'),
         color: 'text.primary',
         display: 'flex',
         flexDirection: 'column',
@@ -800,9 +800,9 @@ export default function LiveOperator() {
             onClick={handlePopoutViewer}
             sx={{
               textTransform: 'none',
-              borderRadius: 2,
-              fontWeight: 800,
-              boxShadow: '0 4px 14px rgba(56, 189, 248, 0.3)',
+              borderRadius: 1.5,
+              fontWeight: 600,
+              fontSize: '0.78rem',
             }}
           >
             Pop Out TV Window
@@ -1079,7 +1079,7 @@ export default function LiveOperator() {
                   minHeight: 0,
                   p: 1.5,
                   borderRadius: 2.5,
-                  bgcolor: isBlack ? '#000000' : isClear ? '#0f172a' : '#090a0f',
+                  bgcolor: isBlack ? '#000000' : isClear ? '#141414' : '#0a0a0a',
                   border: '2px solid',
                   borderColor: isBlack ? '#ef4444' : isClear ? '#f59e0b' : isCurrentSlideHidden ? '#f59e0b' : '#38bdf8',
                   display: 'flex',
@@ -1321,7 +1321,7 @@ export default function LiveOperator() {
                               line={line}
                               showChords={showChords}
                               fontSize="clamp(0.85rem, 1.1vw, 1rem)"
-                              chordColor="#38bdf8"
+                              chordColor="#ff4d28"
                               textColor="#ffffff"
                               align="left"
                             />
@@ -1331,7 +1331,7 @@ export default function LiveOperator() {
                           <Typography
                             variant="caption"
                             sx={{
-                              color: '#38bdf8',
+                              color: '#ff4d28',
                               fontWeight: 800,
                               textTransform: 'uppercase',
                               fontSize: '0.65rem',
@@ -1347,7 +1347,7 @@ export default function LiveOperator() {
                               line={line}
                               showChords={showChords}
                               fontSize="clamp(0.85rem, 1.1vw, 1rem)"
-                              chordColor="#38bdf8"
+                              chordColor="#ff4d28"
                               textColor="#ffffff"
                               align="left"
                             />
@@ -1384,7 +1384,7 @@ export default function LiveOperator() {
                             line={line}
                             showChords={showChords}
                             fontSize="clamp(1.05rem, 1.4vw, 1.25rem)"
-                            chordColor="#38bdf8"
+                            chordColor="#ff4d28"
                             textColor="#ffffff"
                             align="left"
                           />
@@ -1444,7 +1444,7 @@ export default function LiveOperator() {
                         showChords={showChords}
                         fontSize="0.82rem"
                         chordColor="#94a3b8"
-                        textColor={theme.palette.mode === 'dark' ? '#cbd5e1' : '#475569'}
+                        textColor={theme.palette.mode === 'dark' ? '#a1a1aa' : '#475569'}
                         align="left"
                       />
                     ))

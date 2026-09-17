@@ -441,12 +441,13 @@ function EventForm() {
                   Event Preview
                 </Typography>
                 <Paper
+                  variant="outlined"
                   sx={{
-                    p: 2,
-                    bgcolor: 'grey.50',
+                    p: 2.5,
+                    bgcolor: (theme) =>
+                      theme.palette.mode === 'dark' ? '#0c0c0c' : '#f8fafc',
                     borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: 'grey.200',
+                    borderColor: 'divider',
                   }}
                 >
                   <Box display="flex" alignItems="center" gap={2} mb={1}>
@@ -487,7 +488,21 @@ function EventForm() {
         </Grid>
 
         {/* Quick Summary */}
-        <Card sx={{ borderRadius: 3, mt: 3, bgcolor: 'info.lighter' }}>
+        <Card
+          sx={{
+            borderRadius: 3,
+            mt: 3,
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark'
+                ? 'rgba(37, 99, 235, 0.05)'
+                : 'rgba(37, 99, 235, 0.02)',
+            border: '1px solid',
+            borderColor: (theme) =>
+              theme.palette.mode === 'dark'
+                ? 'rgba(59, 130, 246, 0.15)'
+                : 'rgba(37, 99, 235, 0.12)',
+          }}
+        >
           <CardContent sx={{ p: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
               ✨ Event Setup Summary
@@ -495,32 +510,40 @@ function EventForm() {
             <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
                 <Paper
+                  variant="outlined"
                   sx={{
                     p: 2,
                     textAlign: 'center',
-                    bgcolor: 'background.paper',
+                    bgcolor: (theme) =>
+                      theme.palette.mode === 'dark' ? '#0c0c0c' : 'background.paper',
+                    borderColor: 'divider',
+                    borderRadius: 2,
                   }}
                 >
                   <Typography variant="body2" color="text.secondary">
                     Event Type
                   </Typography>
-                  <Typography variant="h6" sx={{ mt: 1 }}>
+                  <Typography variant="h6" sx={{ mt: 1, fontWeight: 700 }}>
                     {selectedEventType?.label || 'Select type'}
                   </Typography>
                 </Paper>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Paper
+                  variant="outlined"
                   sx={{
                     p: 2,
                     textAlign: 'center',
-                    bgcolor: 'background.paper',
+                    bgcolor: (theme) =>
+                      theme.palette.mode === 'dark' ? '#0c0c0c' : 'background.paper',
+                    borderColor: 'divider',
+                    borderRadius: 2,
                   }}
                 >
                   <Typography variant="body2" color="text.secondary">
                     Schedule
                   </Typography>
-                  <Typography variant="h6" sx={{ mt: 1 }}>
+                  <Typography variant="h6" sx={{ mt: 1, fontWeight: 700 }}>
                     {formData.start && formData.end ? '✓' : 'Required'}
                   </Typography>
                 </Paper>

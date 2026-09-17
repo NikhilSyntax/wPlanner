@@ -39,11 +39,11 @@ import { logout } from '../../store/slices/authSlice';
 import { isUserApproved } from '../../utils/isUserApproved';
 import api from '../../services/api';
 
-const drawerWidth = 270;
+const drawerWidth = 260;
 
 const navigationItems = [
   { text: 'Dashboard', icon: DashboardIcon, path: '/dashboard' },
-  { text: 'Events', icon: EventIcon, path: '/events' },
+  { text: 'Events & Plans', icon: EventIcon, path: '/events' },
   { text: 'Teams & Roster', icon: GroupIcon, path: '/teams' },
   { text: 'Song Bank', icon: MusicNoteIcon, path: '/songs' },
   { text: 'Auto Scheduler', icon: AutoModeIcon, path: '/auto-scheduler', requiresLeader: true },
@@ -51,6 +51,7 @@ const navigationItems = [
 
 function Sidebar({ open, onClose, toggleTheme }) {
   const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
@@ -125,59 +126,57 @@ function Sidebar({ open, onClose, toggleTheme }) {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        bgcolor: '#080c14',
-        color: '#f8fafc',
+        bgcolor: isDark ? '#080808' : '#ffffff',
+        color: isDark ? '#f4f4f5' : '#0f172a',
+        borderRight: '1px solid',
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#e2e8f0',
       }}
     >
       {/* Brand Header */}
-      <Box sx={{ px: 2.5, pt: 2.5, pb: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+      <Box sx={{ px: 2, pt: 2, pb: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.75 }}>
           <Box
             sx={{
-              width: 36,
-              height: 36,
-              borderRadius: 2,
-              background: 'linear-gradient(135deg, #2563eb 0%, #06b6d4 100%)',
+              width: 32,
+              height: 32,
+              borderRadius: 1.5,
+              bgcolor: 'primary.main',
+              color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
+              flexShrink: 0,
             }}
           >
-            <MusicNoteIcon sx={{ color: 'white', fontSize: 20 }} />
+            <MusicNoteIcon sx={{ fontSize: 18 }} />
           </Box>
-          <Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
               <Typography
-                variant="subtitle1"
+                variant="subtitle2"
                 sx={{
-                  color: '#ffffff',
-                  fontWeight: 700,
-                  letterSpacing: '-0.02em',
+                  fontWeight: 800,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  fontSize: '0.9375rem',
                   lineHeight: 1.2,
                 }}
               >
-                wPlanner
+                WPLANNER
               </Typography>
-              <Chip
-                label="PRO"
-                size="small"
-                sx={{
-                  height: 18,
-                  fontSize: '0.625rem',
-                  fontWeight: 800,
-                  bgcolor: 'rgba(37, 99, 235, 0.25)',
-                  color: '#60a5fa',
-                  border: '1px solid rgba(37, 99, 235, 0.4)',
-                  px: 0.2,
-                }}
-              />
             </Box>
             <Typography
               variant="caption"
-              sx={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 500 }}
+              sx={{
+                color: 'text.secondary',
+                fontSize: '0.6875rem',
+                display: 'block',
+                letterSpacing: '0.04em',
+                lineHeight: 1.1,
+                mt: 0.2,
+              }}
             >
-              Worship Operations
+              WORSHIP WORKSTATION
             </Typography>
           </Box>
         </Box>
@@ -186,10 +185,12 @@ function Sidebar({ open, onClose, toggleTheme }) {
         {church && (
           <Box
             sx={{
-              p: 1.2,
-              borderRadius: 2,
-              bgcolor: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              p: 1,
+              px: 1.2,
+              borderRadius: 1.5,
+              bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#f8fafc',
+              border: '1px solid',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#e2e8f0',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -197,12 +198,12 @@ function Sidebar({ open, onClose, toggleTheme }) {
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-              <ChurchIcon sx={{ fontSize: 18, color: '#94a3b8' }} />
+              <ChurchIcon sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0 }} />
               <Typography
                 variant="caption"
                 sx={{
-                  color: '#e2e8f0',
                   fontWeight: 600,
+                  fontSize: '0.75rem',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -215,27 +216,17 @@ function Sidebar({ open, onClose, toggleTheme }) {
               <Tooltip title={copied ? 'Copied code!' : `Copy Church Code (${church.joinCode})`}>
                 <Chip
                   size="small"
-                  icon={
-                    copied ? (
-                      <CheckIcon sx={{ fontSize: '13px !important', color: '#10b981 !important' }} />
-                    ) : (
-                      <ContentCopyIcon sx={{ fontSize: '12px !important', color: '#94a3b8 !important' }} />
-                    )
-                  }
-                  label={church.joinCode}
+                  label={copied ? 'Copied' : church.joinCode}
+                  icon={copied ? <CheckIcon sx={{ fontSize: '12px !important' }} /> : <ContentCopyIcon sx={{ fontSize: '11px !important' }} />}
                   onClick={handleCopyCode}
-                  clickable
                   sx={{
-                    height: 22,
+                    height: 20,
                     fontSize: '0.6875rem',
                     fontWeight: 700,
-                    fontFamily: 'monospace',
-                    bgcolor: 'rgba(255, 255, 255, 0.06)',
-                    color: '#94a3b8',
-                    '&:hover': {
-                      bgcolor: 'rgba(255, 255, 255, 0.12)',
-                      color: '#ffffff',
-                    },
+                    cursor: 'pointer',
+                    bgcolor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#e2e8f0',
+                    color: isDark ? '#ffffff' : '#0f172a',
+                    '& .MuiChip-icon': { color: 'inherit' },
                   }}
                 />
               </Tooltip>
@@ -244,24 +235,23 @@ function Sidebar({ open, onClose, toggleTheme }) {
         )}
       </Box>
 
-      <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.06)' }} />
+      <Divider sx={{ borderColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#f1f5f9' }} />
 
       {/* Navigation Links */}
-      <List sx={{ flex: 1, px: 1.5, py: 2 }}>
+      <List sx={{ flex: 1, px: 1, py: 1.5 }}>
         <Typography
-          variant="caption"
+          variant="overline"
           sx={{
-            px: 1.5,
-            mb: 1,
+            px: 1.25,
+            mb: 0.75,
             display: 'block',
-            color: '#64748b',
-            fontSize: '0.6875rem',
+            color: 'text.disabled',
+            fontSize: '0.65rem',
             fontWeight: 700,
-            textTransform: 'uppercase',
             letterSpacing: '0.08em',
           }}
         >
-          Menu
+          Navigation
         </Typography>
         {visibleNavItems.map((item) => {
           const Icon = item.icon;
@@ -272,25 +262,36 @@ function Sidebar({ open, onClose, toggleTheme }) {
               location.pathname.startsWith(item.path));
 
           return (
-            <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
+            <ListItem key={item.text} disablePadding sx={{ mb: 0.35 }}>
               <ListItemButton
                 selected={isSelected}
                 onClick={() => handleNavigation(item.path)}
                 sx={{
-                  borderRadius: 2,
-                  py: 1,
-                  px: 1.5,
+                  borderRadius: 1.5,
+                  py: 0.75,
+                  px: 1.2,
                   position: 'relative',
-                  bgcolor: isSelected ? 'rgba(37, 99, 235, 0.14) !important' : 'transparent',
-                  color: isSelected ? '#ffffff' : '#94a3b8',
+                  bgcolor: isSelected
+                    ? isDark
+                      ? 'rgba(255, 77, 40, 0.12) !important'
+                      : 'rgba(255, 77, 40, 0.08) !important'
+                    : 'transparent',
+                  color: isSelected
+                    ? 'primary.main'
+                    : 'text.secondary',
                   border: isSelected
-                    ? '1px solid rgba(37, 99, 235, 0.3)'
+                    ? `1px solid ${isDark ? 'rgba(255, 77, 40, 0.3)' : 'rgba(255, 77, 40, 0.2)'}`
                     : '1px solid transparent',
+                  transition: 'background-color 100ms ease, color 100ms ease',
                   '&:hover': {
                     bgcolor: isSelected
-                      ? 'rgba(37, 99, 235, 0.2) !important'
-                      : 'rgba(255, 255, 255, 0.04)',
-                    color: '#ffffff',
+                      ? isDark
+                        ? 'rgba(255, 77, 40, 0.18) !important'
+                        : 'rgba(255, 77, 40, 0.12) !important'
+                      : isDark
+                      ? 'rgba(255, 255, 255, 0.03)'
+                      : '#f8fafc',
+                    color: isDark ? '#ffffff' : '#0f172a',
                   },
                 }}
               >
@@ -299,28 +300,27 @@ function Sidebar({ open, onClose, toggleTheme }) {
                     sx={{
                       position: 'absolute',
                       left: 0,
-                      top: '20%',
-                      bottom: '20%',
-                      width: 3,
-                      borderRadius: '0 4px 4px 0',
-                      bgcolor: '#3b82f6',
-                      boxShadow: '0 0 8px rgba(59, 130, 246, 0.8)',
+                      top: '25%',
+                      bottom: '25%',
+                      width: 2.5,
+                      borderRadius: '0 2px 2px 0',
+                      bgcolor: 'primary.main',
                     }}
                   />
                 )}
                 <ListItemIcon
                   sx={{
-                    minWidth: 34,
-                    color: isSelected ? '#60a5fa' : '#64748b',
+                    minWidth: 30,
+                    color: isSelected ? 'primary.main' : 'text.secondary',
                   }}
                 >
-                  <Icon sx={{ fontSize: 20 }} />
+                  <Icon sx={{ fontSize: 18 }} />
                 </ListItemIcon>
                 <ListItemText
                   primary={item.text}
                   sx={{
                     '& .MuiListItemText-primary': {
-                      fontSize: '0.875rem',
+                      fontSize: '0.8125rem',
                       fontWeight: isSelected ? 600 : 500,
                     },
                   }}
@@ -331,36 +331,37 @@ function Sidebar({ open, onClose, toggleTheme }) {
         })}
       </List>
 
-      <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.06)' }} />
+      <Divider sx={{ borderColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#f1f5f9' }} />
 
-      {/* User Profile Card & Actions */}
-      <Box sx={{ p: 2 }}>
+      {/* User Profile Footer & Actions */}
+      <Box sx={{ p: 1.5 }}>
         <Box
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
-            p: 1.2,
-            borderRadius: 2,
-            bgcolor: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.06)',
+            gap: 1.25,
+            p: 1,
+            borderRadius: 1.5,
+            bgcolor: isDark ? 'rgba(255, 255, 255, 0.02)' : '#f8fafc',
+            border: '1px solid',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#e2e8f0',
             cursor: 'pointer',
-            transition: 'all 0.15s ease',
+            transition: 'background-color 100ms ease, border-color 100ms ease',
             '&:hover': {
-              bgcolor: 'rgba(255, 255, 255, 0.07)',
-              borderColor: 'rgba(255, 255, 255, 0.12)',
+              bgcolor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#f1f5f9',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#cbd5e1',
             },
           }}
           onClick={handleMenuClick}
         >
           <Avatar
             sx={{
-              width: 38,
-              height: 38,
-              fontSize: '0.95rem',
-              fontWeight: 700,
-              background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-              border: '1.5px solid rgba(255, 255, 255, 0.2)',
+              width: 32,
+              height: 32,
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              bgcolor: 'primary.main',
+              color: '#ffffff',
             }}
             src={resolveMediaUrl(user?.profilePhotoUrl)}
             alt={user?.name}
@@ -371,33 +372,25 @@ function Sidebar({ open, onClose, toggleTheme }) {
             <Typography
               variant="subtitle2"
               sx={{
-                color: '#ffffff',
                 fontWeight: 600,
-                fontSize: '0.84375rem',
+                fontSize: '0.8125rem',
                 lineHeight: 1.2,
+                color: 'text.primary',
               }}
               noWrap
             >
               {user?.name || 'User'}
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2 }}>
               <Chip
                 label={roleLabel}
                 size="small"
                 sx={{
-                  height: 18,
-                  fontSize: '0.625rem',
-                  fontWeight: 700,
-                  bgcolor: user?.isAdmin
-                    ? 'rgba(245, 158, 11, 0.2)'
-                    : user?.isSubAdmin
-                    ? 'rgba(16, 185, 129, 0.2)'
-                    : 'rgba(255, 255, 255, 0.08)',
-                  color: user?.isAdmin
-                    ? '#fbbf24'
-                    : user?.isSubAdmin
-                    ? '#34d399'
-                    : '#94a3b8',
+                  height: 16,
+                  fontSize: '0.59rem',
+                  fontWeight: 600,
+                  bgcolor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#e2e8f0',
+                  color: 'text.secondary',
                 }}
               />
             </Box>
@@ -405,29 +398,29 @@ function Sidebar({ open, onClose, toggleTheme }) {
         </Box>
 
         {/* Theme Mode Button */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1.5, px: 0.5 }}>
-          <Typography variant="caption" sx={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 500 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1, px: 0.5 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.72rem', fontWeight: 500 }}>
             Appearance
           </Typography>
           <IconButton
             size="small"
             onClick={toggleTheme}
             sx={{
-              color: '#94a3b8',
-              bgcolor: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              p: 0.6,
+              color: 'text.secondary',
+              border: '1px solid',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#e2e8f0',
+              p: 0.5,
               '&:hover': {
-                bgcolor: 'rgba(255, 255, 255, 0.1)',
-                color: '#ffffff',
+                bgcolor: 'action.hover',
+                color: 'text.primary',
               },
             }}
-            title={theme.palette.mode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
-            {theme.palette.mode === 'dark' ? (
-              <LightIcon sx={{ fontSize: 16 }} />
+            {isDark ? (
+              <LightIcon sx={{ fontSize: 14 }} />
             ) : (
-              <DarkIcon sx={{ fontSize: 16 }} />
+              <DarkIcon sx={{ fontSize: 14 }} />
             )}
           </IconButton>
         </Box>
@@ -448,10 +441,9 @@ function Sidebar({ open, onClose, toggleTheme }) {
         }}
         PaperProps={{
           sx: {
-            mt: -1,
-            minWidth: 190,
-            borderRadius: 2,
-            boxShadow: '0 12px 32px rgba(0, 0, 0, 0.3)',
+            mt: -0.5,
+            minWidth: 180,
+            borderRadius: 1.5,
           },
         }}
       >
@@ -460,23 +452,23 @@ function Sidebar({ open, onClose, toggleTheme }) {
             navigate('/profile');
             handleMenuClose();
           }}
-          sx={{ fontSize: '0.875rem', fontWeight: 500, py: 1 }}
+          sx={{ fontSize: '0.8125rem', fontWeight: 500, py: 0.75 }}
         >
           <ListItemIcon>
-            <SettingsIcon fontSize="small" />
+            <SettingsIcon sx={{ fontSize: 18 }} />
           </ListItemIcon>
           Profile Settings
         </MenuItem>
-        <Divider />
+        <Divider sx={{ my: 0.5 }} />
         <MenuItem
           onClick={() => {
             handleLogout();
             handleMenuClose();
           }}
-          sx={{ fontSize: '0.875rem', fontWeight: 500, py: 1, color: 'error.main' }}
+          sx={{ fontSize: '0.8125rem', fontWeight: 500, py: 0.75, color: 'error.main' }}
         >
           <ListItemIcon sx={{ color: 'error.main' }}>
-            <LogoutIcon fontSize="small" />
+            <LogoutIcon sx={{ fontSize: 18 }} />
           </ListItemIcon>
           Logout
         </MenuItem>

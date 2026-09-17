@@ -581,7 +581,7 @@ export default function LiveViewer() {
                       line={lineObj}
                       showChords={showChords}
                       fontSize={showChords ? 'clamp(1.4rem, 2.4vw, 2.8rem)' : 'clamp(1.7rem, 2.9vw, 3.4rem)'}
-                      chordColor="#38bdf8"
+                      chordColor="#ff4d28"
                       textColor="#ffffff"
                       align="left"
                     />
@@ -603,7 +603,7 @@ export default function LiveViewer() {
                   <Typography
                     variant="caption"
                     sx={{
-                      color: '#38bdf8',
+                      color: '#ff4d28',
                       fontWeight: 800,
                       textTransform: 'uppercase',
                       letterSpacing: '0.14em',
@@ -622,7 +622,7 @@ export default function LiveViewer() {
                       line={lineObj}
                       showChords={showChords}
                       fontSize={showChords ? 'clamp(1.4rem, 2.4vw, 2.8rem)' : 'clamp(1.7rem, 2.9vw, 3.4rem)'}
-                      chordColor="#38bdf8"
+                      chordColor="#ff4d28"
                       textColor="#ffffff"
                       align="left"
                     />
@@ -746,7 +746,7 @@ export default function LiveViewer() {
                     line={lineObj}
                     showChords={showChords}
                     fontSize={showChords ? 'clamp(1.6rem, 3.2vw, 3.6rem)' : 'clamp(2.0rem, 4.0vw, 4.4rem)'}
-                    chordColor="#38bdf8"
+                    chordColor="#ff4d28"
                     textColor="#ffffff"
                     align="left"
                   />

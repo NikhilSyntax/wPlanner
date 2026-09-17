@@ -169,7 +169,7 @@ export default function AnchoredLyricRow({
   line = { text: '', chords: [] },
   showChords = true,
   fontSize = '2.4rem',
-  chordColor = '#38bdf8',
+  chordColor = '#ff4d28',
   textColor = '#ffffff',
   align = 'left',
   isPureChordsOnly = false,

@@ -46,7 +46,7 @@ function Layout() {
         {/* Offsets fixed AppBar — same height as Header Toolbar */}
         <Toolbar
           disableGutters
-          sx={{ flexShrink: 0, minHeight: { xs: 56, sm: 64 } }}
+          sx={{ flexShrink: 0, minHeight: { xs: 52, sm: 56 } }}
         />
 
         <Box

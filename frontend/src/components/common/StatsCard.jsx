@@ -4,7 +4,6 @@ import {
   CardContent,
   Typography,
   Box,
-  LinearProgress,
 } from '@mui/material';
 import { TrendingUp, TrendingDown } from '@mui/icons-material';
 
@@ -14,10 +13,10 @@ function StatsCard({
   icon: Icon,
   trend,
   trendValue,
-  color = 'primary',
+  subtitle,
 }) {
-  const getTrendColor = (trend) => {
-    switch (trend) {
+  const getTrendColor = (t) => {
+    switch (t) {
       case 'up':
         return 'success.main';
       case 'down':
@@ -27,89 +26,99 @@ function StatsCard({
     }
   };
 
-  const getTrendIcon = (trend) => {
-    switch (trend) {
-      case 'up':
-        return TrendingUp;
-      case 'down':
-        return TrendingDown;
-      default:
-        return null;
-    }
-  };
-
-  const TrendIcon = getTrendIcon(trend);
+  const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : null;
 
   return (
     <Card
+      elevation={0}
       sx={{
         height: '100%',
-        background: `linear-gradient(135deg, ${color === 'primary' ? '#667eea' : color === 'secondary' ? '#ec4899' : '#10b981'} 0%, ${color === 'primary' ? '#764ba2' : color === 'secondary' ? '#f472b6' : '#34d399'} 100%)`,
-        color: 'white',
-        position: 'relative',
-        overflow: 'hidden',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          width: 100,
-          height: 100,
-          background: 'rgba(255, 255, 255, 0.1)',
-          borderRadius: '50%',
-          transform: 'translate(30px, -30px)',
+        bgcolor: 'background.paper',
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 2,
+        transition: 'border-color 120ms ease',
+        '&:hover': {
+          borderColor: 'text.secondary',
         },
       }}
     >
-      <CardContent sx={{ p: 3, position: 'relative', zIndex: 1 }}>
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="flex-start"
-          mb={2}
-        >
-          <Box>
-            <Typography
-              variant="h4"
-              component="div"
-              sx={{ fontWeight: 700, mb: 1 }}
-            >
-              {value}
-            </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.9 }}>
-              {title}
-            </Typography>
-          </Box>
-          <Box
+      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+        <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
+          <Typography
+            variant="caption"
             sx={{
-              p: 1.5,
-              borderRadius: 2,
-              bgcolor: 'rgba(255, 255, 255, 0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              fontWeight: 600,
+              fontSize: '0.72rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              color: 'text.secondary',
             }}
           >
-            <Icon sx={{ fontSize: 28 }} />
-          </Box>
+            {title}
+          </Typography>
+          {Icon && (
+            <Box
+              sx={{
+                width: 28,
+                height: 28,
+                borderRadius: 1.5,
+                bgcolor: 'action.hover',
+                color: 'text.secondary',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Icon sx={{ fontSize: 16 }} />
+            </Box>
+          )}
         </Box>
 
-        {trend && trendValue && (
-          <Box display="flex" alignItems="center" gap={1}>
+        <Typography
+          variant="h4"
+          component="div"
+          sx={{
+            fontWeight: 700,
+            letterSpacing: '-0.025em',
+            fontSize: '1.75rem',
+            lineHeight: 1.2,
+            mb: 0.5,
+            color: 'text.primary',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {value}
+        </Typography>
+
+        {(trend && trendValue) || subtitle ? (
+          <Box display="flex" alignItems="center" gap={0.75} mt={0.5}>
             {TrendIcon && (
-              <TrendIcon sx={{ fontSize: 16, color: getTrendColor(trend) }} />
+              <TrendIcon sx={{ fontSize: 14, color: getTrendColor(trend) }} />
             )}
-            <Typography
-              variant="caption"
-              sx={{ color: getTrendColor(trend), fontWeight: 600 }}
-            >
-              {trendValue}
-            </Typography>
-            <Typography variant="caption" sx={{ opacity: 0.7 }}>
-              from last month
-            </Typography>
+            {trendValue && (
+              <Typography
+                variant="caption"
+                sx={{
+                  color: getTrendColor(trend),
+                  fontWeight: 600,
+                  fontSize: '0.72rem',
+                }}
+              >
+                {trendValue}
+              </Typography>
+            )}
+            {subtitle && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ fontSize: '0.72rem' }}
+              >
+                {subtitle}
+              </Typography>
+            )}
           </Box>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
