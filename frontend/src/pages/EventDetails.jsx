@@ -85,6 +85,7 @@ import { isEventLocked, EVENT_LOCKED_MESSAGE } from '../utils/eventLock';
 import { mergeSetlistWithBank, mergeSongWithBank, songsByIdMap } from '../utils/songDisplay';
 import { getRecommendedSongs } from '../utils/songRecommendations';
 import { fuzzySearchSongs } from '../utils/fuzzySearch';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 
 const eventTypeColors = {
   service: 'primary',
@@ -2206,11 +2207,16 @@ function EventDetails() {
                           ? String(vol.userId._id)
                           : String(vol.userId || vol._id || '');
                         const isReviewing = reviewingVolunteerId === vUserId;
+                        const isVolSelf = Boolean(currentUserId && vUserId && String(vUserId) === String(currentUserId));
+                        const volPhoto = (isVolSelf && user?.profilePhotoUrl)
+                          ? user.profilePhotoUrl
+                          : (vol.userId?.profilePhotoUrl || vol.user?.profilePhotoUrl || vol.profilePhotoUrl || null);
                         return (
                           <TableRow key={idx} hover>
                             <TableCell sx={{ py: 1.25 }}>
                               <Box display="flex" alignItems="center" gap={1.25}>
                                 <Avatar
+                                  src={volPhoto ? resolveMediaUrl(volPhoto) : undefined}
                                   sx={{
                                     width: 32,
                                     height: 32,
@@ -2375,10 +2381,12 @@ function EventDetails() {
                     const isApproved = rawStatus === 'accepted' || rawStatus === 'confirmed' || rawStatus === 'approved';
                     const memberName = member.userId?.name || member.name || 'Unknown';
                     const memberUserId = member.userId?._id ? String(member.userId._id) : String(member.userId || member._id || '');
-                    const profilePhoto = member.userId?.profilePhotoUrl;
-                    const isRevealed = revealedMemberIds.has(memberUserId);
                     const currentUid = user?.id || user?._id;
                     const isSelf = Boolean(currentUid && memberUserId && String(memberUserId) === String(currentUid));
+                    const profilePhoto = (isSelf && user?.profilePhotoUrl)
+                      ? user.profilePhotoUrl
+                      : (member.userId?.profilePhotoUrl || member.user?.profilePhotoUrl || member.profilePhotoUrl || null);
+                    const isRevealed = revealedMemberIds.has(memberUserId);
 
                     return (
                       <Box
@@ -2398,13 +2406,14 @@ function EventDetails() {
                         }}
                       >
                         {/* Avatar with instrument badge */}
-                        <Tooltip title={isRevealed ? '' : 'Click to reveal name'} arrow>
+                        <Tooltip title={isRevealed ? (memberName + (isSelf ? ' (You)' : '')) : 'Click to reveal name'} arrow>
                           <Box
                             sx={{ position: 'relative', cursor: 'pointer' }}
                             onClick={() => toggleMemberReveal(memberUserId)}
                           >
                             <Avatar
-                              src={profilePhoto || undefined}
+                              src={profilePhoto ? resolveMediaUrl(profilePhoto) : undefined}
+                              alt={memberName}
                               sx={{
                                 width: 42,
                                 height: 42,
