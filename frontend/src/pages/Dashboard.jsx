@@ -32,6 +32,7 @@ import {
   Cancel as CancelIcon,
   AssignmentInd as AssignmentIndIcon,
   VolunteerActivism as VolunteerActivismIcon,
+  Chat as ChatIcon,
 } from '@mui/icons-material';
 import { fetchEvents } from '../store/slices/eventSlice';
 import { addNotification } from '../store/slices/uiSlice';
@@ -155,7 +156,13 @@ function Dashboard() {
     .sort((a, b) => new Date(a.schedule?.start) - new Date(b.schedule?.start));
 
   const nextUpcomingEvent = upcomingEvents[0];
-  const recentEvents = events.slice(0, 3);
+  const recentEvents = [...events]
+    .sort(
+      (a, b) =>
+        new Date(b.schedule?.start || b.createdAt || 0) -
+        new Date(a.schedule?.start || a.createdAt || 0)
+    )
+    .slice(0, 3);
 
   // Determine if the currently logged in user is part of the next upcoming event team / roster (admins cannot be team members)
   const isAdmin = Boolean(
@@ -340,27 +347,33 @@ function Dashboard() {
               variant="caption"
               sx={{
                 fontWeight: 800,
-                letterSpacing: '0.14em',
-                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
                 color: '#ff4d28',
-                fontSize: '0.6875rem',
+                fontSize: '0.72rem',
               }}
             >
-              SERVICES & OPERATIONS
+              Currently Serving the King of Kings
             </Typography>
           </Box>
+
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: 0.5, mb: 0.5, fontSize: '0.875rem' }}
+          >
+            Welcome back,
+          </Typography>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
             <Typography
               variant="h4"
               fontWeight={800}
               sx={{
-                letterSpacing: '-0.03em',
-                textTransform: 'uppercase',
+                letterSpacing: '-0.02em',
                 fontSize: { xs: '1.5rem', sm: '1.875rem' },
               }}
             >
-              Worship Operations
+              {user?.name || 'User'}
             </Typography>
             <Chip
               label={
@@ -380,13 +393,6 @@ function Dashboard() {
               }}
             />
           </Box>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ mt: 0.5, fontSize: '0.875rem', maxWidth: 640 }}
-          >
-            Welcome back, {user?.name || 'User'}. Service schedules, active setlists, and roster coordination.
-          </Typography>
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
@@ -844,8 +850,8 @@ function Dashboard() {
                         variant="outlined"
                         size="small"
                         component={Link}
-                        to={`/events/${nextUpcomingEvent._id}/team`}
-                        startIcon={<GroupIcon sx={{ fontSize: 16, color: '#ff4d28' }} />}
+                        to={`/events/${nextUpcomingEvent._id}/chat`}
+                        startIcon={<ChatIcon sx={{ fontSize: 16, color: '#ff4d28' }} />}
                         sx={{
                           borderRadius: '8px',
                           textTransform: 'none',
@@ -855,7 +861,7 @@ function Dashboard() {
                           justifyContent: 'center',
                         }}
                       >
-                        Team Roster
+                        Service Chat!
                       </Button>
                     </Box>
                   </Box>

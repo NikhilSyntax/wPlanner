@@ -39,11 +39,14 @@ exports.getEvents = async (req, res) => {
       filter.churchId = req.user.churchId;
     }
 
+    const sortOrder =
+      status === "completed" ? { "schedule.start": -1 } : { "schedule.start": 1 };
+
     const events = await Event.find(filter)
       .populate("team", "team.name members")
       .populate("setlist", SETLIST_SONG_FIELDS)
       .populate("assignments.userId", "name email role isAdmin profilePhotoUrl")
-      .sort({ "schedule.start": 1 });
+      .sort(sortOrder);
 
     const withTitles = events.map((doc) => {
       const obj = doc.toObject();

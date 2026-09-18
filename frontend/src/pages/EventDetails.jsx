@@ -67,6 +67,7 @@ import {
 import api, { apiUrl } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import PrintSetlistModal from '../components/events/PrintSetlistModal';
+import EventChatBox from '../components/events/EventChatBox';
 
 const EVENT_ROLE_OPTIONS = [
   'Worship Leader',
@@ -2349,6 +2350,22 @@ function EventDetails() {
                     </IconButton>
                   </Tooltip>
                 )}
+                <Tooltip title="Event Chat" arrow>
+                  <IconButton
+                    size="small"
+                    onClick={() => navigate(`/events/${id}/chat`)}
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1.5,
+                      color: '#ff4d28',
+                    }}
+                  >
+                    <ChatIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                </Tooltip>
               </Box>
 
               {activeTeamMembers.length > 0 ? (
@@ -2371,9 +2388,9 @@ function EventDetails() {
                           flexDirection: 'column',
                           alignItems: 'center',
                           gap: 0.5,
-                          minWidth: 74,
-                          maxWidth: 90,
-                          py: 1,
+                          minWidth: 64,
+                          maxWidth: 80,
+                          py: 0.75,
                           px: 0.5,
                           borderRadius: 2,
                           transition: 'background-color 0.2s ease',
@@ -2389,12 +2406,12 @@ function EventDetails() {
                             <Avatar
                               src={profilePhoto || undefined}
                               sx={{
-                                width: 50,
-                                height: 50,
-                                fontSize: '1.1rem',
+                                width: 42,
+                                height: 42,
+                                fontSize: '0.95rem',
                                 fontWeight: 700,
                                 bgcolor: isApproved ? '#10b981' : 'primary.main',
-                                border: isApproved ? '3px solid #10b981' : '2.5px solid',
+                                border: isApproved ? '2.5px solid #10b981' : '2px solid',
                                 borderColor: isApproved
                                   ? '#10b981'
                                   : isSelf
@@ -2403,7 +2420,7 @@ function EventDetails() {
                                 boxShadow: isApproved ? '0 0 0 2px rgba(16, 185, 129, 0.25)' : 'none',
                                 transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                                 '&:hover': {
-                                  transform: 'scale(1.12)',
+                                  transform: 'scale(1.1)',
                                   boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
                                 },
                               }}
@@ -2418,8 +2435,8 @@ function EventDetails() {
                                 right: -4,
                                 bgcolor: 'background.paper',
                                 borderRadius: '50%',
-                                width: 22,
-                                height: 22,
+                                width: 19,
+                                height: 19,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -2531,6 +2548,9 @@ function EventDetails() {
               )}
             </CardContent>
           </Card>
+
+          {/* Interactive Live Event Chat Box directly under Know Your Team */}
+          <EventChatBox eventId={id} isLocked={isLocked} />
         </Grid>
       </Grid>
 

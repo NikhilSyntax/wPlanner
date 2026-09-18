@@ -20,7 +20,7 @@ import {
   Chat as ChatIcon,
   Send as SendIcon,
 } from '@mui/icons-material';
-import api from '../services/api';
+import api, { API_ORIGIN } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { getEventDisplayTitle } from '../utils/eventTitle';
 import { isEventLocked, EVENT_LOCKED_MESSAGE } from '../utils/eventLock';
@@ -132,13 +132,13 @@ function EventChat() {
 
     load();
 
-    const socketUrl =
-      import.meta.env.VITE_SOCKET_URL ||
-      'https://wplanner-j7a7.onrender.com';
-    const socket = io(socketUrl, {
+    const socket = io(API_ORIGIN, {
       path: '/socket.io',
       query: { token },
+      headers: { Authorization: `Bearer ${token}` },
       transports: ['websocket', 'polling'],
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
     });
     socketRef.current = socket;
 
@@ -354,9 +354,12 @@ function EventChat() {
                             px: 1.75,
                             py: 1.25,
                             borderRadius: 2.5,
-                            bgcolor: msg.isOwn ? 'primary.main' : 'grey.900',
+                            bgcolor: msg.isOwn ? '#10b981' : '#ff4d28',
                             border: 'none',
-                            boxShadow: 1,
+                            boxShadow: msg.isOwn
+                              ? '0 2px 8px rgba(16, 185, 129, 0.3)'
+                              : '0 2px 8px rgba(255, 77, 40, 0.3)',
+                            color: '#ffffff',
                             ...(addsCmd.isAdds && {
                               cursor: 'pointer',
                               '&:hover': { filter: 'brightness(1.08)' },
@@ -368,7 +371,8 @@ function EventChat() {
                             sx={{
                               whiteSpace: 'pre-wrap',
                               wordBreak: 'break-word',
-                              color: '#fff',
+                              color: '#ffffff',
+                              fontWeight: 500,
                             }}
                           >
                             {msg.content}

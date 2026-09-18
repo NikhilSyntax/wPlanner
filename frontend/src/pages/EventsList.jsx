@@ -193,9 +193,13 @@ function EventsList() {
   const draftEvents = filteredEvents.filter(
     (e) => computeEventStatus(e) === 'draft'
   );
-  const completedEvents = filteredEvents.filter(
-    (e) => computeEventStatus(e) === 'completed'
-  );
+  const completedEvents = filteredEvents
+    .filter((e) => computeEventStatus(e) === 'completed')
+    .sort(
+      (a, b) =>
+        new Date(b.schedule?.start || b.schedule?.end || b.createdAt || 0) -
+        new Date(a.schedule?.start || a.schedule?.end || a.createdAt || 0)
+    );
 
   const mainColumns = [
     {
