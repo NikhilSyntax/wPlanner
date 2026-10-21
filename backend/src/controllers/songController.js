@@ -50,7 +50,10 @@ exports.getSongs = async (req, res) => {
       .select('title artist key bpm timeSignature genre usage')
       .sort({ title: 1 })
       .lean();
-    const enriched = await enrichSongsUsage(songs);
+    const enriched = await enrichSongsUsage(songs, {
+      persist: false,
+      churchId: req.user.churchId,
+    });
     res.json(enriched);
   } catch (err) {
     console.error(err);

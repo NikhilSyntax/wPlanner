@@ -20,9 +20,12 @@ const { apiLimiter, authLimiter } = require("./middleware/rateLimiter");
 const { helmetConfig, sanitizeInput } = require("./middleware/security");
 const { getRedisClient } = require("./config/redis");
 const { startReminderScheduler } = require("./utils/reminderScheduler");
+const { performanceTimingMiddleware } = require("./middleware/timingMiddleware");
 
+const serverStartTime = Date.now();
 const app = express();
 app.set('trust proxy', 1);
+app.use(performanceTimingMiddleware);
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, "../uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -112,7 +115,8 @@ app.get("/health", async (req, res) => {
   }
 
   server.listen(config.port, () => {
-    console.log(`Server running on port ${config.port}`);
+    const startupElapsedMs = Date.now() - serverStartTime;
+    console.log(`Server running on port ${config.port} (Startup completed in ${startupElapsedMs}ms)`);
     // Start automated 24h event advance reminder scheduler
     startReminderScheduler();
   });

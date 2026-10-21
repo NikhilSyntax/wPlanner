@@ -3,7 +3,13 @@ import { eventService } from '../../services/eventService';
 
 export const fetchEvents = createAsyncThunk(
   'events/fetchEvents',
-  async (_, { rejectWithValue }) => {
+  async (options = {}, { getState, rejectWithValue }) => {
+    const { force = false } = typeof options === 'object' && options !== null ? options : {};
+    const state = getState().events;
+    const now = Date.now();
+    if (!force && Array.isArray(state.events) && state.events.length > 0 && state.lastFetched && (now - state.lastFetched) < 15000) {
+      return state.events;
+    }
     try {
       return await eventService.getAll();
     } catch (error) {
@@ -64,6 +70,7 @@ const eventSlice = createSlice({
     currentEvent: null,
     loading: false,
     error: null,
+    lastFetched: null,
   },
   reducers: {
     clearError: (state) => {
@@ -79,6 +86,7 @@ const eventSlice = createSlice({
       .addCase(fetchEvents.fulfilled, (state, action) => {
         state.loading = false;
         state.events = action.payload;
+        state.lastFetched = Date.now();
       })
       .addCase(fetchEvents.rejected, (state, action) => {
         state.loading = false;
@@ -104,6 +112,7 @@ const eventSlice = createSlice({
       .addCase(createEvent.fulfilled, (state, action) => {
         state.loading = false;
         state.events.push(action.payload);
+        state.lastFetched = Date.now();
       })
       .addCase(createEvent.rejected, (state, action) => {
         state.loading = false;
@@ -119,6 +128,7 @@ const eventSlice = createSlice({
         state.events = state.events.map((event) =>
           event._id === action.payload._id ? action.payload : event
         );
+        state.lastFetched = Date.now();
       })
       .addCase(updateEvent.rejected, (state, action) => {
         state.loading = false;
@@ -131,6 +141,7 @@ const eventSlice = createSlice({
       .addCase(deleteEvent.fulfilled, (state, action) => {
         state.loading = false;
         state.events = state.events.filter((event) => event._id !== action.payload);
+        state.lastFetched = Date.now();
       })
       .addCase(deleteEvent.rejected, (state, action) => {
         state.loading = false;

@@ -102,6 +102,7 @@ const songSchema = new mongoose.Schema({
   },
 });
 
+songSchema.index({ churchId: 1, title: 1 });
 songSchema.index({ title: 1 });
 songSchema.index({ artist: 1 });
 songSchema.index({ key: 1 });

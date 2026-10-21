@@ -42,14 +42,16 @@ exports.getEvents = async (req, res) => {
     const sortOrder =
       status === "completed" ? { "schedule.start": -1 } : { "schedule.start": 1 };
 
+    const t0 = Date.now();
     const events = await Event.find(filter)
       .populate("team", "team.name members")
       .populate("setlist", SETLIST_SONG_FIELDS)
       .populate("assignments.userId", "name email role isAdmin profilePhotoUrl")
-      .sort(sortOrder);
+      .sort(sortOrder)
+      .lean();
 
     const withTitles = events.map((doc) => {
-      const obj = doc.toObject();
+      const obj = doc.toObject ? doc.toObject() : { ...doc };
       obj.title = getEventDisplayTitle(obj);
       if (Array.isArray(obj.assignments)) {
         obj.assignments = obj.assignments.filter((a) => {
@@ -60,6 +62,11 @@ exports.getEvents = async (req, res) => {
       }
       return obj;
     });
+
+    const elapsedMs = Date.now() - t0;
+    if (elapsedMs > 50) {
+      console.log(`[EventTiming] getEvents count=${withTitles.length} duration=${elapsedMs}ms`);
+    }
 
     res.json(withTitles);
   } catch (err) {

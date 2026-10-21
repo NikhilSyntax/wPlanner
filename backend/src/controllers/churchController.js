@@ -217,16 +217,20 @@ exports.getMembers = async (req, res) => {
       ),
     );
 
-    const church = await Church.findById(req.user.churchId)
-      .select("createdBy")
-      .lean();
-
-    const members = await User.find({
-      churchId: req.user.churchId,
-      approvalStatus: { $ne: "rejected" },
-    })
-      .select("name role isAdmin isSubAdmin approvalStatus manualAvailable")
-      .lean();
+    const t0 = Date.now();
+    const [church, members] = await Promise.all([
+      Church.findById(req.user.churchId).select("createdBy").lean(),
+      User.find({
+        churchId: req.user.churchId,
+        approvalStatus: { $ne: "rejected" },
+      })
+        .select("name role isAdmin isSubAdmin approvalStatus manualAvailable")
+        .lean(),
+    ]);
+    const tDuration = Date.now() - t0;
+    if (tDuration > 50) {
+      console.log(`[ChurchTiming] getMembers count=${members.length} duration=${tDuration}ms`);
+    }
 
     res.json(
       members.map((member) => ({
@@ -492,32 +496,58 @@ exports.updateMemberRole = async (req, res) => {
  */
 exports.getCurrentChurch = async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).lean();
-    if (!user?.churchId) {
+    const churchId = req.user?.churchId;
+    if (!churchId) {
       return res
         .status(404)
         .json({ message: "No church found for current user" });
     }
 
-    const church = await Church.findById(user.churchId).lean();
+    const church = await Church.findById(churchId).lean();
     if (!church) {
       return res.status(404).json({ message: "Church not found" });
     }
 
-    const isPrivileged = !!(user.isAdmin || user.isSubAdmin);
+    const isPrivileged = !!(req.user.isAdmin || req.user.isSubAdmin);
+    const userId = req.user.userId || req.user._id || req.user.id;
     const isCreator = !!(
       church.createdBy &&
-      church.createdBy.toString() === user._id.toString()
+      userId &&
+      church.createdBy.toString() === userId.toString()
     );
 
     res.json({
       _id: church._id,
       name: church.name,
       churchCode: isPrivileged ? church.churchCode : null,
-      isAdmin: !!user.isAdmin,
-      isSubAdmin: !!user.isSubAdmin,
+      isAdmin: !!req.user.isAdmin,
+      isSubAdmin: !!req.user.isSubAdmin,
       isCreator,
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * Lightweight endpoint for dashboard stats (songs count & approved members count).
+ * Avoids downloading entire song catalog and user documents on dashboard render.
+ */
+exports.getChurchStats = async (req, res) => {
+  try {
+    if (!req.user?.churchId) {
+      return res.json({ songsCount: 0, membersCount: 0 });
+    }
+    const Song = require("../models/Song");
+    const [songsCount, membersCount] = await Promise.all([
+      Song.countDocuments({ churchId: req.user.churchId }),
+      User.countDocuments({
+        churchId: req.user.churchId,
+        approvalStatus: { $ne: "rejected" },
+      }),
+    ]);
+    res.json({ songsCount, membersCount });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });

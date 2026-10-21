@@ -72,6 +72,9 @@ eventSchema.index({ 'schedule.start': 1 });
 eventSchema.index({ team: 1 });
 eventSchema.index({ 'event.status': 1 });
 eventSchema.index({ churchId: 1 });
+eventSchema.index({ churchId: 1, 'schedule.start': 1 });
+eventSchema.index({ churchId: 1, setlist: 1 });
+eventSchema.index({ setlist: 1 });
 eventSchema.index({ churchId: 1, 'event.status': 1, 'schedule.end': 1 });
 eventSchema.index({ 'assignments.userId': 1, 'assignments.status': 1 });
 // Auto Event Scheduler: prevent duplicate event generation for the same schedule + occurrence

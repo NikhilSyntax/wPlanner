@@ -16,12 +16,18 @@ exports.getNotifications = async (req, res) => {
     if (type) filter.type = type;
 
     const skip = (page - 1) * limit;
-    const rawNotifications = await Notification.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .select('type title message link read createdAt actionStatus eventId assignmentRole')
-      .lean();
+    const t0 = Date.now();
+    const [rawNotifications, total, unreadCount] = await Promise.all([
+      Notification.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .select('type title message link read createdAt actionStatus eventId assignmentRole')
+        .lean(),
+      Notification.countDocuments(filter),
+      Notification.countDocuments({ recipient: userId, read: false }),
+    ]);
+    const tNotifParallel = Date.now() - t0;
 
     // Extract all eventIds from notifications (either from eventId or extracted from link)
     const eventIdMap = new Map();
@@ -83,8 +89,10 @@ exports.getNotifications = async (req, res) => {
       return n;
     });
 
-    const total = await Notification.countDocuments(filter);
-    const unreadCount = await Notification.countDocuments({ recipient: userId, read: false });
+    const totalDuration = Date.now() - t0;
+    if (totalDuration > 50) {
+      console.log(`[NotifTiming] getNotifications fetchParallel=${tNotifParallel}ms total=${totalDuration}ms`);
+    }
 
     res.json({
       notifications,

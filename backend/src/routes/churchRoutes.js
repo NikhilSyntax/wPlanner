@@ -28,6 +28,7 @@ router.delete(
 // Toggle availability for current user
 router.patch("/members/availability", churchController.setAvailability);
 router.get("/current", churchController.getCurrentChurch);
+router.get("/stats", churchController.getChurchStats);
 
 // Admin / Sub-Admin review flow for join requests
 router.get("/requests/pending", authMiddleware.adminOnly, churchController.getPendingRequests);

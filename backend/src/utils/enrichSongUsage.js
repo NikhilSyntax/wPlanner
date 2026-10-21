@@ -3,7 +3,8 @@ const Song = require("../models/Song");
 const { getEventDisplayTitle } = require("./eventTitle");
 
 /** Resolve live event titles, calculate real usage from scheduled events, and patch usage history (in memory + DB). */
-async function enrichSongsUsage(songs, { persist = true } = {}) {
+async function enrichSongsUsage(songs, { persist = true, churchId } = {}) {
+  const enrichStart = Date.now();
   if (!songs) return songs;
   const isArray = Array.isArray(songs);
   const list = isArray ? songs : [songs];
@@ -14,13 +15,18 @@ async function enrichSongsUsage(songs, { persist = true } = {}) {
 
   if (!songIds.length) return isArray ? plain : plain[0];
 
-  // Find all events that have any of these songs in their setlist
-  const events = await Event.find({
-    setlist: { $in: songIds },
-  })
+  // Find all events that have any of these songs in their setlist (scoped to church if provided)
+  const eventFilter = { setlist: { $in: songIds } };
+  if (churchId) {
+    eventFilter.churchId = churchId;
+  }
+
+  const tFindStart = Date.now();
+  const events = await Event.find(eventFilter)
     .select("_id churchId event schedule setlist createdAt")
     .sort({ "schedule.start": -1, createdAt: -1 })
     .lean();
+  const tFindDuration = Date.now() - tFindStart;
 
   // Group events by songId
   const eventsBySongId = new Map();
@@ -94,7 +100,9 @@ async function enrichSongsUsage(songs, { persist = true } = {}) {
     }
   }
 
+  let tPersistDuration = 0;
   if (persist && songsToPersist.length) {
+    const tPersistStart = Date.now();
     await Promise.all(
       songsToPersist.map((item) =>
         Song.updateOne(
@@ -109,6 +117,14 @@ async function enrichSongsUsage(songs, { persist = true } = {}) {
           },
         ),
       ),
+    );
+    tPersistDuration = Date.now() - tPersistStart;
+  }
+
+  const totalEnrichMs = Date.now() - enrichStart;
+  if (totalEnrichMs > 50) {
+    console.log(
+      `[SongTiming] enrichSongsUsage songs=${plain.length} eventsLookup=${tFindDuration}ms persist=${tPersistDuration}ms total=${totalEnrichMs}ms`
     );
   }
 

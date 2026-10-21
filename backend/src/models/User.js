@@ -44,9 +44,13 @@ const userSchema = new mongoose.Schema(
     },
     approvedAt: { type: Date },
     joinedAt: { type: Date, default: Date.now },
+    refreshTokens: [{ type: String }],
   },
   { timestamps: true },
 );
+
+userSchema.index({ churchId: 1 });
+userSchema.index({ churchId: 1, approvalStatus: 1 });
 
 const User = mongoose.model("User", userSchema);
 User.ROLE_OPTIONS = ROLE_OPTIONS;

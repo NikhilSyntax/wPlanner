@@ -18,10 +18,13 @@ async function cleanupLegacyUserIndexes() {
 }
 
 async function connectMongo() {
+  const startTime = Date.now();
   try {
     await mongoose.connect(config.mongoUri);
     await cleanupLegacyUserIndexes();
-    console.log('MongoDB connected successfully to:', config.mongoUri);
+    const elapsedMs = Date.now() - startTime;
+    const safeHost = mongoose.connection.host || 'cluster';
+    console.log(`[MongoDB] Connected in ${elapsedMs}ms (host: ${safeHost})`);
   } catch (error) {
     console.error('MongoDB connection error:', error.message);
     process.exit(1);

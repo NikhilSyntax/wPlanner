@@ -16,7 +16,10 @@ async function generateTokens(user) {
   if (user.refreshTokens.length > 10) {
     user.refreshTokens = user.refreshTokens.slice(-10);
   }
-  await user.save();
+  await User.updateOne(
+    { _id: user._id },
+    { $set: { refreshTokens: user.refreshTokens } }
+  );
   return { accessToken, refreshToken };
 }
 
@@ -125,17 +128,36 @@ exports.login = async (req, res) => {
     if (!identifier) {
       return res.status(400).json({ message: "Email or username is required" });
     }
-    const user = await User.findOne({
-      $or: [
-        { email: identifier },
-        { email: `${identifier}@wplanner.app` },
-        { name: new RegExp(`^${identifier}$`, "i") },
-      ],
-    });
+    const t0 = Date.now();
+    const isEmail = identifier.includes('@');
+    const user = isEmail
+      ? await User.findOne({ email: identifier })
+      : await User.findOne({
+          $or: [
+            { email: identifier },
+            { email: `${identifier}@wplanner.app` },
+            { name: new RegExp(`^${identifier}$`, "i") },
+          ],
+        });
+    const tLookup = Date.now() - t0;
+
     if (!user) return res.status(400).json({ message: "Invalid credentials" });
+
+    const t1 = Date.now();
     const valid = await bcrypt.compare(password, user.password);
+    const tBcrypt = Date.now() - t1;
+
     if (!valid) return res.status(400).json({ message: "Invalid credentials" });
+
+    const t2 = Date.now();
     const tokens = await generateTokens(user);
+    const tTokens = Date.now() - t2;
+    const totalLoginMs = Date.now() - t0;
+
+    console.log(
+      `[AuthTiming] login userLookup=${tLookup}ms bcrypt=${tBcrypt}ms tokenGen=${tTokens}ms total=${totalLoginMs}ms`
+    );
+
     res.json({
       user: {
         id: user._id,

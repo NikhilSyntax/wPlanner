@@ -61,12 +61,20 @@ function Sidebar({ open, onClose, toggleTheme }) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (user?.churchId) {
-      api.get('/church/current')
-        .then((res) => setChurch(res.data))
-        .catch(() => {});
-    }
-  }, [user?.churchId]);
+    if (!user?.churchId) return;
+    if (church?._id === user.churchId) return;
+
+    let isMounted = true;
+    api.get('/church/current')
+      .then((res) => {
+        if (isMounted) setChurch(res.data);
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.churchId, church?._id]);
 
   const gated = userLoaded && user && !isUserApproved(user);
   const visibleNavItems = gated

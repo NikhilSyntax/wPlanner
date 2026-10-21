@@ -123,17 +123,28 @@ function Dashboard() {
 
     window.addEventListener('wplanner:assignment_updated', handleAssignmentUpdate);
 
-    // Fetch live counts for songs and church members
-    Promise.all([
-      api.get('/songs').catch(() => ({ data: [] })),
-      api.get('/church/members').catch(() => ({ data: { members: [] } })),
-    ]).then(([songsRes, membersRes]) => {
-      const s = Array.isArray(songsRes.data) ? songsRes.data : songsRes.data?.songs || [];
-      const m = Array.isArray(membersRes.data) ? membersRes.data : membersRes.data?.members || [];
-      setSongsCount(s.length);
-      setMembersCount(m.length);
-      setStatsLoading(false);
-    });
+    // Fetch live counts for songs and church members using lightweight stats endpoint
+    api
+      .get('/church/stats')
+      .then((res) => {
+        setSongsCount(res.data?.songsCount ?? 0);
+        setMembersCount(res.data?.membersCount ?? 0);
+      })
+      .catch(() => {
+        // Fallback for backward compatibility
+        return Promise.all([
+          api.get('/songs').catch(() => ({ data: [] })),
+          api.get('/church/members').catch(() => ({ data: { members: [] } })),
+        ]).then(([songsRes, membersRes]) => {
+          const s = Array.isArray(songsRes.data) ? songsRes.data : songsRes.data?.songs || [];
+          const m = Array.isArray(membersRes.data) ? membersRes.data : membersRes.data?.members || [];
+          setSongsCount(s.length);
+          setMembersCount(m.length);
+        });
+      })
+      .finally(() => {
+        setStatsLoading(false);
+      });
 
     return () => {
       window.removeEventListener('wplanner:assignment_updated', handleAssignmentUpdate);
