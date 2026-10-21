@@ -13,6 +13,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Menu,
+  ListItemIcon,
+  ListItemText,
   Chip,
   Grid,
   Divider,
@@ -63,11 +66,20 @@ import {
   Piano as PianoIcon,
   Headphones as HeadphonesIcon,
   GraphicEq as GraphicEqIcon,
+  CloudDownload as CloudDownloadIcon,
+  CloudDone as CloudDoneIcon,
+  Refresh as RefreshIcon,
+  DeleteOutline as DeleteOutlineIcon,
 } from '@mui/icons-material';
 import api, { apiUrl } from '../services/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import PrintSetlistModal from '../components/events/PrintSetlistModal';
 import EventChatBox from '../components/events/EventChatBox';
+import {
+  downloadSetlist,
+  isSetlistOffline,
+  removeOfflineSetlist,
+} from '../services/setlistOfflineService';
 
 const EVENT_ROLE_OPTIONS = [
   'Worship Leader',
@@ -169,6 +181,61 @@ function EventDetails() {
   const [addSongError, setAddSongError] = useState('');
   const [setlist, setSetlist] = useState([]);
   const [printModalOpen, setPrintModalOpen] = useState(false);
+  // Offline setlist state
+  const [isOfflineSetlistReady, setIsOfflineSetlistReady] = useState(() => isSetlistOffline(id));
+  const [downloadingSetlist, setDownloadingSetlist] = useState(false);
+  const [offlineMenuAnchor, setOfflineMenuAnchor] = useState(null);
+
+  useEffect(() => {
+    setIsOfflineSetlistReady(isSetlistOffline(id));
+    const handleOfflineUpdated = (e) => {
+      if (e?.detail?.eventId === String(id)) {
+        setIsOfflineSetlistReady(true);
+      }
+    };
+    const handleOfflineRemoved = (e) => {
+      if (e?.detail?.eventId === String(id)) {
+        setIsOfflineSetlistReady(false);
+      }
+    };
+    window.addEventListener('wplanner:offline_setlist_updated', handleOfflineUpdated);
+    window.addEventListener('wplanner:offline_setlist_removed', handleOfflineRemoved);
+    return () => {
+      window.removeEventListener('wplanner:offline_setlist_updated', handleOfflineUpdated);
+      window.removeEventListener('wplanner:offline_setlist_removed', handleOfflineRemoved);
+    };
+  }, [id]);
+
+  const handleDownloadSetlist = async () => {
+    try {
+      setDownloadingSetlist(true);
+      const bundle = await downloadSetlist(id);
+      setIsOfflineSetlistReady(true);
+      setSaveMessage({
+        type: 'success',
+        text: `Setlist downloaded (${bundle.songCount} songs)! Lyrics & chords are now available offline.`,
+      });
+    } catch (err) {
+      console.error('Failed to download setlist:', err);
+      setSaveMessage({
+        type: 'error',
+        text: 'Failed to download setlist for offline use.',
+      });
+    } finally {
+      setDownloadingSetlist(false);
+    }
+  };
+
+  const handleRemoveOfflineSetlist = () => {
+    removeOfflineSetlist(id);
+    setIsOfflineSetlistReady(false);
+    setOfflineMenuAnchor(null);
+    setSaveMessage({
+      type: 'success',
+      text: 'Offline setlist removed from this device.',
+    });
+  };
+
   const [reminderLoading, setReminderLoading] = useState(false);
   const [reminderMessage, setReminderMessage] = useState('');
   // ----- edit mode for title/description -----
@@ -1413,6 +1480,94 @@ function EventDetails() {
                 </Box>
                 {setlist.length > 0 && (
                   <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
+                    {/* Download Setlist / Offline Ready Control */}
+                    {isOfflineSetlistReady ? (
+                      <>
+                        <Tooltip title="Setlist is downloaded to this device with all chords & lyrics. Click for options.">
+                          <Chip
+                            icon={<CloudDoneIcon sx={{ fontSize: '16px !important' }} />}
+                            label="Offline Ready"
+                            color="success"
+                            variant="outlined"
+                            onClick={(e) => setOfflineMenuAnchor(e.currentTarget)}
+                            sx={{
+                              borderRadius: 2,
+                              fontWeight: 700,
+                              height: 36.5,
+                              px: 0.5,
+                              cursor: 'pointer',
+                              bgcolor: (th) =>
+                                th.palette.mode === 'dark'
+                                  ? 'rgba(34, 197, 94, 0.15)'
+                                  : 'rgba(34, 197, 94, 0.08)',
+                              borderColor: 'success.main',
+                              transition: 'all 0.2s',
+                              '&:hover': {
+                                bgcolor: 'success.main',
+                                color: 'success.contrastText',
+                                '& .MuiChip-icon': {
+                                  color: 'inherit',
+                                },
+                              },
+                            }}
+                          />
+                        </Tooltip>
+                        <Menu
+                          anchorEl={offlineMenuAnchor}
+                          open={Boolean(offlineMenuAnchor)}
+                          onClose={() => setOfflineMenuAnchor(null)}
+                        >
+                          <MenuItem
+                            onClick={() => {
+                              setOfflineMenuAnchor(null);
+                              handleDownloadSetlist();
+                            }}
+                          >
+                            <ListItemIcon>
+                              <RefreshIcon fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText
+                              primary="Update / Re-download"
+                              secondary="Fetch latest chords & lyrics from server"
+                            />
+                          </MenuItem>
+                          <MenuItem
+                            onClick={handleRemoveOfflineSetlist}
+                            sx={{ color: 'error.main' }}
+                          >
+                            <ListItemIcon sx={{ color: 'error.main' }}>
+                              <DeleteOutlineIcon fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText
+                              primary="Remove from Device"
+                              secondary="Delete cached chords & lyrics"
+                            />
+                          </MenuItem>
+                        </Menu>
+                      </>
+                    ) : (
+                      <Button
+                        variant="outlined"
+                        color="inherit"
+                        startIcon={
+                          downloadingSetlist ? (
+                            <CircularProgress size={16} color="inherit" />
+                          ) : (
+                            <CloudDownloadIcon />
+                          )
+                        }
+                        onClick={handleDownloadSetlist}
+                        disabled={downloadingSetlist}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {downloadingSetlist ? 'Downloading...' : 'Download Setlist'}
+                      </Button>
+                    )}
+
                     <Button
                       variant="outlined"
                       color="primary"

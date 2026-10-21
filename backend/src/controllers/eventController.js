@@ -13,12 +13,14 @@ const { sendNotification, notifyAssignmentStatusUpdated } = require("../utils/no
 const { send24HourRemindersForEvent } = require("../utils/reminderScheduler");
 
 const SETLIST_SONG_FIELDS = "title artist key timeSignature";
+const FULL_SETLIST_SONG_FIELDS = "title artist key bpm timeSignature genre content regionalLyrics capo tuning usage";
 
-async function populateEventDetails(eventId) {
+async function populateEventDetails(eventId, fullSetlist = false) {
+  const fields = fullSetlist ? FULL_SETLIST_SONG_FIELDS : SETLIST_SONG_FIELDS;
   return Event.findById(eventId)
     .populate("team", "team.name members")
     .populate("assignments.userId", "name email role isAdmin profilePhotoUrl")
-    .populate("setlist", SETLIST_SONG_FIELDS);
+    .populate("setlist", fields);
 }
 
 // List events
@@ -78,7 +80,8 @@ exports.getEvents = async (req, res) => {
 // Get single event
 exports.getEvent = async (req, res) => {
   try {
-    const event = await populateEventDetails(req.params.id);
+    const isFullSetlist = req.query.fullSetlist === 'true' || req.query.full === 'true';
+    const event = await populateEventDetails(req.params.id, isFullSetlist);
     if (!event) return res.status(404).json({ message: "Event not found" });
 
     // Double-check church scoping
@@ -99,6 +102,34 @@ exports.getEvent = async (req, res) => {
         return !u.isAdmin && r !== 'admin';
       });
     }
+
+    // Attach user preference to setlist songs if fullSetlist requested and user exists
+    if (isFullSetlist && Array.isArray(obj.setlist)) {
+      const UserSongPreference = require("../models/UserSongPreference");
+      const userId = req.user?.userId || req.user?._id;
+      if (userId) {
+        const songIds = obj.setlist.map((s) => s?._id).filter(Boolean);
+        const userPrefs = await UserSongPreference.find({
+          userId,
+          songId: { $in: songIds },
+        }).lean();
+        const prefMap = new Map(userPrefs.map((p) => [p.songId.toString(), p]));
+        obj.setlist = obj.setlist.map((s) => {
+          if (s && s._id && prefMap.has(s._id.toString())) {
+            const p = prefMap.get(s._id.toString());
+            s.userPreference = {
+              key: p.key,
+              transpose: p.transpose,
+              capo: p.capo,
+              chords: p.chords,
+              updatedAt: p.updatedAt,
+            };
+          }
+          return s;
+        });
+      }
+    }
+
     res.json(obj);
   } catch (err) {
     console.error(err);

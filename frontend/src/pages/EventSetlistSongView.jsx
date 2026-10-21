@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Alert,
@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -16,6 +17,9 @@ import {
   Grid,
   IconButton,
   InputLabel,
+  ListItemIcon,
+  ListItemText,
+  Menu,
   MenuItem,
   Select,
   Snackbar,
@@ -35,6 +39,11 @@ import {
   OpenInNew as OpenInNewIcon,
   Tv as TvIcon,
   CloudDownload as ImportIcon,
+  CloudDownload as CloudDownloadIcon,
+  CloudDone as CloudDoneIcon,
+  WifiOff as WifiOffIcon,
+  Refresh as RefreshIcon,
+  DeleteOutline as DeleteOutlineIcon,
   Print as PrintIcon,
   QueueMusic as QueueMusicIcon,
 } from '@mui/icons-material';
@@ -44,6 +53,15 @@ import ChordSheetViewer from '../components/common/ChordSheetViewer';
 import ImportSongModal from '../components/songs/ImportSongModal';
 import PrintSetlistModal from '../components/events/PrintSetlistModal';
 import SongQuickNavModal from '../components/common/SongQuickNavModal';
+import {
+  downloadSetlist,
+  getOfflineSetlist,
+  getOfflineSong,
+  isSetlistOffline,
+  removeOfflineSetlist,
+  saveOfflineSetlist,
+  updateSongInOfflineSetlist,
+} from '../services/setlistOfflineService';
 
 const KEY_OPTIONS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const TIME_SIG_OPTIONS = ['2/4', '3/4', '4/4', '5/4', '6/8', '7/8'];
@@ -113,11 +131,31 @@ function EventSetlistSongView() {
     }, { replace: true });
   };
 
-  const [loading, setLoading] = useState(true);
+  // In-memory song cache: songId -> full song object
+  const songsCacheRef = useRef(new Map());
+
+  // Offline status & connectivity
+  const initialOffline = useMemo(() => getOfflineSetlist(id), [id]);
+  const [isOfflineReady, setIsOfflineReady] = useState(() => isSetlistOffline(id));
+  const [downloading, setDownloading] = useState(false);
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [offlineMenuAnchor, setOfflineMenuAnchor] = useState(null);
+
+  // Synchronous pre-population from offline bundle if available for 0ms initial render
+  const [eventTitle, setEventTitle] = useState(() => initialOffline?.eventTitle || '');
+  const [setlist, setSetlist] = useState(() => initialOffline?.songs || []);
+  const [song, setSong] = useState(() => {
+    if (initialOffline?.songsById && initialOffline.songsById[String(songId)]) {
+      return initialOffline.songsById[String(songId)];
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(() => {
+    return !(initialOffline?.songsById && initialOffline.songsById[String(songId)]);
+  });
   const [error, setError] = useState('');
-  const [eventTitle, setEventTitle] = useState('');
-  const [setlist, setSetlist] = useState([]);
-  const [song, setSong] = useState(null);
 
   // Edit Modal State
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -139,36 +177,170 @@ function EventSetlistSongView() {
     content: '',
   });
 
-  // Data fetching
+  // Seed memory cache with initial offline data
+  useEffect(() => {
+    if (initialOffline?.songs && Array.isArray(initialOffline.songs)) {
+      initialOffline.songs.forEach((s) => {
+        if (s?._id) songsCacheRef.current.set(String(s._id), s);
+      });
+    }
+  }, [initialOffline]);
+
+  // Online / offline and setlist cache event listeners
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    const handleOfflineUpdated = (e) => {
+      if (e?.detail?.eventId === String(id)) {
+        setIsOfflineReady(true);
+      }
+    };
+    const handleOfflineRemoved = (e) => {
+      if (e?.detail?.eventId === String(id)) {
+        setIsOfflineReady(false);
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('wplanner:offline_setlist_updated', handleOfflineUpdated);
+    window.addEventListener('wplanner:offline_setlist_removed', handleOfflineRemoved);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('wplanner:offline_setlist_updated', handleOfflineUpdated);
+      window.removeEventListener('wplanner:offline_setlist_removed', handleOfflineRemoved);
+    };
+  }, [id]);
+
+  // 1. Fetch event setlist with full song details in a single round trip (runs only when `id` changes)
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        setLoading(true);
-        setError('');
-        const eventRes = await api.get(`/events/${id}`);
+        if (!navigator.onLine) {
+          const offlineBundle = getOfflineSetlist(id);
+          if (offlineBundle && !cancelled) {
+            setEventTitle(offlineBundle.eventTitle || 'Event');
+            setSetlist(offlineBundle.songs || []);
+            offlineBundle.songs.forEach((s) => {
+              if (s?._id) songsCacheRef.current.set(String(s._id), s);
+            });
+            setIsOfflineReady(true);
+          }
+          return;
+        }
+
+        const eventRes = await api.get(`/events/${id}?fullSetlist=true`);
         if (cancelled) return;
         const eventDoc = eventRes.data || {};
         const list = Array.isArray(eventDoc.setlist) ? eventDoc.setlist : [];
-        setEventTitle(eventDoc?.event?.title || 'Event');
+        const title = eventDoc?.event?.title || eventDoc?.title || 'Event';
+        setEventTitle(title);
         setSetlist(list);
-        const fromEvent = list.find((s) => String(s?._id) === String(songId));
-        if (fromEvent && (fromEvent?.content?.lyrics || fromEvent?.content?.chords)) {
-          setSong(fromEvent);
-        } else {
-          const songRes = await api.get(`/songs/${songId}`);
-          if (!cancelled) setSong(songRes.data || null);
+
+        // Put songs into memory cache
+        list.forEach((s) => {
+          if (s && s._id) {
+            songsCacheRef.current.set(String(s._id), s);
+          }
+        });
+
+        // If previously saved offline, keep offline storage refreshed in background
+        if (isSetlistOffline(id)) {
+          const songsById = {};
+          list.forEach((s) => {
+            if (s?._id) songsById[String(s._id)] = s;
+          });
+          saveOfflineSetlist(id, {
+            eventId: String(id),
+            eventTitle: title,
+            downloadedAt: Date.now(),
+            songs: list,
+            songsById,
+            songCount: list.length,
+            version: 1,
+          });
+          setIsOfflineReady(true);
         }
       } catch (e) {
-        if (!cancelled) setError(e?.response?.data?.message || 'Failed to load lyrics and chords');
-      } finally {
-        if (!cancelled) setLoading(false);
+        console.warn('[EventSetlistSongView] Failed to fetch full event setlist:', e);
+        const offlineBundle = getOfflineSetlist(id);
+        if (offlineBundle && !cancelled) {
+          setEventTitle(offlineBundle.eventTitle || 'Event');
+          setSetlist(offlineBundle.songs || []);
+          offlineBundle.songs.forEach((s) => {
+            if (s?._id) songsCacheRef.current.set(String(s._id), s);
+          });
+          setIsOfflineReady(true);
+        } else if (!cancelled && !song) {
+          setError(e?.response?.data?.message || 'Failed to load setlist');
+          setLoading(false);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [id, songId]);
+  }, [id]);
+
+  // 2. Select / switch current song — INSTANT 0ms latency when song is in memory or offline cache
+  useEffect(() => {
+    let cancelled = false;
+    const songIdStr = String(songId);
+
+    // 1. Check in-memory cache first
+    const inMemory = songsCacheRef.current.get(songIdStr);
+    if (inMemory && (inMemory.content?.chords || inMemory.content?.lyrics || inMemory.content)) {
+      setSong(inMemory);
+      setLoading(false);
+      return;
+    }
+
+    // 2. Check setlist array
+    const fromList = setlist.find((s) => String(s?._id) === songIdStr);
+    if (fromList && (fromList.content?.chords || fromList.content?.lyrics || fromList.content)) {
+      songsCacheRef.current.set(songIdStr, fromList);
+      setSong(fromList);
+      setLoading(false);
+      return;
+    }
+
+    // 3. Check offline cache
+    const offlineSong = getOfflineSong(id, songIdStr);
+    if (offlineSong && (offlineSong.content?.chords || offlineSong.content?.lyrics || offlineSong.content)) {
+      songsCacheRef.current.set(songIdStr, offlineSong);
+      setSong(offlineSong);
+      setLoading(false);
+      return;
+    }
+
+    // 4. Fallback: fetch single song from API (only if missing from all caches)
+    (async () => {
+      try {
+        if (!song) setLoading(true);
+        setError('');
+        const songRes = await api.get(`/songs/${songId}`);
+        if (cancelled) return;
+        const fetchedSong = songRes.data || null;
+        if (fetchedSong) {
+          songsCacheRef.current.set(songIdStr, fetchedSong);
+          setSong(fetchedSong);
+        }
+      } catch (err) {
+        if (!cancelled && !song) {
+          setError(err?.response?.data?.message || 'Failed to load lyrics and chords');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, songId, setlist]);
 
   const currentIndex = useMemo(
     () => setlist.findIndex((s) => String(s?._id) === String(songId)),
@@ -193,6 +365,34 @@ function EventSetlistSongView() {
     if (!targetSong?._id) return;
     const stageParam = isFullscreenStage ? '&stage=1' : '';
     navigate(`/events/${id}/setlist/${targetSong._id}?view=${viewMode}${stageParam}`);
+  };
+
+  const handleDownloadSetlist = async () => {
+    try {
+      setDownloading(true);
+      const bundle = await downloadSetlist(id);
+      setIsOfflineReady(true);
+      bundle.songs.forEach((s) => {
+        if (s?._id) songsCacheRef.current.set(String(s._id), s);
+      });
+      setSetlist(bundle.songs);
+      if (bundle.songsById && bundle.songsById[String(songId)]) {
+        setSong(bundle.songsById[String(songId)]);
+      }
+      setToastMessage(`Setlist downloaded (${bundle.songCount} songs)! Available offline.`);
+    } catch (err) {
+      console.error('Download setlist failed:', err);
+      setToastMessage('Failed to download setlist for offline use.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleRemoveOffline = () => {
+    removeOfflineSetlist(id);
+    setIsOfflineReady(false);
+    setOfflineMenuAnchor(null);
+    setToastMessage('Offline setlist removed from device.');
   };
 
   const handleOpenEditModal = () => {
@@ -238,16 +438,49 @@ function EventSetlistSongView() {
           lyrics: editForm.content,
         },
       };
-      const res = await api.put(`/songs/${songId}`, payload);
-      const updatedSong = res.data;
+
+      let updatedSong = { ...song, ...payload };
+
+      if (navigator.onLine) {
+        const res = await api.put(`/songs/${songId}`, payload);
+        if (res.data) updatedSong = res.data;
+      }
+
       setSong(updatedSong);
-      setToastMessage('Lyrics & chords updated successfully!');
+      songsCacheRef.current.set(String(songId), updatedSong);
+      setSetlist((prev) =>
+        prev.map((s) => (String(s._id) === String(songId) ? { ...s, ...updatedSong } : s))
+      );
+      updateSongInOfflineSetlist(id, updatedSong);
+
+      setToastMessage(
+        navigator.onLine
+          ? 'Lyrics & chords updated successfully!'
+          : 'Saved offline! Changes stored on this device.'
+      );
       setEditDialogOpen(false);
     } catch (err) {
       console.error('Failed to update song:', err);
-      setEditError(
-        err?.response?.data?.message || 'Failed to save changes. Please try again.'
-      );
+      if (!navigator.onLine || err.message?.includes('Network')) {
+        const updatedSong = {
+          ...song,
+          title: editForm.title.trim(),
+          artist: editForm.artist.trim(),
+          key: editForm.key,
+          bpm: editForm.bpm ? parseInt(editForm.bpm, 10) : undefined,
+          timeSignature: editForm.timeSignature,
+          content: { chords: editForm.content, lyrics: editForm.content },
+        };
+        setSong(updatedSong);
+        songsCacheRef.current.set(String(songId), updatedSong);
+        updateSongInOfflineSetlist(id, updatedSong);
+        setToastMessage('Saved offline on this device.');
+        setEditDialogOpen(false);
+      } else {
+        setEditError(
+          err?.response?.data?.message || 'Failed to save changes. Please try again.'
+        );
+      }
     } finally {
       setEditLoading(false);
     }
@@ -310,6 +543,94 @@ function EventSetlistSongView() {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {/* Download Setlist / Offline Ready Control */}
+          {isOfflineReady ? (
+            <>
+              <Tooltip title="Setlist is downloaded & available offline. Click for options.">
+                <Chip
+                  icon={<CloudDoneIcon sx={{ fontSize: '15px !important' }} />}
+                  label="Offline Ready"
+                  size="small"
+                  color="success"
+                  variant="outlined"
+                  onClick={(e) => setOfflineMenuAnchor(e.currentTarget)}
+                  sx={{
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    height: 30,
+                    cursor: 'pointer',
+                    bgcolor: (th) =>
+                      th.palette.mode === 'dark'
+                        ? 'rgba(34, 197, 94, 0.15)'
+                        : 'rgba(34, 197, 94, 0.08)',
+                    borderColor: 'success.main',
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      bgcolor: 'success.main',
+                      color: 'success.contrastText',
+                      '& .MuiChip-icon': {
+                        color: 'inherit',
+                      },
+                    },
+                  }}
+                />
+              </Tooltip>
+              <Menu
+                anchorEl={offlineMenuAnchor}
+                open={Boolean(offlineMenuAnchor)}
+                onClose={() => setOfflineMenuAnchor(null)}
+              >
+                <MenuItem
+                  onClick={() => {
+                    setOfflineMenuAnchor(null);
+                    handleDownloadSetlist();
+                  }}
+                >
+                  <ListItemIcon>
+                    <RefreshIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Update / Re-download"
+                    secondary="Fetch latest chords & lyrics from server"
+                  />
+                </MenuItem>
+                <MenuItem onClick={handleRemoveOffline} sx={{ color: 'error.main' }}>
+                  <ListItemIcon sx={{ color: 'error.main' }}>
+                    <DeleteOutlineIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Remove from Device"
+                    secondary="Delete cached chords & lyrics"
+                  />
+                </MenuItem>
+              </Menu>
+            </>
+          ) : (
+            <Button
+              size="small"
+              variant="outlined"
+              color="primary"
+              disabled={downloading}
+              startIcon={
+                downloading ? (
+                  <CircularProgress size={13} color="inherit" />
+                ) : (
+                  <CloudDownloadIcon fontSize="small" />
+                )
+              }
+              onClick={handleDownloadSetlist}
+              sx={{
+                fontWeight: 700,
+                fontSize: '0.75rem',
+                height: 30,
+                textTransform: 'none',
+                borderRadius: 2,
+              }}
+            >
+              {downloading ? 'Downloading...' : 'Download Setlist'}
+            </Button>
+          )}
+
           <Button
             size="small"
             variant="outlined"
@@ -375,6 +696,21 @@ function EventSetlistSongView() {
           )}
         </Box>
       </Box>
+
+      {/* Offline Alert Banner */}
+      {!isOnline && (
+        <Alert
+          severity="warning"
+          icon={<WifiOffIcon />}
+          sx={{
+            mb: 2,
+            borderRadius: 2,
+            boxShadow: '0 2px 8px rgba(234, 88, 12, 0.1)',
+          }}
+        >
+          <strong>Offline Mode:</strong> Disconnected from internet. All chords and lyrics are served instantly from your offline download.
+        </Alert>
+      )}
 
       {/* Song Hero Card with Touch-friendly Navigation Bar */}
       <Card
@@ -586,7 +922,13 @@ function EventSetlistSongView() {
         key={`${songId}-${viewMode}-${song?.updatedAt || ''}`}
         songId={songId}
         song={song}
-        onSaveSong={(updated) => setSong(updated)}
+        onSaveSong={(updated) => {
+          setSong(updated);
+          if (updated?._id) {
+            songsCacheRef.current.set(String(updated._id), updated);
+            updateSongInOfflineSetlist(id, updated);
+          }
+        }}
         rawContent={songContent}
         originalKey={song?.key || 'C'}
         title={song?.title}
@@ -820,6 +1162,10 @@ function EventSetlistSongView() {
         }}
         onSongSaved={(updatedSong) => {
           setSong(updatedSong);
+          if (updatedSong?._id) {
+            songsCacheRef.current.set(String(updatedSong._id), updatedSong);
+            updateSongInOfflineSetlist(id, updatedSong);
+          }
           setToastMessage(`Song "${updatedSong.title}" updated successfully with imported lyrics & chords!`);
         }}
       />
