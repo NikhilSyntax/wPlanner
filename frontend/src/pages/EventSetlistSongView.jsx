@@ -1178,13 +1178,13 @@ function EventSetlistSongView() {
         setlist={setlist}
       />
 
-      {/* Mobile Floating Quick Jump Button */}
-      {setlist.length > 1 && (
+      {/* Mobile Floating Quick Jump Button (Hidden in Fullscreen to prevent overlapping floating auto-scroll) */}
+      {!isFullscreenStage && setlist.length > 1 && (
         <Box
           sx={{
             position: 'fixed',
-            bottom: { xs: 20, sm: 26 },
-            right: { xs: 16, sm: 24 },
+            bottom: { xs: 18, sm: 24 },
+            right: { xs: 72, sm: 82 },
             zIndex: 1200,
             display: { xs: 'block', md: 'none' },
           }}
@@ -1193,15 +1193,15 @@ function EventSetlistSongView() {
             variant="contained"
             color="primary"
             onClick={() => setQuickNavOpen(true)}
-            startIcon={<QueueMusicIcon />}
+            startIcon={<QueueMusicIcon sx={{ fontSize: 17 }} />}
             sx={{
               borderRadius: 6,
-              px: 2,
-              py: 0.9,
+              px: 1.75,
+              py: 0.75,
               fontWeight: 700,
-              fontSize: '0.82rem',
+              fontSize: '0.78rem',
               textTransform: 'none',
-              boxShadow: '0 6px 20px rgba(37, 99, 235, 0.45)',
+              boxShadow: '0 4px 16px rgba(37, 99, 235, 0.45)',
               backdropFilter: 'blur(10px)',
             }}
           >

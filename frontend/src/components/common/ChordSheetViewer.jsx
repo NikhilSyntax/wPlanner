@@ -695,6 +695,20 @@ function ChordSheetViewer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen, isControlledFullscreen, onFullscreenChange]);
 
+  // Prevent body horizontal overflow & rubber-banding when in fullscreen mode
+  useEffect(() => {
+    if (isFullscreen) {
+      const prevOverflow = document.body.style.overflow;
+      const prevOverscroll = document.body.style.overscrollBehavior;
+      document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehavior = 'none';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+        document.body.style.overscrollBehavior = prevOverscroll;
+      };
+    }
+  }, [isFullscreen]);
+
   // Stage Mode Setlist Keyboard Shortcuts (Foot pedals / page turners / arrow keys)
   useEffect(() => {
     if (!isFullscreen) return;
@@ -1143,71 +1157,134 @@ function ChordSheetViewer({
       {/* ================= Fullscreen Floating Toolbar ================= */}
       {isFullscreen && (
         <Paper elevation={4} className="cs-fullscreen-bar">
-          <Box display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
-            <Typography variant="subtitle2" fontWeight={800} noWrap sx={{ maxWidth: { xs: 140, sm: 220 } }}>
-              {title || 'Chord Sheet'}{' '}
-              {isSplitMode
-                ? `(Split: English + ${selectedSplitLanguage})`
-                : selectedLanguage !== 'original'
-                  ? `(${selectedLanguage})`
-                  : ''}
+          {/* Left: Song Title + Compact Transpose Capsule */}
+          <Box display="flex" alignItems="center" gap={{ xs: 0.5, sm: 1 }} minWidth={0}>
+            <Typography
+              variant="subtitle2"
+              fontWeight={800}
+              noWrap
+              sx={{
+                maxWidth: { xs: 80, sm: 140, md: 220 },
+                fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                lineHeight: 1.2,
+              }}
+              title={
+                title
+                  ? `${title} ${
+                      isSplitMode
+                        ? `(Split: English + ${selectedSplitLanguage})`
+                        : selectedLanguage !== 'original'
+                        ? `(${selectedLanguage})`
+                        : ''
+                    }`
+                  : 'Chord Sheet'
+              }
+            >
+              {title || 'Chord Sheet'}
             </Typography>
-            <Chip
-              size="small"
-              label={`Key: ${currentDisplayKey || 'C'}`}
-              color="primary"
-              sx={{ fontWeight: 700, height: 22 }}
-            />
-            {showChords && (
-              <Stack direction="row" spacing={0.5} alignItems="center">
-                <Button
+
+            <Box
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                bgcolor: (th) =>
+                  th.palette.mode === 'dark'
+                    ? 'rgba(37, 99, 235, 0.16)'
+                    : 'rgba(37, 99, 235, 0.08)',
+                borderRadius: 1.5,
+                border: '1px solid',
+                borderColor: 'primary.main',
+                height: { xs: 24, sm: 26 },
+                px: { xs: 0.25, sm: 0.5 },
+                flexShrink: 0,
+              }}
+            >
+              {showChords && (
+                <IconButton
                   size="small"
-                  variant="outlined"
                   onClick={() => handleTransposeStep(-1)}
-                  sx={{ minWidth: 26, height: 24, p: 0, fontWeight: 700 }}
+                  aria-label="Transpose down"
+                  sx={{
+                    width: { xs: 18, sm: 22 },
+                    height: { xs: 18, sm: 22 },
+                    p: 0,
+                    color: 'primary.main',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    lineHeight: 1,
+                  }}
                 >
                   -
-                </Button>
-                <Button
+                </IconButton>
+              )}
+              <Typography
+                sx={{
+                  fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                  fontWeight: 800,
+                  color: 'primary.main',
+                  px: { xs: 0.35, sm: 0.5 },
+                  userSelect: 'none',
+                }}
+              >
+                {currentDisplayKey || 'C'}
+              </Typography>
+              {showChords && (
+                <IconButton
                   size="small"
-                  variant="outlined"
                   onClick={() => handleTransposeStep(1)}
-                  sx={{ minWidth: 26, height: 24, p: 0, fontWeight: 700 }}
+                  aria-label="Transpose up"
+                  sx={{
+                    width: { xs: 18, sm: 22 },
+                    height: { xs: 18, sm: 22 },
+                    p: 0,
+                    color: 'primary.main',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    lineHeight: 1,
+                  }}
                 >
                   +
-                </Button>
-              </Stack>
-            )}
+                </IconButton>
+              )}
+            </Box>
           </Box>
 
-          {/* Setlist Navigation Controls (Prev / Song Counter / Next) in Fullscreen */}
+          {/* Center: Setlist Navigation Controls (Prev / Song Counter / Next) in Fullscreen */}
           {(onPrevSong || onNextSong || (totalSongs && totalSongs > 0)) && (
             <Box
               className="cs-stage-nav-group"
               sx={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: { xs: 0.5, sm: 1 },
+                gap: { xs: 0.25, sm: 0.75 },
                 bgcolor: 'rgba(0, 0, 0, 0.06)',
-                p: { xs: '2px 4px', sm: '3px 8px' },
+                p: { xs: '1px 3px', sm: '3px 8px' },
                 borderRadius: 2,
                 border: '1px solid',
                 borderColor: 'divider',
+                flexShrink: 0,
               }}
             >
-              <Tooltip title={prevSong ? `Previous Song: ${prevSong.title || 'Untitled'}` : 'First song in setlist'}>
+              <Tooltip
+                title={
+                  prevSong
+                    ? `Previous Song: ${prevSong.title || 'Untitled'}`
+                    : 'First song in setlist'
+                }
+              >
                 <span>
                   <Button
                     size="small"
                     variant="outlined"
-                    startIcon={<PrevIcon />}
+                    startIcon={<PrevIcon sx={{ fontSize: { xs: 18, sm: 20 }, m: 0 }} />}
                     onClick={onPrevSong}
                     disabled={!prevSong || !onPrevSong}
                     className="cs-stage-prev-btn"
+                    aria-label="Previous song"
                     sx={{
-                      height: 28,
-                      minWidth: { xs: 32, sm: 76 },
-                      px: { xs: 0.75, sm: 1.5 },
+                      minWidth: { xs: 28, sm: 70 },
+                      height: { xs: 24, sm: 28 },
+                      p: { xs: '2px 4px', sm: '3px 10px' },
                       textTransform: 'none',
                       fontWeight: 700,
                       fontSize: '0.78rem',
@@ -1220,6 +1297,10 @@ function ChordSheetViewer({
                       },
                       '&.Mui-disabled': {
                         opacity: 0.35,
+                      },
+                      '& .MuiButton-startIcon': {
+                        mr: { xs: 0, sm: 0.5 },
+                        ml: 0,
                       },
                     }}
                   >
@@ -1245,14 +1326,14 @@ function ChordSheetViewer({
                     onClick={onOpenSongList}
                     sx={{
                       fontWeight: 800,
-                      fontSize: '0.75rem',
-                      height: 24,
-                      px: 0.5,
+                      fontSize: { xs: '0.68rem', sm: '0.75rem' },
+                      height: { xs: 22, sm: 24 },
+                      px: { xs: 0.2, sm: 0.5 },
                       cursor: onOpenSongList ? 'pointer' : 'default',
                       transition: 'all 0.15s ease-in-out',
                       '&:hover': onOpenSongList
                         ? {
-                            transform: 'scale(1.08)',
+                            transform: 'scale(1.06)',
                             boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)',
                           }
                         : undefined,
@@ -1261,19 +1342,24 @@ function ChordSheetViewer({
                 </Tooltip>
               )}
 
-              <Tooltip title={nextSong ? `Next Song: ${nextSong.title || 'Untitled'}` : 'Last song in setlist'}>
+              <Tooltip
+                title={
+                  nextSong ? `Next Song: ${nextSong.title || 'Untitled'}` : 'Last song in setlist'
+                }
+              >
                 <span>
                   <Button
                     size="small"
                     variant="contained"
-                    endIcon={<NextIcon />}
+                    endIcon={<NextIcon sx={{ fontSize: { xs: 18, sm: 20 }, m: 0 }} />}
                     onClick={onNextSong}
                     disabled={!nextSong || !onNextSong}
                     className="cs-stage-next-btn"
+                    aria-label="Next song"
                     sx={{
-                      height: 28,
-                      minWidth: { xs: 32, sm: 76 },
-                      px: { xs: 0.75, sm: 1.5 },
+                      minWidth: { xs: 28, sm: 70 },
+                      height: { xs: 24, sm: 28 },
+                      p: { xs: '2px 4px', sm: '3px 10px' },
                       textTransform: 'none',
                       fontWeight: 700,
                       fontSize: '0.78rem',
@@ -1281,6 +1367,10 @@ function ChordSheetViewer({
                       boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)',
                       '&.Mui-disabled': {
                         opacity: 0.35,
+                      },
+                      '& .MuiButton-endIcon': {
+                        ml: { xs: 0, sm: 0.5 },
+                        mr: 0,
                       },
                     }}
                   >
@@ -1293,31 +1383,57 @@ function ChordSheetViewer({
             </Box>
           )}
 
-          <Box display="flex" alignItems="center" gap={1}>
-            <IconButton
-              size="small"
-              onClick={() => {
-                const nextVal = !showChords;
-                setShowChords(nextVal);
-                if (onViewModeChange) onViewModeChange(nextVal ? 'chords' : 'lyrics');
-                if (onToggleShowChords) onToggleShowChords(nextVal);
-              }}
-              sx={{ color: showChords ? '#ff4d28' : 'inherit' }}
-              title={showChords ? 'Hide Chords (Lyrics Only)' : 'Show Chords'}
-            >
-              {showChords ? <QueueMusicIcon fontSize="small" /> : <LyricsIcon fontSize="small" />}
-            </IconButton>
+          {/* Right: Chords/Lyrics Toggle & Exit Fullscreen */}
+          <Box display="flex" alignItems="center" gap={{ xs: 0.5, sm: 0.75 }} flexShrink={0}>
+            <Tooltip title={showChords ? 'Hide Chords (Lyrics Only)' : 'Show Chords'}>
+              <IconButton
+                size="small"
+                onClick={() => {
+                  const nextVal = !showChords;
+                  setShowChords(nextVal);
+                  if (onViewModeChange) onViewModeChange(nextVal ? 'chords' : 'lyrics');
+                  if (onToggleShowChords) onToggleShowChords(nextVal);
+                }}
+                sx={{
+                  color: showChords ? '#ff4d28' : 'inherit',
+                  width: { xs: 26, sm: 28 },
+                  height: { xs: 26, sm: 28 },
+                  p: 0,
+                }}
+              >
+                {showChords ? (
+                  <QueueMusicIcon sx={{ fontSize: { xs: 18, sm: 20 } }} />
+                ) : (
+                  <LyricsIcon sx={{ fontSize: { xs: 18, sm: 20 } }} />
+                )}
+              </IconButton>
+            </Tooltip>
 
-            <Button
-              size="small"
-              variant="contained"
-              color="primary"
-              startIcon={<FullscreenExitIcon />}
-              onClick={() => handleToggleFullscreen(false)}
-              sx={{ textTransform: 'none', borderRadius: 1.5, fontWeight: 700 }}
-            >
-              Exit Fullscreen
-            </Button>
+            <Tooltip title="Exit Fullscreen">
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                onClick={() => handleToggleFullscreen(false)}
+                sx={{
+                  minWidth: { xs: 28, sm: 70 },
+                  height: { xs: 25, sm: 28 },
+                  p: { xs: 0, sm: '3px 8px' },
+                  borderRadius: 1.5,
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  textTransform: 'none',
+                  boxShadow: 'none',
+                }}
+              >
+                <FullscreenExitIcon
+                  sx={{ fontSize: { xs: 19, sm: 18 }, mr: { xs: 0, sm: 0.4 } }}
+                />
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                  Exit
+                </Box>
+              </Button>
+            </Tooltip>
           </Box>
         </Paper>
       )}
@@ -2061,52 +2177,77 @@ function ChordSheetViewer({
         </DialogActions>
       </Dialog>
 
-      {/* ================= Floating Auto-Scroll Control ================= */}
-      <Box className="cs-autoscroll-bar">
-        <Box className="cs-autoscroll-panel">
-          <IconButton
+      {/* ================= Small Floating Auto-Scroll Button (Right Corner) ================= */}
+      <Box className="cs-autoscroll-floating-corner">
+        <Tooltip title={`Auto-scroll speed: ${scrollSpeed}x (Tap to change)`} placement="left">
+          <Chip
             size="small"
+            label={`${scrollSpeed}x`}
+            onClick={() => {
+              const speeds = [0.5, 0.75, 1, 1.5, 2];
+              const nextIdx = (speeds.indexOf(scrollSpeed) + 1) % speeds.length;
+              setScrollSpeed(speeds[nextIdx]);
+            }}
+            sx={{
+              height: 20,
+              fontSize: '0.65rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              bgcolor: 'rgba(15, 23, 42, 0.82)',
+              color: '#ffffff',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              backdropFilter: 'blur(8px)',
+              px: 0.25,
+              transition: 'all 0.15s ease',
+              '&:hover': {
+                bgcolor: 'rgba(30, 41, 59, 0.95)',
+                transform: 'scale(1.05)',
+              },
+            }}
+          />
+        </Tooltip>
+
+        <Tooltip
+          title={
+            isScrolling
+              ? `Auto-scroll running (${scrollSpeed}x) — Click to Pause`
+              : `Auto-scroll paused — Click to Play (${scrollSpeed}x)`
+          }
+          placement="left"
+        >
+          <IconButton
             onClick={() => setIsScrolling(!isScrolling)}
-            sx={{ color: isScrolling ? '#ff4d28' : '#ffffff' }}
+            aria-label={isScrolling ? 'Pause auto-scroll' : 'Play auto-scroll'}
+            sx={{
+              width: { xs: 38, sm: 42 },
+              height: { xs: 38, sm: 42 },
+              borderRadius: '50%',
+              bgcolor: isScrolling ? '#ff4d28 !important' : 'rgba(15, 23, 42, 0.9) !important',
+              color: '#ffffff !important',
+              border: isScrolling
+                ? '2px solid rgba(255, 255, 255, 0.6)'
+                : '1.5px solid rgba(255, 255, 255, 0.25)',
+              boxShadow: isScrolling
+                ? '0 0 16px rgba(255, 77, 40, 0.65), 0 4px 12px rgba(0,0,0,0.4)'
+                : '0 4px 14px rgba(0, 0, 0, 0.35)',
+              backdropFilter: 'blur(10px)',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              '&:hover': {
+                bgcolor: isScrolling ? '#e63e18 !important' : 'rgba(30, 41, 59, 0.98) !important',
+                transform: 'scale(1.08)',
+              },
+              '&:active': {
+                transform: 'scale(0.92)',
+              },
+            }}
           >
-            {isScrolling ? <PauseIcon /> : <PlayIcon />}
+            {isScrolling ? (
+              <PauseIcon sx={{ fontSize: { xs: 20, sm: 23 } }} />
+            ) : (
+              <PlayIcon sx={{ fontSize: { xs: 20, sm: 23 }, ml: '2px' }} />
+            )}
           </IconButton>
-
-          <Typography
-            variant="caption"
-            fontWeight={600}
-            sx={{ color: '#ffffff', minWidth: 65, fontSize: '0.75rem' }}
-          >
-            {isScrolling ? `Auto (${scrollSpeed}x)` : 'Auto Scroll'}
-          </Typography>
-
-          <Stack direction="row" spacing={0.5} alignItems="center">
-            {[0.5, 0.75, 1, 1.5, 2].map((spd) => (
-              <Button
-                key={spd}
-                size="small"
-                variant={scrollSpeed === spd ? 'contained' : 'text'}
-                onClick={() => setScrollSpeed(spd)}
-                sx={{
-                  minWidth: 26,
-                  px: 0.6,
-                  py: 0.2,
-                  fontSize: '0.68rem',
-                  fontWeight: 700,
-                  color: scrollSpeed === spd ? '#ffffff' : 'rgba(255,255,255,0.7)',
-                  bgcolor: scrollSpeed === spd ? '#ff4d28 !important' : 'transparent',
-                  '&:hover': {
-                    bgcolor: scrollSpeed === spd ? '#e63e18 !important' : 'rgba(255,255,255,0.08)',
-                  },
-                  borderRadius: 1,
-                  height: 22,
-                }}
-              >
-                {spd}x
-              </Button>
-            ))}
-          </Stack>
-        </Box>
+        </Tooltip>
       </Box>
 
       {/* ================= Fullscreen Floating Edge Navigation ================= */}
